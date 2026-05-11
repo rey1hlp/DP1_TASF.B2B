@@ -1,0 +1,77 @@
+package com.tasf_b2b.planificador;
+
+import com.tasf_b2b.planificador.dominio.*;
+import com.tasf_b2b.planificador.utils.*;
+import java.nio.file.Paths;
+import java.util.*;
+
+/**
+ * Debug: Analizar qué rutas se están generando y sus características
+ */
+public class DEBUG_RutasInfo {
+    public static void main(String[] args) throws Exception {
+        System.out.println("=== DEBUG: Análisis de Rutas Generadas ===\n");
+
+        // Cargar datos
+        Map<String, Aeropuerto> aeropuertos = UtilArchivos.cargarAeropuertos(
+            Paths.get("data/aeropuertos.csv")
+        );
+        System.out.println("Aeropuertos: " + aeropuertos.size());
+
+        List<Vuelo> planesVuelo = UtilArchivos.cargarPlanesVuelo(
+            Paths.get("data/planes_vuelo.txt"),
+            aeropuertos
+        );
+        System.out.println("Planes vuelo: " + planesVuelo.size());
+
+        List<Vuelo> vuelos = UtilArchivos.instanciarVuelosPorRango(
+            planesVuelo,
+            20260101,
+            20260105
+        );
+        System.out.println("Vuelos instanciados: " + vuelos.size() + "\n");
+
+        GrafoVuelos grafo = new GrafoVuelos(vuelos, aeropuertos);
+
+        // Cargar algunos envíos
+        List<Envio> envios = UtilArchivos.cargarEnvios(
+            Paths.get("data/_envios_preliminar_"),
+            new HashSet<>(Arrays.asList("EBCI")),
+            aeropuertos,
+            20260101,
+            20260105
+        );
+        envios = envios.subList(0, Math.min(10, envios.size()));
+        System.out.println("Envios a analizar: " + envios.size() + "\n");
+
+        Random rnd = new Random(42);
+        
+        // Probar búsqueda de rutas
+        for (int maxEsc = 1; maxEsc <= 6; maxEsc++) {
+            System.out.println("--- maxEscalas = " + maxEsc + " ---");
+            int[] contadores = new int[7];
+            
+            for (Envio e : envios) {
+                List<Vuelo> ruta = grafo.buscarRutaAleatoria(
+                    e.origen,
+                    e.destino,
+                    e.horaIngresoMin,
+                    maxEsc,
+                    30
+                );
+                if (ruta != null) {
+                    int numVuelos = ruta.size();
+                    contadores[numVuelos]++;
+                }
+            }
+            
+            System.out.print("Distribución: ");
+            for (int i = 1; i < 7; i++) {
+                if (contadores[i] > 0) {
+                    System.out.print(i + "vuelos:" + contadores[i] + " ");
+                }
+            }
+            System.out.println("\n");
+        }
+    }
+}

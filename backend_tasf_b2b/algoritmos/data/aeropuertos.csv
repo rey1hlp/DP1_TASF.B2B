@@ -1,0 +1,31 @@
+codigo_oaci,nombre,pais,codigo_corto,gmt,capacidad,latitud,longitud,continente
+SKBO,Bogota,Colombia,bogo,-5,430,4.701389,-74.146944,America del Sur
+SEQM,Quito,Ecuador,quit,-5,410,0.113333,-78.358611,America del Sur
+SVMI,Caracas,Venezuela,cara,-4,400,10.603056,-66.990556,America del Sur
+SBBR,Brasilia,Brasil,bras,-3,480,-15.864722,-47.918056,America del Sur
+SPIM,Lima,Perú,lima,-5,440,-12.021944,-77.114444,America del Sur
+SLLP,La Paz,Bolivia,lapa,-4,420,-16.513056,-68.192222,America del Sur
+SCEL,Santiago de Chile,Chile,sant,-3,460,-33.396389,-70.794722,America del Sur
+SABE,Buenos Aires,Argentina,buen,-3,460,-34.559167,-58.415556,America del Sur
+SGAS,Asunción,Paraguay,asun,-4,400,-25.240000,-57.520000,America del Sur
+SUAA,Motenvideo,Uruguay,mont,-3,400,-34.789167,-56.264722,America del Sur
+LATI,Tirana,Albania,tira,+2,410,41.414722,19.720556,Europa
+EDDI,Berlin,Alemania,berl,+2,480,52.473611,13.401667,Europa
+LOWW,Viena,Austria,vien,+2,430,48.110833,16.570833,Europa
+EBCI,Bruselas,Belgica,brus,+2,440,50.459167,4.453611,Europa
+UMMS,Minsk,Bielorrusia,mins,+3,400,53.882500,28.032500,Europa
+LBSF,Sofia,Bulgaria,sofi,+3,400,42.690278,23.404722,Europa
+LKPR,Praga,Checa,prag,+2,400,50.101389,14.265556,Europa
+LDZA,Zagreb,Croacia,zagr,+2,420,45.742778,16.068611,Europa
+EKCH,Copenhague,Dinamarca,cope,+2,480,55.618056,12.656111,Europa
+EHAM,Amsterdam,Holanda,amst,+2,480,52.300000,4.765000,Europa
+VIDP,Delhi,India,delh,+5,480,28.566389,77.103056,Asia
+OSDI,Damasco,Siria,dama,+3,400,33.411389,36.515556,Asia
+OERK,Riad,Arabia Saudita,riad,+3,420,24.957778,46.698889,Asia
+OMDB,Dubai,Emiratos A.U,emir,+4,420,25.252778,55.364444,Asia
+OAKB,Kabul,Afganistan,kabu,+4,480,34.565556,69.210833,Asia
+OOMS,Mascate,Oman,masc,+4,460,23.589444,58.284167,Asia
+OYSN,Sana,Yemen,sana,+3,420,15.476111,44.219722,Asia
+OPKC,Karachi,Pakistan,kara,+5,410,24.900000,67.150000,Asia
+UBBB,Baku,Azerbaiyan,baku,+2,400,40.467222,50.046667,Asia
+OJAI,Aman,Jordania,aman,+3,400,31.722500,35.993333,Asia
