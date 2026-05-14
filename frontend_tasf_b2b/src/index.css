@@ -21,9 +21,9 @@ body {
 
 /* ─── App shell ─────────────────────────────────────────────────── */
 /*
-  FIX: removed max-height + overflow: hidden — those two rules were
-  trapping all content inside 100vh and clipping anything that overflowed.
-  Using min-height so the shell grows with its content instead.
+  Layout shell fixed to the viewport height.
+  `overflow: hidden` keeps page-level scrolling clipped at the shell,
+  while scrolling is handled inside `.main` (and `.sidebar` if needed).
 */
 .app {
   display: grid;
