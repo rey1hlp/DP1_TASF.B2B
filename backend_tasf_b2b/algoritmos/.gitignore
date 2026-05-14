@@ -4,6 +4,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# temporary run artifacts
+/tmp_run
+
 ### STS ###
 .apt_generated
 .classpath
