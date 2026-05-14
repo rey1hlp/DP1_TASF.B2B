@@ -49,6 +49,7 @@ export type FlightSegmentDto = {
   salidaMin: number
   llegadaMin: number
   carga: number
+  capacidad?: number
   origenLat: number
   origenLon: number
   destinoLat: number

@@ -8,6 +8,18 @@ export type SimulationControlsProps = {
 export default function SimulationControls({ onStart, isRunning }: SimulationControlsProps) {
   const [inicio, setInicio] = useState('2026-02-15')
   const [dias, setDias] = useState(3)
+  const [greenMax, setGreenMax] = useState(30)
+  const [amberMax, setAmberMax] = useState(70)
+
+  const handleGreenChange = (value: number) => {
+    const next = Math.min(value, amberMax - 1)
+    setGreenMax(Math.max(0, next))
+  }
+
+  const handleAmberChange = (value: number) => {
+    const next = Math.max(value, greenMax + 1)
+    setAmberMax(Math.min(100, next))
+  }
 
   return (
     <div className="control-panel">
@@ -42,18 +54,35 @@ export default function SimulationControls({ onStart, isRunning }: SimulationCon
         />
       </label>
 
-      <label className="field">
-        Rango Semaforo Verde
-        <input type="text" defaultValue="0% - 30%" />
-      </label>
-      <label className="field">
-        Rango Semaforo Ambar
-        <input type="text" defaultValue="30% - 70%" />
-      </label>
-      <label className="field">
-        Rango Semaforo Rojo
-        <input type="text" defaultValue="70% - 100%" />
-      </label>
+      <div className="field">
+        <div className="field-label">Rangos de semaforo</div>
+        <div className="range-row">
+          <span className="range-label">Verde</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={greenMax}
+            onChange={(event) => handleGreenChange(Number(event.target.value))}
+          />
+          <span className="range-value">{`0% - ${greenMax}%`}</span>
+        </div>
+        <div className="range-row">
+          <span className="range-label">Ambar</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={amberMax}
+            onChange={(event) => handleAmberChange(Number(event.target.value))}
+          />
+          <span className="range-value">{`${greenMax}% - ${amberMax}%`}</span>
+        </div>
+        <div className="range-row">
+          <span className="range-label">Rojo</span>
+          <div className="range-static">{`${amberMax}% - 100%`}</div>
+        </div>
+      </div>
 
       <div className="buttons">
         <button

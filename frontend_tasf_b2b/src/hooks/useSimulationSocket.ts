@@ -9,6 +9,7 @@ import { buildWsUrl } from '../services/api'
 export function useSimulationSocket(simId: string | null) {
   const socketRef = useRef<WebSocket | null>(null)
   const [status, setStatus] = useState<string>('IDLE')
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [currentMinute, setCurrentMinute] = useState<number | null>(null)
   const [segments, setSegments] = useState<FlightSegmentDto[]>([])
   const [meta, setMeta] = useState<WsInitMessage | null>(null)
@@ -28,17 +29,20 @@ export function useSimulationSocket(simId: string | null) {
         setMeta(init)
         setSegments(init.vuelos)
         setStatus('READY')
+        setStatusMessage(null)
       }
       if (payload.type === 'tick') {
         setCurrentMinute(payload.minuto)
       }
       if (payload.type === 'status') {
         setStatus(payload.status)
+        setStatusMessage(payload.message ?? null)
       }
     }
 
     ws.onclose = () => {
       setStatus('CLOSED')
+      setStatusMessage('Conexion finalizada.')
     }
 
     return () => {
@@ -48,6 +52,7 @@ export function useSimulationSocket(simId: string | null) {
 
   return {
     status,
+    statusMessage,
     currentMinute,
     segments,
     meta,

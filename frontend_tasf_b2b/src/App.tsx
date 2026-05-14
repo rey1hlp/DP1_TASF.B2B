@@ -5,13 +5,17 @@ import { useSimulationSocket } from './hooks/useSimulationSocket'
 import MapView from './components/MapView'
 import SimulationStatus from './components/SimulationStatus'
 import SimulationControls from './components/SimulationControls'
+import { formatCompactDate, getDayIndexFromDateString, getInclusiveDaySpan } from './utils/time'
 
 export default function App() {
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [simId, setSimId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [requestedStart, setRequestedStart] = useState<string | null>(null)
+  const [requestedDays, setRequestedDays] = useState<number | null>(null)
+  const [displayOffset, setDisplayOffset] = useState<number | null>(null)
 
-  const { status, currentMinute, segments, meta } = useSimulationSocket(simId)
+  const { status, statusMessage, currentMinute, segments, meta } = useSimulationSocket(simId)
 
   useEffect(() => {
     fetchAirports()
@@ -21,6 +25,9 @@ export default function App() {
 
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
     setError(null)
+    setRequestedStart(inicio)
+    setRequestedDays(dias)
+    setDisplayOffset(null)
     try {
       const response = await startSimulation({
         envios: '_envios_preliminar_',
@@ -41,6 +48,45 @@ export default function App() {
       setError(msg)
     }
   }
+
+  const requestedStartIndex = getDayIndexFromDateString(requestedStart)
+  const requestedStartMinute = requestedStartIndex !== null ? requestedStartIndex * 1440 : null
+  const isPreparing = (status === 'READY' || status === 'RUNNING') && currentMinute === null
+
+  useEffect(() => {
+    if (requestedStartMinute === null || currentMinute === null) {
+      return
+    }
+    if (displayOffset === null) {
+      setDisplayOffset(requestedStartMinute - currentMinute)
+    }
+  }, [requestedStartMinute, currentMinute, displayOffset])
+
+  const displayMinute =
+    currentMinute === null
+      ? null
+      : displayOffset !== null
+        ? currentMinute + displayOffset
+        : currentMinute
+  const duration =
+    requestedDays ?? (meta ? getInclusiveDaySpan(meta.inicio, meta.fin) : null)
+  const running = status === 'READY' || status === 'RUNNING'
+  const preparingMessage = isPreparing
+    ? `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStart ?? meta?.inicio)}`
+    : null
+  const displayStartDate = formatCompactDate(requestedStart ?? meta?.inicio)
+  const bannerMessage = (() => {
+    if (status === 'COMPLETED') {
+      return 'Simulacion finalizada con exito.'
+    }
+    if (status === 'FAILED') {
+      return statusMessage || 'La simulacion finalizo con error.'
+    }
+    if (status === 'CLOSED') {
+      return statusMessage || 'Conexion finalizada.'
+    }
+    return null
+  })()
 
   return (
     <div className="app">
@@ -72,13 +118,12 @@ export default function App() {
       <main className="main">
         <section className="toolbar">
           <div className="tabs">
-            <button className="tab">Escenario diario</button>
             <button className="tab active">Simulacion del periodo</button>
             <button className="tab">Simulacion hasta el colapso</button>
           </div>
           <div className="status">
-            <div className="status-item">Fecha: <strong>{meta?.inicio ?? '--'}</strong></div>
-            <div className="status-item">Duracion: <strong>{meta ? `${meta.diaMax - meta.diaMin + 1} dias` : '--'}</strong></div>
+            <div className="status-item">Fecha: <strong>{displayStartDate}</strong></div>
+            <div className="status-item">Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong></div>
             <div className="status-item">Vuelos activos: <strong>{segments.length}</strong></div>
             <div className="status-item">Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong></div>
           </div>
@@ -86,12 +131,19 @@ export default function App() {
 
         <section className="map-area">
           <div className="map-placeholder">
-            <SimulationStatus meta={meta} currentMinute={currentMinute} />
-            <MapView airports={airports} segments={segments} currentMinute={currentMinute} />
+            <SimulationStatus
+              meta={meta}
+              currentMinute={displayMinute}
+              status={status}
+              preparingMessage={preparingMessage}
+            />
+            <MapView airports={airports} segments={segments} currentMinute={displayMinute} />
+            {isPreparing ? <div className="prep-overlay">{preparingMessage}</div> : null}
+            {bannerMessage ? <div className="status-banner">{bannerMessage}</div> : null}
             {error ? <div className="error">{error}</div> : null}
           </div>
 
-          <SimulationControls onStart={handleStart} isRunning={status === 'READY' || status === 'RUNNING'} />
+          <SimulationControls onStart={handleStart} isRunning={running} />
         </section>
       </main>
     </div>
