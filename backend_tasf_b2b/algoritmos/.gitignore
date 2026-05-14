@@ -4,7 +4,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-# logs
+# temporary run artifacts
 /tmp_run
 
 ### STS ###
