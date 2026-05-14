@@ -327,14 +327,22 @@ public class SimulationService {
                     simulationId
                 );
     
-                ReporteSinRuta.escribirReporte(
-                    Path.of(raiz),
-                    envios,
-                    mejor,
-                    "GA"
-                );
-
-                ReporteRutas.escribirReporte(Path.of(raiz), envios, mejor, "GA_full");
+                try {
+                    ReporteSinRuta.escribirReporte(
+                        Path.of(raiz),
+                        envios,
+                        mejor,
+                        "GA"
+                    );
+    
+                    ReporteRutas.escribirReporte(Path.of(raiz), envios, mejor, "GA_full");
+                } catch (Exception e) {
+                    log.warn(
+                        "[SIM:{}] Report generation failed; continuing simulation without report",
+                        simulationId,
+                        e
+                    );
+                }
             }
     
             // =========================
