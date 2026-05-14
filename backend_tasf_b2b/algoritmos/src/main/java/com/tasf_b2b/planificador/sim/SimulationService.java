@@ -13,12 +13,15 @@ import com.tasf_b2b.planificador.nucleo.ObjetivoConfig;
 import com.tasf_b2b.planificador.nucleo.ParametrosGa;
 import com.tasf_b2b.planificador.nucleo.PlanificadorGa;
 import com.tasf_b2b.planificador.nucleo.Ruta;
+import com.tasf_b2b.planificador.utils.ReporteRutas;
 import com.tasf_b2b.planificador.utils.ReporteSinRuta;
 import com.tasf_b2b.planificador.utils.RutaResolver;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -39,6 +42,7 @@ public class SimulationService {
     private static final double DEFAULT_MUTACION = 0.05;
     private static final int DEFAULT_TORNEO = 5;
     private static final double DEFAULT_SPEED_MIN_PER_SEC = 5.0;
+    private static final Logger log = LoggerFactory.getLogger(SimulationService.class);
 
     private final SimulationRegistry registry;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -60,6 +64,8 @@ public class SimulationService {
             ? request.speedMinPerSec
             : DEFAULT_SPEED_MIN_PER_SEC;
         response.message = "RUNNING";
+        // de momento, para que siempre genere reporte en el back
+        request.reporte = true;
 
         registry.create(simulationId);
 
@@ -68,103 +74,316 @@ public class SimulationService {
     }
 
     private void ejecutar(String simulationId, SimulationRequest request) {
+        long simulationStart = System.currentTimeMillis();
         try {
+    
+            log.info("[SIM:{}] Simulation started", simulationId);
+    
             String raiz = System.getProperty("user.dir");
             UtilArchivos util = new UtilArchivos();
-
-            String archivoEnvios = (request.envios == null || request.envios.isBlank())
-                ? "_envios_preliminar_"
-                : request.envios;
-
+    
+            String archivoEnvios = resolverArchivoEnvios(request);
             String inicio = request.inicio;
-            String fin = request.fin;
-            if ((fin == null || fin.isBlank()) && request.dias != null && inicio != null) {
-                fin = calcularFinDesdeInicio(inicio, request.dias);
-            }
-
-            Path rutaAeropuertosTxt = RutaResolver.resolverRutaData(raiz, "aeropuertos.txt");
-            Path rutaAeropuertosCsv = RutaResolver.resolverRutaData(raiz, "aeropuertos.csv");
-            Path rutaVuelos = RutaResolver.resolverRutaData(raiz, "planes_vuelo.txt");
-            Path rutaEnvios = RutaResolver.resolverRutaData(raiz, archivoEnvios);
-
-            Map<String, Aeropuerto> aeropuertos = util.cargarAeropuertos(rutaAeropuertosTxt, rutaAeropuertosCsv);
-
-            if (Files.isDirectory(rutaEnvios)) {
-                // noop, solo para confirmar existencia
-            }
-
-            List<Envio> envios = util.cargarEnvios(rutaEnvios, aeropuertos.keySet(), aeropuertos, inicio, fin);
-            if (request.maxEnvios != null && request.maxEnvios > 0 && envios.size() > request.maxEnvios) {
-                envios = new ArrayList<>(envios.subList(0, request.maxEnvios));
-            }
-
+            String fin = resolverFechaFin(request);
+    
+            log.info(
+                "[SIM:{}] Input params -> inicio={}, fin={}, archivoEnvios={}",
+                simulationId,
+                inicio,
+                fin,
+                archivoEnvios
+            );
+    
+            // =========================
+            // RESOLVER RUTAS
+            // =========================
+    
+            Path rutaAeropuertosTxt =
+                RutaResolver.resolverRutaData(raiz, "aeropuertos.txt");
+    
+            Path rutaAeropuertosCsv =
+                RutaResolver.resolverRutaData(raiz, "aeropuertos.csv");
+    
+            Path rutaVuelos =
+                RutaResolver.resolverRutaData(raiz, "planes_vuelo.txt");
+    
+            Path rutaEnvios =
+                RutaResolver.resolverRutaData(raiz, archivoEnvios);
+    
+            // =========================
+            // CARGAR AEROPUERTOS
+            // =========================
+    
+            long tAeropuertos = System.currentTimeMillis();
+    
+            Map<String, Aeropuerto> aeropuertos =
+                util.cargarAeropuertos(
+                    rutaAeropuertosTxt,
+                    rutaAeropuertosCsv
+                );
+    
+            log.info(
+                "[SIM:{}] Loaded {} airports in {} ms",
+                simulationId,
+                aeropuertos.size(),
+                System.currentTimeMillis() - tAeropuertos
+            );
+    
+            // =========================
+            // CARGAR ENVIOS
+            // =========================
+    
+            long tEnvios = System.currentTimeMillis();
+    
+            List<Envio> envios =
+                util.cargarEnvios(
+                    rutaEnvios,
+                    aeropuertos.keySet(),
+                    aeropuertos,
+                    inicio,
+                    fin
+                );
+    
+            log.info(
+                "[SIM:{}] Loaded {} shipments in {} ms",
+                simulationId,
+                envios.size(),
+                System.currentTimeMillis() - tEnvios
+            );
+    
+            envios = limitarEnvios(request, envios);
+    
             if (envios.isEmpty()) {
-                registry.markFailed(simulationId, "No hay envios en la ventana solicitada.");
+    
+                log.warn(
+                    "[SIM:{}] No shipments found in requested window",
+                    simulationId
+                );
+    
+                registry.markFailed(
+                    simulationId,
+                    "No hay envios en la ventana solicitada."
+                );
+    
                 return;
             }
-
-            int diaMin = envios.stream().mapToInt(e -> e.diaIndex).min().orElse(0);
-            int diaMax = envios.stream().mapToInt(e -> e.diaIndex).max().orElse(diaMin);
-            int maxSlaHoras = envios.stream().mapToInt(e -> e.slaHoras).max().orElse(0);
-            int diasExtra = (request.diasExtra != null && request.diasExtra >= 0)
-                ? request.diasExtra
-                : (int) Math.ceil(maxSlaHoras / 24.0);
-
-            List<Vuelo> planes = util.cargarVuelos(rutaVuelos, aeropuertos.keySet());
-            ParametrosGa params = construirParametros(request);
-
-            if (Boolean.TRUE.equals(request.buscarColapso)) {
-                BuscadorColapso.ResultadoVentana ventana = BuscadorColapso.buscarPuntoColapso(
-                    envios,
-                    aeropuertos,
-                    planes,
-                    diasExtra,
-                    params,
-                    1L
+    
+            // =========================
+            // CALCULAR VENTANA
+            // =========================
+    
+            int diaMin =
+                envios.stream()
+                    .mapToInt(e -> e.diaIndex)
+                    .min()
+                    .orElse(0);
+    
+            int diaMax =
+                envios.stream()
+                    .mapToInt(e -> e.diaIndex)
+                    .max()
+                    .orElse(diaMin);
+    
+            int maxSlaHoras =
+                envios.stream()
+                    .mapToInt(e -> e.slaHoras)
+                    .max()
+                    .orElse(0);
+    
+            int diasExtra =
+                resolverDiasExtra(request, maxSlaHoras);
+    
+            log.info(
+                "[SIM:{}] Window -> diaMin={}, diaMax={}, diasExtra={}",
+                simulationId,
+                diaMin,
+                diaMax,
+                diasExtra
+            );
+    
+            // =========================
+            // CARGAR PLANES
+            // =========================
+    
+            long tPlanes = System.currentTimeMillis();
+    
+            List<Vuelo> planes =
+                util.cargarVuelos(
+                    rutaVuelos,
+                    aeropuertos.keySet()
                 );
+    
+            log.info(
+                "[SIM:{}] Loaded {} flight plans in {} ms",
+                simulationId,
+                planes.size(),
+                System.currentTimeMillis() - tPlanes
+            );
+    
+            ParametrosGa params = construirParametros(request);
+    
+            // =========================
+            // BUSQUEDA DE COLAPSO
+            // =========================
+    
+            if (Boolean.TRUE.equals(request.buscarColapso)) {
+    
+                log.info(
+                    "[SIM:{}] Running collapse search",
+                    simulationId
+                );
+    
+                BuscadorColapso.ResultadoVentana ventana =
+                    BuscadorColapso.buscarPuntoColapso(
+                        envios,
+                        aeropuertos,
+                        planes,
+                        diasExtra,
+                        params,
+                        1L
+                    );
+    
                 envios = ventana.enviosVentana;
                 diaMin = ventana.diaMin;
                 diaMax = ventana.diaMax;
+    
+                log.info(
+                    "[SIM:{}] Collapse window resolved -> diaMin={}, diaMax={}, envios={}",
+                    simulationId,
+                    diaMin,
+                    diaMax,
+                    envios.size()
+                );
             }
-
-            List<Vuelo> vuelos = util.instanciarVuelosPorRango(planes, diaMin, diaMax + Math.max(0, diasExtra));
+    
+            // =========================
+            // INSTANCIAR VUELOS
+            // =========================
+    
+            long tInstancias = System.currentTimeMillis();
+    
+            List<Vuelo> vuelos =
+                util.instanciarVuelosPorRango(
+                    planes,
+                    diaMin,
+                    diaMax + Math.max(0, diasExtra)
+                );
+    
+            log.info(
+                "[SIM:{}] Instantiated {} flights in {} ms",
+                simulationId,
+                vuelos.size(),
+                System.currentTimeMillis() - tInstancias
+            );
+    
             if (vuelos.isEmpty()) {
-                registry.markFailed(simulationId, "No hay vuelos disponibles para la ventana.");
+    
+                log.warn(
+                    "[SIM:{}] No flights available for selected range",
+                    simulationId
+                );
+    
+                registry.markFailed(
+                    simulationId,
+                    "No hay vuelos disponibles para la ventana."
+                );
+    
                 return;
             }
-
-            GrafoVuelos grafo = new GrafoVuelos(vuelos, aeropuertos);
-            PlanificadorGa planificador = new PlanificadorGa(grafo, envios, params, 1L);
+    
+            // =========================
+            // EJECUTAR GA
+            // =========================
+    
+            long tGa = System.currentTimeMillis();
+    
+            GrafoVuelos grafo =
+                new GrafoVuelos(vuelos, aeropuertos);
+    
+            PlanificadorGa planificador =
+                new PlanificadorGa(
+                    grafo,
+                    envios,
+                    params,
+                    1L
+                );
+    
             Individuo mejor = planificador.ejecutar();
-
-            if (Boolean.TRUE.equals(request.reporte)) {
-                ReporteSinRuta.escribirReporte(Path.of(raiz), envios, mejor, "GA");
-            }
-
-            long totalMaletas = envios.stream().mapToLong(e -> e.cantidad).sum();
-            List<FlightSegmentDto> segmentos = construirSegmentos(mejor, envios, aeropuertos);
-
-            String inicioFinal = UtilArchivos.formatearFecha(diaMin);
-            String finFinal = UtilArchivos.formatearFecha(diaMax);
-            double speed = (request.speedMinPerSec != null && request.speedMinPerSec > 0)
-                ? request.speedMinPerSec
-                : DEFAULT_SPEED_MIN_PER_SEC;
-
-            SimulationData data = new SimulationData(
-                inicioFinal,
-                finFinal,
-                diaMin,
-                diaMax,
-                diasExtra,
-                envios.size(),
-                totalMaletas,
-                speed,
-                segmentos
+    
+            log.info(
+                "[SIM:{}] Genetic algorithm finished in {} ms",
+                simulationId,
+                System.currentTimeMillis() - tGa
             );
+    
+            // =========================
+            // REPORTE
+            // =========================
+    
+            if (Boolean.TRUE.equals(request.reporte)) {
+    
+                log.info(
+                    "[SIM:{}] Generating report",
+                    simulationId
+                );
+    
+                ReporteSinRuta.escribirReporte(
+                    Path.of(raiz),
+                    envios,
+                    mejor,
+                    "GA"
+                );
 
+                ReporteRutas.escribirReporte(Path.of(raiz), envios, mejor, "GA_full");
+            }
+    
+            // =========================
+            // RESULTADOS
+            // =========================
+    
+            long totalMaletas =
+                envios.stream()
+                    .mapToLong(e -> e.cantidad)
+                    .sum();
+    
+            List<FlightSegmentDto> segmentos =
+                construirSegmentos(
+                    mejor,
+                    envios,
+                    aeropuertos
+                );
+    
+            SimulationData data =
+                construirSimulationData(
+                    request,
+                    envios,
+                    segmentos,
+                    totalMaletas,
+                    diaMin,
+                    diaMax,
+                    diasExtra
+                );
+    
             registry.markReady(simulationId, data);
+    
+            log.info(
+                "[SIM:{}] Simulation completed successfully in {} ms",
+                simulationId,
+                System.currentTimeMillis() - simulationStart
+            );
+    
         } catch (Exception ex) {
-            registry.markFailed(simulationId, ex.getMessage());
+    
+            log.error(
+                "[SIM:{}] Simulation failed",
+                simulationId,
+                ex
+            );
+    
+            registry.markFailed(
+                simulationId,
+                ex.getMessage()
+            );
         }
     }
 
@@ -233,5 +452,100 @@ public class SimulationService {
         LocalDate d = LocalDate.parse(inicio, FECHA_FORMAT);
         int delta = Math.max(1, dias) - 1;
         return d.plusDays(delta).format(FECHA_FORMAT);
+    }
+
+    private String resolverArchivoEnvios(SimulationRequest request) {
+
+        if (request.envios == null || request.envios.isBlank()) {
+            return "_envios_preliminar_";
+        }
+    
+        return request.envios;
+    }
+
+    private String resolverFechaFin(SimulationRequest request) {
+
+        String fin = request.fin;
+    
+        if ((fin == null || fin.isBlank())
+            && request.dias != null
+            && request.inicio != null) {
+    
+            return calcularFinDesdeInicio(
+                request.inicio,
+                request.dias
+            );
+        }
+    
+        return fin;
+    }
+
+    private List<Envio> limitarEnvios(
+        SimulationRequest request,
+        List<Envio> envios
+    ) {
+    
+        Integer maxEnvios = request.maxEnvios;
+    
+        if (maxEnvios == null || maxEnvios <= 0) {
+            return envios;
+        }
+    
+        if (envios.size() <= maxEnvios) {
+            return envios;
+        }
+    
+        return new ArrayList<>(
+            envios.subList(0, maxEnvios)
+        );
+    }
+
+    private int resolverDiasExtra(
+        SimulationRequest request,
+        int maxSlaHoras
+    ) {
+    
+        if (request.diasExtra != null
+            && request.diasExtra >= 0) {
+    
+            return request.diasExtra;
+        }
+    
+        return (int) Math.ceil(maxSlaHoras / 24.0);
+    }
+
+    private SimulationData construirSimulationData(
+        SimulationRequest request,
+        List<Envio> envios,
+        List<FlightSegmentDto> segmentos,
+        long totalMaletas,
+        int diaMin,
+        int diaMax,
+        int diasExtra
+    ) {
+    
+        String inicioFinal =
+            UtilArchivos.formatearFecha(diaMin);
+    
+        String finFinal =
+            UtilArchivos.formatearFecha(diaMax);
+    
+        double speed =
+            (request.speedMinPerSec != null
+                && request.speedMinPerSec > 0)
+                ? request.speedMinPerSec
+                : DEFAULT_SPEED_MIN_PER_SEC;
+    
+        return new SimulationData(
+            inicioFinal,
+            finFinal,
+            diaMin,
+            diaMax,
+            diasExtra,
+            envios.size(),
+            totalMaletas,
+            speed,
+            segmentos
+        );
     }
 }
