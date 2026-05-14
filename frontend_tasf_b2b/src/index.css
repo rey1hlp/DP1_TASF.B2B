@@ -1,5 +1,6 @@
 @import "leaflet/dist/leaflet.css";
 
+/* ─── Reset & base ─────────────────────────────────────────────── */
 :root {
   color-scheme: light;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
@@ -18,12 +19,25 @@ body {
   min-height: 100vh;
 }
 
+/* ─── App shell ─────────────────────────────────────────────────── */
+/*
+  FIX: removed max-height + overflow: hidden — those two rules were
+  trapping all content inside 100vh and clipping anything that overflowed.
+  Using min-height so the shell grows with its content instead.
+*/
 .app {
   display: grid;
   grid-template-columns: 260px 1fr;
-  min-height: 100vh;
+  height: 100vh;        /* lock to viewport height */
+  overflow: hidden;     /* clip at the shell level — scroll happens inside .main */
 }
 
+/* ─── Sidebar ───────────────────────────────────────────────────── */
+/*
+  FIX: sticky + height 100vh so it stays in view while the main
+  area scrolls on desktop. overflow-y: auto lets the sidebar itself
+  scroll if its content is taller than the viewport.
+*/
 .sidebar {
   background: #1b3d6b;
   color: #eef3fb;
@@ -31,6 +45,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -48,6 +66,7 @@ body {
   display: grid;
   place-items: center;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .brand-title {
@@ -79,6 +98,7 @@ body {
   display: grid;
   place-items: center;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .profile-name {
@@ -105,6 +125,7 @@ body {
   text-align: left;
   cursor: pointer;
   font-size: 14px;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .nav-item.active,
@@ -113,13 +134,18 @@ body {
   border-color: #3f6fb9;
 }
 
+/* ─── Main content ──────────────────────────────────────────────── */
 .main {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 26px 28px 28px 28px;
+  padding: 20px 24px;
+  height: 100%;       /* fill the grid column */
+  overflow-y: auto;   /* scroll happens here, not on the page */
+  min-width: 0;       /* prevents grid blowout */
 }
 
+/* ─── Toolbar ───────────────────────────────────────────────────── */
 .toolbar {
   background: #ffffff;
   border-radius: 18px;
@@ -127,6 +153,7 @@ body {
   box-shadow: 0 18px 40px rgba(20, 46, 86, 0.12);
   display: grid;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .tabs {
@@ -142,6 +169,8 @@ body {
   border-radius: 999px;
   font-size: 13px;
   cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
 }
 
 .tab.active {
@@ -158,10 +187,19 @@ body {
   color: #40577a;
 }
 
+/* ─── Map area ──────────────────────────────────────────────────── */
+/*
+  FIX: removed min-height: 0 and overflow: hidden — those caused
+  the map container to collapse. Added min-height on the placeholder
+  and an explicit px height on the map div for Leaflet.
+*/
 .map-area {
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 20px;
+  flex: 1;            /* fill remaining vertical space inside .main */
+  min-height: 0;      /* required: without this, flex children ignore the constraint */
+  align-items: stretch;
 }
 
 .map-placeholder {
@@ -170,13 +208,18 @@ body {
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.15);
   padding: 18px 18px 24px;
   position: relative;
-  min-height: 520px;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;       /* fill the grid cell */
+  min-height: 0;      /* allow shrinking below content size */
 }
 
+/* Leaflet needs a concrete height. Since .map-placeholder is now flex,
+   flex: 1 here gives the map all remaining space after the timestamp header. */
 .map {
   width: 100%;
-  height: calc(100% - 42px);
+  flex: 1;
+  min-height: 200px;  /* safety floor so Leaflet always has something to render */
   border-radius: 18px;
   overflow: hidden;
   position: relative;
@@ -218,6 +261,7 @@ body {
   transform: rotate(35deg);
 }
 
+/* ─── Control panel ─────────────────────────────────────────────── */
 .control-panel {
   background: #ffffff;
   border-radius: 22px;
@@ -226,11 +270,14 @@ body {
   flex-direction: column;
   gap: 16px;
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.12);
+  height: 100%;       /* fill the grid cell */
+  overflow-y: auto;   /* scroll internally if content is taller */
 }
 
 .chip-row {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .chip {
@@ -240,6 +287,7 @@ body {
   padding: 8px 14px;
   font-size: 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .chip.active {
@@ -260,6 +308,7 @@ body {
   border-radius: 12px;
   border: 1px solid #d6dfef;
   padding: 8px 10px;
+  width: 100%;
 }
 
 .buttons {
@@ -275,6 +324,11 @@ body {
   background: #f7f9fc;
   cursor: pointer;
   font-size: 12px;
+  transition: opacity 0.15s;
+}
+
+.btn:hover {
+  opacity: 0.85;
 }
 
 .btn.primary {
@@ -355,36 +409,177 @@ body {
   border-radius: 10px;
 }
 
-@media (max-width: 1100px) {
-  .app {
-    grid-template-columns: 1fr;
-  }
+/* ─── Responsive breakpoints ────────────────────────────────────── */
 
-  .sidebar {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
+/* Tablet landscape: collapse map + control panel to single column */
+@media (max-width: 1200px) {
   .map-area {
     grid-template-columns: 1fr;
   }
+
+  .control-panel {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
-@media (max-width: 700px) {
+/* Tablet portrait: collapse entire app to single column */
+@media (max-width: 1024px) {
+  .app {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .main {
+    height: auto;
+    overflow-y: visible;
+  }
+
+  .map-area {
+    flex: none;
+    min-height: 0;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    overflow-y: visible;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .brand {
+    width: 100%;
+  }
+
+  .profile {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .nav {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .nav-item {
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+  }
+
+  .map-placeholder {
+    height: auto;
+    min-height: 420px;
+  }
+
+  .map {
+    flex: none;
+    height: 360px;
+  }
+
+  .control-panel {
+    height: auto;
+    max-height: none;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .main {
+    padding: 12px;
+    gap: 12px;
+  }
+
   .toolbar,
   .map-placeholder,
   .control-panel {
-    padding: 16px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .tabs {
+    flex-direction: column;
+  }
+
+  .tab {
+    padding: 12px 16px;
+    font-size: 12px;
   }
 
   .status {
     flex-direction: column;
     gap: 8px;
+    font-size: 12px;
   }
 
-  .nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .status-item {
+    white-space: nowrap;
+  }
+
+  .map-placeholder {
+    min-height: 360px;
+  }
+
+  .map {
+    flex: none;
+    height: 300px;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .sidebar {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .main {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .brand-title {
+    font-size: 16px;
+  }
+
+  .logo,
+  .avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .toolbar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .map-placeholder {
+    padding: 10px;
+    min-height: 300px;
+  }
+
+  .map {
+    flex: none;
+    height: 240px;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr 1fr; /* keep 2 cols even on small phones */
+  }
+
+  .buttons {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+    text-align: center;
   }
 }
