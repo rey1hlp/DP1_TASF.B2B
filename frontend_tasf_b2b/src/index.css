@@ -34,8 +34,7 @@ body {
 
 /* ─── Sidebar ───────────────────────────────────────────────────── */
 /*
-  FIX: sticky + height 100vh so it stays in view while the main
-  area scrolls on desktop. overflow-y: auto lets the sidebar itself
+  overflow-y: auto lets the sidebar itself
   scroll if its content is taller than the viewport.
 */
 .sidebar {
@@ -189,9 +188,7 @@ body {
 
 /* ─── Map area ──────────────────────────────────────────────────── */
 /*
-  FIX: removed min-height: 0 and overflow: hidden — those caused
-  the map container to collapse. Added min-height on the placeholder
-  and an explicit px height on the map div for Leaflet.
+  Added min-height on the placeholder and an explicit px height on the map div for Leaflet.
 */
 .map-area {
   display: grid;
@@ -219,7 +216,7 @@ body {
 .map {
   width: 100%;
   flex: 1;
-  min-height: 200px;  /* safety floor so Leaflet always has something to render */
+  min-height: 200px;
   border-radius: 18px;
   overflow: hidden;
   position: relative;
