@@ -4,6 +4,7 @@ public class SimulationState {
     public enum Status {
         RUNNING,
         READY,
+        PAUSED,
         FAILED
     }
 

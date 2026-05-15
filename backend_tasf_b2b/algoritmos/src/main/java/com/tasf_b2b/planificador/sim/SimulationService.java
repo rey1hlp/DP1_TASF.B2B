@@ -1,6 +1,8 @@
 package com.tasf_b2b.planificador.sim;
 
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
+import com.tasf_b2b.planificador.api.dto.WarehouseEventDto;
+import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
 import com.tasf_b2b.planificador.api.dto.SimulationRequest;
 import com.tasf_b2b.planificador.api.dto.SimulationResponse;
 import com.tasf_b2b.planificador.dominio.Aeropuerto;
@@ -360,12 +362,20 @@ public class SimulationService {
                     envios,
                     aeropuertos
                 );
+
+            List<WarehouseStatusDto> almacenes =
+                construirEventosAlmacen(
+                    mejor,
+                    envios,
+                    aeropuertos
+                );
     
             SimulationData data =
                 construirSimulationData(
                     request,
                     envios,
                     segmentos,
+                    almacenes,
                     totalMaletas,
                     diaMin,
                     diaMax,
@@ -437,6 +447,7 @@ public class SimulationService {
                     seg.destino = vuelo.destino;
                     seg.salidaMin = vuelo.salidaMin;
                     seg.llegadaMin = vuelo.llegadaMin;
+                    seg.capacidad = vuelo.capacidad;
                     Aeropuerto aO = aeropuertos.get(vuelo.origen);
                     Aeropuerto aD = aeropuertos.get(vuelo.destino);
                     if (aO != null) {
@@ -454,6 +465,61 @@ public class SimulationService {
         }
 
         return new ArrayList<>(mapa.values());
+    }
+
+    private List<WarehouseStatusDto> construirEventosAlmacen(
+        Individuo mejor,
+        List<Envio> envios,
+        Map<String, Aeropuerto> aeropuertos
+    ) {
+
+        Map<String, List<WarehouseEventDto>> eventos = new HashMap<>();
+        if (mejor == null || mejor.asignaciones == null) {
+            return List.of();
+        }
+
+        for (int i = 0; i < envios.size(); i++) {
+            Envio envio = envios.get(i);
+            Ruta ruta = mejor.asignaciones[i];
+            if (ruta == null || ruta.vuelos == null || ruta.vuelos.isEmpty()) {
+                continue;
+            }
+            for (int j = 0; j < ruta.vuelos.size(); j++) {
+                int llegada = ruta.llegadasAlmacenMin[j];
+                int salida = ruta.salidasAlmacenMin[j];
+                if (salida <= llegada) {
+                    continue;
+                }
+                Vuelo vuelo = ruta.vuelos.get(j);
+                List<WarehouseEventDto> lista = eventos.computeIfAbsent(
+                    vuelo.destino,
+                    k -> new ArrayList<>()
+                );
+
+                WarehouseEventDto in = new WarehouseEventDto();
+                in.minuto = llegada;
+                in.delta = envio.cantidad;
+                lista.add(in);
+
+                WarehouseEventDto out = new WarehouseEventDto();
+                out.minuto = salida;
+                out.delta = -envio.cantidad;
+                lista.add(out);
+            }
+        }
+
+        List<WarehouseStatusDto> result = new ArrayList<>();
+        for (Aeropuerto aeropuerto : aeropuertos.values()) {
+            List<WarehouseEventDto> lista = eventos.getOrDefault(aeropuerto.codigoOaci, new ArrayList<>());
+            lista.sort(java.util.Comparator.comparingInt(a -> a.minuto));
+            WarehouseStatusDto dto = new WarehouseStatusDto();
+            dto.codigoOaci = aeropuerto.codigoOaci;
+            dto.capacidad = aeropuerto.capacidad;
+            dto.eventos = lista;
+            result.add(dto);
+        }
+
+        return result;
     }
 
     private String calcularFinDesdeInicio(String inicio, int dias) {
@@ -526,6 +592,7 @@ public class SimulationService {
         SimulationRequest request,
         List<Envio> envios,
         List<FlightSegmentDto> segmentos,
+        List<WarehouseStatusDto> almacenes,
         long totalMaletas,
         int diaMin,
         int diaMax,
@@ -553,7 +620,8 @@ public class SimulationService {
             envios.size(),
             totalMaletas,
             speed,
-            segmentos
+            segmentos,
+            almacenes
         );
     }
 }

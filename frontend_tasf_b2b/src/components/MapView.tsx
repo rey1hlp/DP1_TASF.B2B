@@ -7,6 +7,8 @@ export type MapViewProps = {
   airports: AirportDto[]
   segments: FlightSegmentDto[]
   currentMinute: number | null
+  warehouseSnapshot: Record<string, { capacidad: number; ocupacion: number; porcentaje: number; libre: number }>
+  ranges: { greenMax: number; amberMax: number }
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -36,7 +38,23 @@ function buildPlaneIcon(heading: number) {
   })
 }
 
-export default function MapView({ airports, segments, currentMinute }: MapViewProps) {
+function resolveSemaphoreColor(percent: number, ranges: { greenMax: number; amberMax: number }) {
+  if (percent <= ranges.greenMax) {
+    return { stroke: '#2f8f46', fill: '#54b86c' }
+  }
+  if (percent <= ranges.amberMax) {
+    return { stroke: '#d3952a', fill: '#f0be62' }
+  }
+  return { stroke: '#c4473d', fill: '#e36b60' }
+}
+
+export default function MapView({
+  airports,
+  segments,
+  currentMinute,
+  warehouseSnapshot,
+  ranges,
+}: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -70,20 +88,35 @@ export default function MapView({ airports, segments, currentMinute }: MapViewPr
     airportLayerRef.current.clearLayers()
 
     airports.forEach((airport) => {
+      const snapshot = warehouseSnapshot[airport.codigoOaci]
+      const percent = snapshot ? snapshot.porcentaje : null
+      const colors = percent === null
+        ? { stroke: '#f4c56a', fill: '#f7d48a' }
+        : resolveSemaphoreColor(percent, ranges)
+
       const marker = L.circleMarker([airport.latitud, airport.longitud], {
-        radius: 4,
-        color: '#f4c56a',
+        radius: 5,
+        color: colors.stroke,
         weight: 1,
-        fillColor: '#f7d48a',
+        fillColor: colors.fill,
         fillOpacity: 0.9,
       })
-      const tooltip = `${airport.codigoOaci} - ${airport.nombre}<br/>Capacidad: ${airport.capacidad}`
+      const tooltipParts = [
+        `${airport.codigoOaci} - ${airport.nombre}`,
+        `Capacidad: ${airport.capacidad}`,
+      ]
+      if (snapshot) {
+        tooltipParts.push(`Ocupacion: ${snapshot.ocupacion}`)
+        tooltipParts.push(`Libre: ${snapshot.libre}`)
+        tooltipParts.push(`Uso: ${snapshot.porcentaje.toFixed(1)}%`)
+      }
+      const tooltip = tooltipParts.join('<br/>')
       marker.bindTooltip(tooltip, {
         direction: 'top',
       })
       marker.addTo(airportLayerRef.current as L.LayerGroup)
     })
-  }, [airports])
+  }, [airports, warehouseSnapshot, ranges])
 
   useEffect(() => {
     if (!planeLayerRef.current) {

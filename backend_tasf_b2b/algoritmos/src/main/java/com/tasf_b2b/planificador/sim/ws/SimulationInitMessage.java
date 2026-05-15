@@ -1,6 +1,7 @@
 package com.tasf_b2b.planificador.sim.ws;
 
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
+import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
 
 import java.util.List;
 
@@ -16,4 +17,5 @@ public class SimulationInitMessage {
     public long totalMaletas;
     public double speedMinPerSec;
     public List<FlightSegmentDto> vuelos;
+    public List<WarehouseStatusDto> almacenes;
 }

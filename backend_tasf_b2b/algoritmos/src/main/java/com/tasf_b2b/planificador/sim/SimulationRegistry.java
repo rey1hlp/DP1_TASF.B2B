@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class SimulationRegistry {
-    private static final long TICK_MS = 1000L;
+    private static final long TICK_MS = 500L;
 
     private final ObjectMapper mapper;
     private final Map<String, SimulationState> states = new ConcurrentHashMap<>();
@@ -69,6 +69,47 @@ public class SimulationRegistry {
         sendInitToSession(simulationId, session);
     }
 
+    public void pauseSimulation(String simulationId) {
+        SimulationState state = states.get(simulationId);
+        if (state == null) {
+            return;
+        }
+        state.status = SimulationState.Status.PAUSED;
+        Set<SessionContext> set = sessions.get(simulationId);
+        if (set == null || set.isEmpty()) {
+            return;
+        }
+        long now = Instant.now().toEpochMilli();
+        for (SessionContext ctx : new ArrayList<>(set)) {
+            if (!ctx.paused) {
+                long elapsedMs = Math.max(0L, now - ctx.inicioMs);
+                ctx.pausedElapsedMs = elapsedMs;
+                ctx.paused = true;
+            }
+        }
+        broadcastStatus(simulationId, "PAUSED", null);
+    }
+
+    public void resumeSimulation(String simulationId) {
+        SimulationState state = states.get(simulationId);
+        if (state == null) {
+            return;
+        }
+        state.status = SimulationState.Status.READY;
+        Set<SessionContext> set = sessions.get(simulationId);
+        if (set == null || set.isEmpty()) {
+            return;
+        }
+        long now = Instant.now().toEpochMilli();
+        for (SessionContext ctx : new ArrayList<>(set)) {
+            if (ctx.paused) {
+                ctx.inicioMs = now - ctx.pausedElapsedMs;
+                ctx.paused = false;
+            }
+        }
+        broadcastStatus(simulationId, "READY", null);
+    }
+
     public void unregisterSession(String simulationId, WebSocketSession session) {
         Set<SessionContext> set = sessions.get(simulationId);
         if (set == null) {
@@ -91,11 +132,16 @@ public class SimulationRegistry {
 
     private void sendInitToSession(String simulationId, WebSocketSession session) {
         SimulationState state = states.get(simulationId);
-        if (state == null || state.data == null || state.status != SimulationState.Status.READY) {
+        if (state == null || state.data == null) {
+            return;
+        }
+        if (state.status != SimulationState.Status.READY && state.status != SimulationState.Status.PAUSED) {
             return;
         }
         send(session, buildInitMessage(simulationId, state.data));
-        iniciarRelojSesion(simulationId, session, state.data.speedMinPerSec);
+        if (state.status == SimulationState.Status.READY) {
+            iniciarRelojSesion(simulationId, session, state.data.speedMinPerSec);
+        }
     }
 
     private void broadcastInit(String simulationId, SimulationData data) {
@@ -136,6 +182,7 @@ public class SimulationRegistry {
         init.totalMaletas = data.totalMaletas;
         init.speedMinPerSec = data.speedMinPerSec;
         init.vuelos = data.vuelos;
+        init.almacenes = data.almacenes;
         return init;
     }
 
@@ -167,11 +214,11 @@ public class SimulationRegistry {
             long maxMin = ((long) (state.data.diaMax + state.data.diasExtra + 1)) * 24L * 60L;
 
             for (SessionContext ctx : new ArrayList<>(entry.getValue())) {
-                if (!ctx.relojActivo || ctx.finalizado) {
+                if (!ctx.relojActivo || ctx.finalizado || ctx.paused) {
                     continue;
                 }
-                long elapsedSec = Math.max(0L, (Instant.now().toEpochMilli() - ctx.inicioMs) / 1000L);
-                long simMin = baseMin + (long) Math.floor(elapsedSec * ctx.speedMinPerSec);
+                long elapsedMs = Math.max(0L, Instant.now().toEpochMilli() - ctx.inicioMs);
+                long simMin = baseMin + (long) Math.floor((elapsedMs * ctx.speedMinPerSec) / 1000.0);
 
                 if (simMin > maxMin) {
                     ctx.finalizado = true;
@@ -210,6 +257,8 @@ public class SimulationRegistry {
         double speedMinPerSec;
         boolean relojActivo;
         boolean finalizado;
+        boolean paused;
+        long pausedElapsedMs;
 
         SessionContext(String simulationId, WebSocketSession session) {
             this.simulationId = simulationId;

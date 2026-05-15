@@ -56,6 +56,17 @@ export type FlightSegmentDto = {
   destinoLon: number
 }
 
+export type WarehouseEventDto = {
+  minuto: number
+  delta: number
+}
+
+export type WarehouseStatusDto = {
+  codigoOaci: string
+  capacidad: number
+  eventos: WarehouseEventDto[]
+}
+
 export type WsInitMessage = {
   type: 'init'
   simulationId: string
@@ -68,6 +79,7 @@ export type WsInitMessage = {
   totalMaletas: number
   speedMinPerSec: number
   vuelos: FlightSegmentDto[]
+  almacenes: WarehouseStatusDto[]
 }
 
 export type WsTickMessage = {

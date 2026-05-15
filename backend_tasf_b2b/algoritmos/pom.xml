@@ -75,7 +75,7 @@
 							<goal>repackage</goal>
 						</goals>
 						<configuration>
-							<mainClass>com.tasf_b2b.planificador.Main</mainClass>
+							<mainClass>com.tasf_b2b.planificador.PlanificadorApplication</mainClass>
 						</configuration>
 					</execution>
 				</executions>

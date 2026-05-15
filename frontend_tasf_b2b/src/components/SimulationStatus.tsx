@@ -17,6 +17,10 @@ export default function SimulationStatus({ meta, currentMinute, status, preparin
     return <div className="timestamp">{preparingMessage}</div>
   }
 
+  if (status === 'PAUSED') {
+    return <div className="timestamp">Simulacion pausada</div>
+  }
+
   if (status === 'READY' && currentMinute === null) {
     return (
       <div className="timestamp">

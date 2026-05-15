@@ -8,6 +8,7 @@ public class FlightSegmentDto {
     public int salidaMin;
     public int llegadaMin;
     public long carga;
+    public int capacidad;
     public double origenLat;
     public double origenLon;
     public double destinoLat;

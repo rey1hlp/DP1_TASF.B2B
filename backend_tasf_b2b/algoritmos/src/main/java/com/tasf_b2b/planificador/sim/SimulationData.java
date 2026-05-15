@@ -1,6 +1,7 @@
 package com.tasf_b2b.planificador.sim;
 
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
+import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
 
 import java.util.List;
 
@@ -14,6 +15,7 @@ public class SimulationData {
     public final long totalMaletas;
     public final double speedMinPerSec;
     public final List<FlightSegmentDto> vuelos;
+    public final List<WarehouseStatusDto> almacenes;
 
     public SimulationData(
         String inicio,
@@ -24,7 +26,8 @@ public class SimulationData {
         int totalEnvios,
         long totalMaletas,
         double speedMinPerSec,
-        List<FlightSegmentDto> vuelos
+        List<FlightSegmentDto> vuelos,
+        List<WarehouseStatusDto> almacenes
     ) {
         this.inicio = inicio;
         this.fin = fin;
@@ -35,5 +38,6 @@ public class SimulationData {
         this.totalMaletas = totalMaletas;
         this.speedMinPerSec = speedMinPerSec;
         this.vuelos = vuelos;
+        this.almacenes = almacenes;
     }
 }

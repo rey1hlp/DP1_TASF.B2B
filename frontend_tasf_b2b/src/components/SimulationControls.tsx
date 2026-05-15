@@ -2,23 +2,37 @@ import { useState } from 'react'
 
 export type SimulationControlsProps = {
   onStart: (payload: { inicio: string; dias: number }) => void
+  onPause: () => void
+  onResume: () => void
   isRunning: boolean
+  isPaused: boolean
+  ranges: { greenMax: number; amberMax: number }
+  onRangesChange: (ranges: { greenMax: number; amberMax: number }) => void
 }
 
-export default function SimulationControls({ onStart, isRunning }: SimulationControlsProps) {
+export default function SimulationControls({
+  onStart,
+  onPause,
+  onResume,
+  isRunning,
+  isPaused,
+  ranges,
+  onRangesChange,
+}: SimulationControlsProps) {
   const [inicio, setInicio] = useState('2026-02-15')
   const [dias, setDias] = useState(3)
-  const [greenMax, setGreenMax] = useState(30)
-  const [amberMax, setAmberMax] = useState(70)
+
+  const greenMax = ranges.greenMax
+  const amberMax = ranges.amberMax
 
   const handleGreenChange = (value: number) => {
     const next = Math.min(value, amberMax - 1)
-    setGreenMax(Math.max(0, next))
+    onRangesChange({ greenMax: Math.max(0, next), amberMax })
   }
 
   const handleAmberChange = (value: number) => {
     const next = Math.max(value, greenMax + 1)
-    setAmberMax(Math.min(100, next))
+    onRangesChange({ greenMax, amberMax: Math.min(100, next) })
   }
 
   return (
@@ -92,8 +106,12 @@ export default function SimulationControls({ onStart, isRunning }: SimulationCon
         >
           {isRunning ? 'Ejecutando...' : 'Iniciar'}
         </button>
-        <button className="btn" disabled>
-          Pausar
+        <button
+          className="btn"
+          onClick={isPaused ? onResume : onPause}
+          disabled={!isRunning}
+        >
+          {isPaused ? 'Reanudar' : 'Pausar'}
         </button>
         <button className="btn ghost" disabled>
           Exportar CSV

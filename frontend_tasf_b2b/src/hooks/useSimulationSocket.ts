@@ -16,6 +16,12 @@ export function useSimulationSocket(simId: string | null) {
 
   useEffect(() => {
     if (!simId) {
+      setStatus('IDLE')
+      setStatusMessage(null)
+      setCurrentMinute(null)
+      setSegments([])
+      setMeta(null)
+      socketRef.current = null
       return
     }
 
@@ -50,11 +56,20 @@ export function useSimulationSocket(simId: string | null) {
     }
   }, [simId])
 
+  const sendControl = (action: 'pause' | 'resume') => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      return
+    }
+    socketRef.current.send(JSON.stringify({ type: 'control', action }))
+  }
+
   return {
     status,
     statusMessage,
     currentMinute,
     segments,
     meta,
+    pause: () => sendControl('pause'),
+    resume: () => sendControl('resume'),
   }
 }
