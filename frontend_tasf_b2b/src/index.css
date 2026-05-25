@@ -331,6 +331,28 @@ body {
   overflow-y: auto;   /* scroll internally if content is taller */
 }
 
+.panel-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.panel-tab {
+  border-radius: 12px;
+  border: 1px solid #d9e4f4;
+  background: #f3f6fb;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #2b3a52;
+}
+
+.panel-tab.active {
+  background: #2f62b5;
+  border-color: #2f62b5;
+  color: #fff;
+}
+
 .chip-row {
   display: flex;
   gap: 10px;
@@ -458,12 +480,92 @@ body {
   font-size: 12px;
 }
 
+.warehouse-list {
+  display: grid;
+  gap: 8px;
+}
+
 .warehouse-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   background: #f6f8fc;
   padding: 8px 10px;
   border-radius: 10px;
+}
+
+.warehouse-title {
+  font-weight: 600;
+  color: #1e2c44;
+}
+
+.warehouse-sub {
+  font-size: 11px;
+  color: #6a7a95;
+}
+
+.warehouse-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #1e2c44;
+}
+
+.warehouse-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.flight-list {
+  border: 1px solid #d6dfef;
+  border-radius: 12px;
+  overflow-y: auto;
+  background: #f9fbff;
+}
+
+.flight-list-spacer {
+  position: relative;
+}
+
+.flight-list-items {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+}
+
+.flight-item {
+  border: none;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border-bottom: 1px solid rgba(217, 228, 244, 0.8);
+  cursor: pointer;
+}
+
+.flight-item.active {
+  background: rgba(47, 98, 181, 0.12);
+}
+
+.flight-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e2c44;
+}
+
+.flight-meta {
+  font-size: 11px;
+  color: #6a7a95;
+}
+
+.flight-hint {
+  font-size: 11px;
+  color: #6a7a95;
+  text-align: right;
 }
 
 /* ─── Responsive breakpoints ────────────────────────────────────── */

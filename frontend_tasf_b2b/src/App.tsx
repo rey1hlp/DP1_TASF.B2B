@@ -16,6 +16,7 @@ export default function App() {
   const [displayOffset, setDisplayOffset] = useState<number | null>(null)
   const [localCompleted, setLocalCompleted] = useState(false)
   const [ranges, setRanges] = useState({ greenMax: 30, amberMax: 70 })
+  const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
 
   const { status, statusMessage, currentMinute, segments, meta, pause, resume } = useSimulationSocket(simId)
 
@@ -107,6 +108,7 @@ export default function App() {
     setRequestedStart(null)
     setRequestedDays(null)
     setDisplayOffset(null)
+    setSelectedFlightId(null)
   }, [localCompleted])
 
   const displayMinute =
@@ -161,6 +163,79 @@ export default function App() {
     })
     return snapshot
   }, [meta, displayMinute])
+
+  const airportsByCode = useMemo(() => {
+    const map: Record<string, AirportDto> = {}
+    airports.forEach((airport) => {
+      map[airport.codigoOaci] = airport
+    })
+    return map
+  }, [airports])
+
+  const activeSegments = useMemo(() => {
+    if (displayMinute === null) {
+      return []
+    }
+    return cappedSegments.filter(
+      (seg) => displayMinute >= seg.salidaMin && displayMinute <= seg.llegadaMin
+    )
+  }, [cappedSegments, displayMinute])
+
+  const stats = useMemo(() => {
+    const totalSegments = cappedSegments.length
+    const totalActive = activeSegments.length
+    const totalCargo = activeSegments.reduce((acc, seg) => acc + seg.carga, 0)
+    const totalCapacity = activeSegments.reduce((acc, seg) => acc + (seg.capacidad ?? 0), 0)
+    const capacityPct = totalCapacity > 0 ? (totalCargo * 100) / totalCapacity : 0
+    const avgDurationMin = activeSegments.length
+      ? activeSegments.reduce((acc, seg) => acc + Math.max(0, seg.llegadaMin - seg.salidaMin), 0) / activeSegments.length
+      : 0
+    const progressPct =
+      requestedStartMinute !== null && requestedEndMinute !== null && displayMinute !== null
+        ? Math.min(100, Math.max(0, ((displayMinute - requestedStartMinute) * 100) / (requestedEndMinute - requestedStartMinute)))
+        : 0
+    const activePct = totalSegments > 0 ? (totalActive * 100) / totalSegments : 0
+
+    return {
+      cards: [
+        { label: 'Vuelos activos', value: `${totalActive}` },
+        { label: 'Carga en aire', value: `${Math.round(totalCargo)}` },
+        { label: 'Capacidad usada', value: `${capacityPct.toFixed(1)}%` },
+        { label: 'Duracion prom. vuelo', value: `${(avgDurationMin / 60).toFixed(2)}h` },
+      ],
+      bars: [
+        { label: 'Completado', value: progressPct },
+        { label: 'Capacidad promedio', value: capacityPct },
+        { label: 'Actividad de vuelos', value: activePct },
+      ],
+    }
+  }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute])
+
+  const warehouseItems = useMemo(() => {
+    const entries = Object.entries(warehouseSnapshot).map(([codigo, data]) => {
+      const airport = airportsByCode[codigo]
+      const percent = data.porcentaje
+      let color = '#54b86c'
+      if (percent > ranges.amberMax) {
+        color = '#e36b60'
+      } else if (percent > ranges.greenMax) {
+        color = '#f0be62'
+      }
+      return {
+        codigoOaci: codigo,
+        nombre: airport?.nombre ?? codigo,
+        pais: airport?.pais ?? '--',
+        porcentaje: percent,
+        color,
+      }
+    })
+
+    return entries.sort((a, b) => b.porcentaje - a.porcentaje)
+  }, [warehouseSnapshot, airportsByCode, ranges])
+
+  const handleSelectFlight = (flightId: number) => {
+    setSelectedFlightId((prev) => (prev === flightId ? null : flightId))
+  }
 
   return (
     <div className="app">
@@ -217,6 +292,7 @@ export default function App() {
               currentMinute={displayMinute}
               warehouseSnapshot={warehouseSnapshot}
               ranges={ranges}
+              selectedFlightId={selectedFlightId}
             />
             {isPreparing ? <div className="prep-overlay">{preparingMessage}</div> : null}
             {bannerMessage ? <div className="status-banner">{bannerMessage}</div> : null}
@@ -231,6 +307,11 @@ export default function App() {
             isPaused={status === 'PAUSED'}
             ranges={ranges}
             onRangesChange={setRanges}
+            stats={stats}
+            warehouseItems={warehouseItems}
+            flightItems={activeSegments}
+            selectedFlightId={selectedFlightId}
+            onSelectFlight={handleSelectFlight}
           />
         </section>
       </main>

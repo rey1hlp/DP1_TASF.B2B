@@ -9,6 +9,7 @@ export type MapViewProps = {
   currentMinute: number | null
   warehouseSnapshot: Record<string, { capacidad: number; ocupacion: number; porcentaje: number; libre: number }>
   ranges: { greenMax: number; amberMax: number }
+  selectedFlightId: number | null
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -54,6 +55,7 @@ export default function MapView({
   currentMinute,
   warehouseSnapshot,
   ranges,
+  selectedFlightId,
 }: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
@@ -141,9 +143,12 @@ export default function MapView({
       const icon = buildPlaneIcon(heading)
       const capacity = seg.capacidad
       const free = capacity !== undefined ? Math.max(0, capacity - seg.carga) : undefined
+      const isSelected = selectedFlightId !== null && seg.flightId === selectedFlightId
+      const isDimmed = selectedFlightId !== null && !isSelected
 
       const tooltipParts = [
         `${seg.origen} → ${seg.destino}`,
+        `Vuelo: ${seg.flightId}`,
         `Carga: ${Math.round(seg.carga)}`,
         capacity !== undefined ? `Capacidad: ${capacity}` : 'Capacidad: n/d',
         free !== undefined ? `Libre: ${free}` : 'Libre: n/d',
@@ -151,10 +156,23 @@ export default function MapView({
       const tooltip = `${tooltipParts.join('<br/>')}`
 
       const marker = L.marker([lat, lon], { icon })
-      marker.bindTooltip(tooltip, { direction: 'top' })
+      marker.bindTooltip(tooltip, {
+        direction: 'top',
+        permanent: isSelected,
+        opacity: 0.95,
+      })
+      if (isDimmed) {
+        marker.setOpacity(0.4)
+      } else {
+        marker.setOpacity(1)
+      }
+      if (isSelected) {
+        marker.setZIndexOffset(500)
+        marker.openTooltip()
+      }
       marker.addTo(planeLayerRef.current as L.LayerGroup)
     })
-  }, [segments, currentMinute])
+  }, [segments, currentMinute, selectedFlightId])
 
   return <div id="map" className="map"></div>
 }
