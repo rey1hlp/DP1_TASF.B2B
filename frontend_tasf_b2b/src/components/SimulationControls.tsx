@@ -22,6 +22,9 @@ export type SimulationControlsProps = {
   }>
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void
+  airportItems: Array<{ codigoOaci: string; nombre: string; pais: string }>
+  selectedAirportCode: string | null
+  onSelectAirport: (codigoOaci: string) => void
 }
 
 export default function SimulationControls({
@@ -37,12 +40,17 @@ export default function SimulationControls({
   flightItems,
   selectedFlightId,
   onSelectFlight,
+  airportItems,
+  selectedAirportCode,
+  onSelectAirport,
 }: SimulationControlsProps) {
-  const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'flights'>('config')
+  const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15')
   const [dias, setDias] = useState(3)
   const [flightQuery, setFlightQuery] = useState('')
   const [flightScrollTop, setFlightScrollTop] = useState(0)
+  const [airportQuery, setAirportQuery] = useState('')
+  const [airportScrollTop, setAirportScrollTop] = useState(0)
 
   const greenMax = ranges.greenMax
   const amberMax = ranges.amberMax
@@ -68,6 +76,17 @@ export default function SimulationControls({
     })
   }, [flightItems, flightQuery])
 
+  const filteredAirports = useMemo(() => {
+    const query = airportQuery.trim().toLowerCase()
+    if (!query) {
+      return airportItems
+    }
+    return airportItems.filter((airport) => {
+      const label = `${airport.codigoOaci} ${airport.nombre} ${airport.pais}`.toLowerCase()
+      return label.includes(query)
+    })
+  }, [airportItems, airportQuery])
+
   const listHeight = 280
   const itemHeight = 44
   const visibleCount = Math.ceil(listHeight / itemHeight) + 6
@@ -75,6 +94,10 @@ export default function SimulationControls({
   const endIndex = Math.min(filteredFlights.length, startIndex + visibleCount)
   const visibleFlights = filteredFlights.slice(startIndex, endIndex)
   const offsetY = startIndex * itemHeight
+  const airportStartIndex = Math.max(0, Math.floor(airportScrollTop / itemHeight))
+  const airportEndIndex = Math.min(filteredAirports.length, airportStartIndex + visibleCount)
+  const visibleAirports = filteredAirports.slice(airportStartIndex, airportEndIndex)
+  const airportOffsetY = airportStartIndex * itemHeight
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
@@ -102,10 +125,10 @@ export default function SimulationControls({
           Estadisticas
         </button>
         <button
-          className={`panel-tab ${activeTab === 'flights' ? 'active' : ''}`}
-          onClick={() => setActiveTab('flights')}
+          className={`panel-tab ${activeTab === 'entities' ? 'active' : ''}`}
+          onClick={() => setActiveTab('entities')}
         >
-          Vuelos
+          Entidades
         </button>
       </div>
 
@@ -238,9 +261,9 @@ export default function SimulationControls({
         </>
       ) : null}
 
-      {activeTab === 'flights' ? (
+      {activeTab === 'entities' ? (
         <>
-          <h3>Buscar vuelo en la simulacion</h3>
+          <h3>Buscar vuelo en la simulación</h3>
           <label className="field">
             <input
               type="text"
@@ -272,6 +295,38 @@ export default function SimulationControls({
             </div>
           </div>
           <div className="flight-hint">{`${filteredFlights.length} vuelos activos`}</div>
+
+          <h3>Buscar aeropuerto en la simulación</h3>
+          <label className="field">
+            <input
+              type="text"
+              placeholder="Buscar por OACI, nombre o pais"
+              value={airportQuery}
+              onChange={(event) => setAirportQuery(event.target.value)}
+            />
+          </label>
+          <div
+            className="flight-list"
+            onScroll={(event) => setAirportScrollTop(event.currentTarget.scrollTop)}
+            style={{ height: `${listHeight}px` }}
+          >
+            <div className="flight-list-spacer" style={{ height: `${filteredAirports.length * itemHeight}px` }}>
+              <div className="flight-list-items" style={{ transform: `translateY(${airportOffsetY}px)` }}>
+                {visibleAirports.map((airport) => (
+                  <button
+                    key={airport.codigoOaci}
+                    className={`flight-item ${selectedAirportCode === airport.codigoOaci ? 'active' : ''}`}
+                    onClick={() => onSelectAirport(airport.codigoOaci)}
+                    style={{ height: `${itemHeight}px` }}
+                  >
+                    <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
+                    <div className="flight-meta">{airport.pais}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flight-hint">{`${filteredAirports.length} aeropuertos`}</div>
         </>
       ) : null}
     </div>

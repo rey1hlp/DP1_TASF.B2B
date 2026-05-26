@@ -10,6 +10,7 @@ export type MapViewProps = {
   warehouseSnapshot: Record<string, { capacidad: number; ocupacion: number; porcentaje: number; libre: number }>
   ranges: { greenMax: number; amberMax: number }
   selectedFlightId: number | null
+  selectedAirportCode: string | null
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -56,6 +57,7 @@ export default function MapView({
   warehouseSnapshot,
   ranges,
   selectedFlightId,
+  selectedAirportCode,
 }: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
@@ -93,13 +95,14 @@ export default function MapView({
       const snapshot = warehouseSnapshot[airport.codigoOaci]
       const percent = snapshot ? snapshot.porcentaje : null
       const colors = percent === null
-        ? { stroke: '#f4c56a', fill: '#f7d48a' }
+        ? { stroke: '#d9a441', fill: '#f7d48a' }
         : resolveSemaphoreColor(percent, ranges)
+      const isSelected = selectedAirportCode !== null && airport.codigoOaci === selectedAirportCode
 
       const marker = L.circleMarker([airport.latitud, airport.longitud], {
-        radius: 5,
+        radius: isSelected ? 9 : 8,
         color: colors.stroke,
-        weight: 1,
+        weight: isSelected ? 2.5 : 2,
         fillColor: colors.fill,
         fillOpacity: 0.9,
       })
@@ -115,10 +118,16 @@ export default function MapView({
       const tooltip = tooltipParts.join('<br/>')
       marker.bindTooltip(tooltip, {
         direction: 'top',
+        permanent: isSelected,
+        opacity: 0.95,
       })
+      if (isSelected) {
+        marker.bringToFront()
+        marker.openTooltip()
+      }
       marker.addTo(airportLayerRef.current as L.LayerGroup)
     })
-  }, [airports, warehouseSnapshot, ranges])
+  }, [airports, warehouseSnapshot, ranges, selectedAirportCode])
 
   useEffect(() => {
     if (!planeLayerRef.current) {

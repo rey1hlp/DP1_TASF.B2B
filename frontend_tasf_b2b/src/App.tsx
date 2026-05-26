@@ -23,6 +23,7 @@ export default function App() {
   const [localCompleted, setLocalCompleted] = useState(false)
   const [ranges, setRanges] = useState({ greenMax: 30, amberMax: 70 })
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
+  const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
   const { status, statusMessage, currentMinute, segments, meta, pause, resume } = useSimulationSocket(simId)
 
@@ -132,6 +133,7 @@ export default function App() {
     setRequestedDays(null)
     setDisplayOffset(null)
     setSelectedFlightId(null)
+    setSelectedAirportCode(null)
   }, [localCompleted])
 
   const displayMinute =
@@ -260,6 +262,10 @@ export default function App() {
     setSelectedFlightId((prev) => (prev === flightId ? null : flightId))
   }
 
+  const handleSelectAirport = (codigoOaci: string) => {
+    setSelectedAirportCode((prev) => (prev === codigoOaci ? null : codigoOaci))
+  }
+
   return (
     <div className="app">
       <header className="sidebar">
@@ -337,6 +343,7 @@ export default function App() {
                       warehouseSnapshot={warehouseSnapshot}
                       ranges={ranges}
                       selectedFlightId={selectedFlightId}
+                      selectedAirportCode={selectedAirportCode}
                     />
                     {isPreparing ? <div className="prep-overlay">{preparingMessage}</div> : null}
                     {bannerMessage ? <div className="status-banner">{bannerMessage}</div> : null}
@@ -356,6 +363,13 @@ export default function App() {
                     flightItems={activeSegments}
                     selectedFlightId={selectedFlightId}
                     onSelectFlight={handleSelectFlight}
+                    airportItems={airports.map((airport) => ({
+                      codigoOaci: airport.codigoOaci,
+                      nombre: airport.nombre,
+                      pais: airport.pais,
+                    }))}
+                    selectedAirportCode={selectedAirportCode}
+                    onSelectAirport={handleSelectAirport}
                   />
                 </section>
               </>
