@@ -3,6 +3,8 @@ package com.tasf_b2b.planificador.sim;
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
 import com.tasf_b2b.planificador.api.dto.WarehouseEventDto;
 import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
+import com.tasf_b2b.planificador.persistence.SimulationRunEntity;
+import com.tasf_b2b.planificador.persistence.SimulationRunRepository;
 import com.tasf_b2b.planificador.api.dto.SimulationRequest;
 import com.tasf_b2b.planificador.api.dto.SimulationResponse;
 import com.tasf_b2b.planificador.dominio.Aeropuerto;
@@ -15,6 +17,10 @@ import com.tasf_b2b.planificador.nucleo.ObjetivoConfig;
 import com.tasf_b2b.planificador.nucleo.ParametrosGa;
 import com.tasf_b2b.planificador.nucleo.PlanificadorGa;
 import com.tasf_b2b.planificador.nucleo.Ruta;
+import com.tasf_b2b.planificador.persistence.AirportEntity;
+import com.tasf_b2b.planificador.persistence.AirportRepository;
+import com.tasf_b2b.planificador.persistence.FlightEntity;
+import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.utils.ReporteRutas;
 import com.tasf_b2b.planificador.utils.ReporteSinRuta;
 import com.tasf_b2b.planificador.utils.RutaResolver;
@@ -26,6 +32,7 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,10 +54,21 @@ public class SimulationService {
     private static final Logger log = LoggerFactory.getLogger(SimulationService.class);
 
     private final SimulationRegistry registry;
+    private final SimulationRunRepository simulationRunRepository;
+    private final AirportRepository airportRepository;
+    private final FlightRepository flightRepository;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
-    public SimulationService(SimulationRegistry registry) {
+    public SimulationService(
+        SimulationRegistry registry,
+        SimulationRunRepository simulationRunRepository,
+        AirportRepository airportRepository,
+        FlightRepository flightRepository
+    ) {
         this.registry = registry;
+        this.simulationRunRepository = simulationRunRepository;
+        this.airportRepository = airportRepository;
+        this.flightRepository = flightRepository;
     }
 
     public SimulationResponse startSimulation(SimulationRequest request) {
@@ -68,6 +86,17 @@ public class SimulationService {
         response.message = "RUNNING";
         // de momento, para que siempre genere reporte en el back
         request.reporte = true;
+
+        SimulationRunEntity run = new SimulationRunEntity();
+        run.simulationId = simulationId;
+        run.tipo = (request.buscarColapso != null && request.buscarColapso) ? "COLAPSO" : "PERIODO";
+        run.inicio = request.inicio;
+        run.fin = response.fin;
+        run.dias = request.dias;
+        run.estado = SimulationState.Status.RUNNING.name();
+        run.speedMinPerSec = response.speedMinPerSec;
+        run.creadoEn = LocalDateTime.now();
+        simulationRunRepository.save(run);
 
         registry.create(simulationId);
 
@@ -100,15 +129,6 @@ public class SimulationService {
             // RESOLVER RUTAS
             // =========================
     
-            Path rutaAeropuertosTxt =
-                RutaResolver.resolverRutaData(raiz, "aeropuertos.txt");
-    
-            Path rutaAeropuertosCsv =
-                RutaResolver.resolverRutaData(raiz, "aeropuertos.csv");
-    
-            Path rutaVuelos =
-                RutaResolver.resolverRutaData(raiz, "planes_vuelo.txt");
-    
             Path rutaEnvios =
                 RutaResolver.resolverRutaData(raiz, archivoEnvios);
     
@@ -118,11 +138,7 @@ public class SimulationService {
     
             long tAeropuertos = System.currentTimeMillis();
     
-            Map<String, Aeropuerto> aeropuertos =
-                util.cargarAeropuertos(
-                    rutaAeropuertosTxt,
-                    rutaAeropuertosCsv
-                );
+            Map<String, Aeropuerto> aeropuertos = cargarAeropuertosDb();
     
             log.info(
                 "[SIM:{}] Loaded {} airports in {} ms",
@@ -130,6 +146,14 @@ public class SimulationService {
                 aeropuertos.size(),
                 System.currentTimeMillis() - tAeropuertos
             );
+
+            if (aeropuertos.isEmpty()) {
+                registry.markFailed(
+                    simulationId,
+                    "No hay aeropuertos registrados en la base de datos."
+                );
+                return;
+            }
     
             // =========================
             // CARGAR ENVIOS
@@ -209,11 +233,7 @@ public class SimulationService {
     
             long tPlanes = System.currentTimeMillis();
     
-            List<Vuelo> planes =
-                util.cargarVuelos(
-                    rutaVuelos,
-                    aeropuertos.keySet()
-                );
+            List<Vuelo> planes = cargarVuelosDb(aeropuertos.keySet());
     
             log.info(
                 "[SIM:{}] Loaded {} flight plans in {} ms",
@@ -381,6 +401,17 @@ public class SimulationService {
                     diaMax,
                     diasExtra
                 );
+
+            SimulationRunEntity stored = simulationRunRepository.findBySimulationId(simulationId);
+            if (stored != null) {
+                stored.estado = SimulationState.Status.READY.name();
+                stored.totalEnvios = envios.size();
+                stored.totalMaletas = totalMaletas;
+                stored.inicio = data.inicio;
+                stored.fin = data.fin;
+                stored.finalizadoEn = LocalDateTime.now();
+                simulationRunRepository.save(stored);
+            }
     
             registry.markReady(simulationId, data);
     
@@ -465,6 +496,63 @@ public class SimulationService {
         }
 
         return new ArrayList<>(mapa.values());
+    }
+
+    private Map<String, Aeropuerto> cargarAeropuertosDb() {
+        Map<String, Aeropuerto> resultado = new HashMap<>();
+        List<AirportEntity> entities = airportRepository.findAll();
+        for (AirportEntity entity : entities) {
+            if (entity.codigoOaci == null || entity.codigoOaci.isBlank()) {
+                continue;
+            }
+            String codigo = entity.codigoOaci.trim().toUpperCase();
+            String codigoCorto = codigo.toLowerCase();
+            String continente = (entity.continente == null || entity.continente.isBlank())
+                ? UtilArchivos.obtenerContinente(codigo)
+                : entity.continente.trim();
+
+            Aeropuerto aeropuerto = new Aeropuerto(
+                codigo,
+                entity.nombre,
+                entity.pais,
+                codigoCorto,
+                entity.gmt,
+                entity.capacidad,
+                entity.latitud,
+                entity.longitud,
+                continente
+            );
+            resultado.put(codigo, aeropuerto);
+        }
+        return resultado;
+    }
+
+    private List<Vuelo> cargarVuelosDb(java.util.Set<String> oaciValidos) {
+        List<Vuelo> planes = new ArrayList<>();
+        List<FlightEntity> entities = flightRepository.findAll();
+        int id = 0;
+        for (FlightEntity entity : entities) {
+            if (entity.origen == null || entity.destino == null || entity.salida == null || entity.llegada == null) {
+                continue;
+            }
+            String origen = entity.origen.codigoOaci;
+            String destino = entity.destino.codigoOaci;
+            if (origen == null || destino == null) {
+                continue;
+            }
+            origen = origen.trim().toUpperCase();
+            destino = destino.trim().toUpperCase();
+            if (!oaciValidos.contains(origen) || !oaciValidos.contains(destino)) {
+                continue;
+            }
+            int salidaMin = entity.salida.getHour() * 60 + entity.salida.getMinute();
+            int llegadaMin = entity.llegada.getHour() * 60 + entity.llegada.getMinute();
+            int capacidad = entity.capacidad;
+            int planId = entity.id != null ? entity.id.intValue() : id;
+
+            planes.add(new Vuelo(id++, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, planId));
+        }
+        return planes;
     }
 
     private List<WarehouseStatusDto> construirEventosAlmacen(

@@ -1,0 +1,3 @@
+codigo_oaci,nombre,pais,codigo_corto,gmt,capacidad,latitud,longitud,continente
+SKBO,Bogota,Colombia,bogo,-5,430,4.701389,-74.146944,America del Sur
+SEQM,Quito,Ecuador,quit,-5,410,0.113333,-78.358611,America del Sur

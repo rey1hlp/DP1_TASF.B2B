@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AirportDto } from './types/sim'
-import { fetchAirports, startSimulation } from './services/api'
+import { deleteEnvios, fetchAirports, startSimulation } from './services/api'
 import { useSimulationSocket } from './hooks/useSimulationSocket'
 import MapView from './components/MapView'
 import SimulationStatus from './components/SimulationStatus'
 import SimulationControls from './components/SimulationControls'
+import UploadEnvios from './components/UploadEnvios'
+import FlightsCrud from './components/FlightsCrud'
+import AirportsCrud from './components/AirportsCrud'
 import { formatCompactDate, getDayIndexFromDateString, getInclusiveDaySpan } from './utils/time'
 
 export default function App() {
+  const ENVIOS_KEY_STORAGE = 'enviosKey'
+  const [activeSection, setActiveSection] = useState<'sim' | 'flights' | 'airports'>('sim')
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [simId, setSimId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [enviosKey, setEnviosKey] = useState<string | null>(null)
   const [requestedStart, setRequestedStart] = useState<string | null>(null)
   const [requestedDays, setRequestedDays] = useState<number | null>(null)
   const [displayOffset, setDisplayOffset] = useState<number | null>(null)
@@ -26,6 +32,20 @@ export default function App() {
       .catch((err) => setError(err.message))
   }, [])
 
+  useEffect(() => {
+    const stored = localStorage.getItem(ENVIOS_KEY_STORAGE)
+    if (!stored) {
+      return
+    }
+    localStorage.removeItem(ENVIOS_KEY_STORAGE)
+    deleteEnvios(stored).catch(() => {})
+  }, [])
+
+  const handleEnviosUploaded = (key: string) => {
+    setEnviosKey(key)
+    localStorage.setItem(ENVIOS_KEY_STORAGE, key)
+  }
+
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
     setError(null)
     setRequestedStart(inicio)
@@ -33,8 +53,11 @@ export default function App() {
     setDisplayOffset(null)
     setLocalCompleted(false)
     try {
+      if (!enviosKey) {
+        throw new Error('Debes cargar los archivos de envios antes de simular.')
+      }
       const response = await startSimulation({
-        envios: '_envios_preliminar_',
+        envios: enviosKey,
         inicio: inicio.replaceAll('-', ''),
         dias,
         maxEnvios: 5000000,
@@ -256,64 +279,92 @@ export default function App() {
         </div>
         <nav className="nav">
           <button className="nav-item">Envios</button>
-          <button className="nav-item">Vuelos</button>
-          <button className="nav-item">Almacenes</button>
-          <button className="nav-item active">Simulacion</button>
+          <button
+            className={`nav-item ${activeSection === 'flights' ? 'active' : ''}`}
+            onClick={() => setActiveSection('flights')}
+          >
+            Vuelos
+          </button>
+          <button
+            className={`nav-item ${activeSection === 'airports' ? 'active' : ''}`}
+            onClick={() => setActiveSection('airports')}
+          >
+            Aeropuertos
+          </button>
+          <button
+            className={`nav-item ${activeSection === 'sim' ? 'active' : ''}`}
+            onClick={() => setActiveSection('sim')}
+          >
+            Simulacion
+          </button>
           <button className="nav-item">Reportes</button>
           <button className="nav-item">Configuracion</button>
         </nav>
       </header>
 
       <main className="main">
-        <section className="toolbar">
-          <div className="tabs">
-            <button className="tab active">Simulacion del periodo</button>
-            <button className="tab">Simulacion hasta el colapso</button>
-          </div>
-          <div className="status">
-            <div className="status-item">Fecha: <strong>{displayStartDate}</strong></div>
-            <div className="status-item">Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong></div>
-            <div className="status-item">Vuelos activos: <strong>{cappedSegments.length}</strong></div>
-            <div className="status-item">Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong></div>
-          </div>
-        </section>
+        {activeSection === 'sim' ? (
+          <>
+            {!enviosKey ? (
+              <UploadEnvios onUploaded={handleEnviosUploaded} />
+            ) : (
+              <>
+                <section className="toolbar">
+                  <div className="tabs">
+                    <button className="tab active">Simulacion del periodo</button>
+                    <button className="tab">Simulacion hasta el colapso</button>
+                  </div>
+                  <div className="status">
+                    <div className="status-item">Fecha: <strong>{displayStartDate}</strong></div>
+                    <div className="status-item">Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong></div>
+                    <div className="status-item">Vuelos activos: <strong>{cappedSegments.length}</strong></div>
+                    <div className="status-item">Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong></div>
+                  </div>
+                </section>
 
-        <section className="map-area">
-          <div className="map-placeholder">
-            <SimulationStatus
-              meta={meta}
-              currentMinute={displayMinute}
-              status={status}
-              preparingMessage={preparingMessage}
-            />
-            <MapView
-              airports={airports}
-              segments={localCompleted ? [] : cappedSegments}
-              currentMinute={displayMinute}
-              warehouseSnapshot={warehouseSnapshot}
-              ranges={ranges}
-              selectedFlightId={selectedFlightId}
-            />
-            {isPreparing ? <div className="prep-overlay">{preparingMessage}</div> : null}
-            {bannerMessage ? <div className="status-banner">{bannerMessage}</div> : null}
-            {error ? <div className="error">{error}</div> : null}
-          </div>
+                <section className="map-area">
+                  <div className="map-placeholder">
+                    <SimulationStatus
+                      meta={meta}
+                      currentMinute={displayMinute}
+                      status={status}
+                      preparingMessage={preparingMessage}
+                    />
+                    <MapView
+                      airports={airports}
+                      segments={localCompleted ? [] : cappedSegments}
+                      currentMinute={displayMinute}
+                      warehouseSnapshot={warehouseSnapshot}
+                      ranges={ranges}
+                      selectedFlightId={selectedFlightId}
+                    />
+                    {isPreparing ? <div className="prep-overlay">{preparingMessage}</div> : null}
+                    {bannerMessage ? <div className="status-banner">{bannerMessage}</div> : null}
+                    {error ? <div className="error">{error}</div> : null}
+                  </div>
 
-          <SimulationControls
-            onStart={handleStart}
-            onPause={pause}
-            onResume={resume}
-            isRunning={running}
-            isPaused={status === 'PAUSED'}
-            ranges={ranges}
-            onRangesChange={setRanges}
-            stats={stats}
-            warehouseItems={warehouseItems}
-            flightItems={activeSegments}
-            selectedFlightId={selectedFlightId}
-            onSelectFlight={handleSelectFlight}
-          />
-        </section>
+                  <SimulationControls
+                    onStart={handleStart}
+                    onPause={pause}
+                    onResume={resume}
+                    isRunning={running}
+                    isPaused={status === 'PAUSED'}
+                    ranges={ranges}
+                    onRangesChange={setRanges}
+                    stats={stats}
+                    warehouseItems={warehouseItems}
+                    flightItems={activeSegments}
+                    selectedFlightId={selectedFlightId}
+                    onSelectFlight={handleSelectFlight}
+                  />
+                </section>
+              </>
+            )}
+          </>
+        ) : null}
+
+        {activeSection === 'flights' ? <FlightsCrud /> : null}
+        {activeSection === 'airports' ? <AirportsCrud /> : null}
       </main>
     </div>
   )

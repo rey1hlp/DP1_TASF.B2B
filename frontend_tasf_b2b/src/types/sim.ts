@@ -96,3 +96,37 @@ export type WsStatusMessage = {
 }
 
 export type WsMessage = WsInitMessage | WsTickMessage | WsStatusMessage
+
+export type PageResponse<T> = {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
+export type AirportCrudDto = {
+  id?: number
+  codigoOaci: string
+  nombre: string
+  pais: string
+  ciudad?: string
+  continente?: string
+  gmt: number
+  capacidad: number
+  latitud: number
+  longitud: number
+}
+
+export type FlightCrudDto = {
+  id?: number
+  codigo: string
+  origenOaci: string
+  origenCiudad?: string
+  destinoOaci: string
+  destinoCiudad?: string
+  salida: string
+  llegada: string
+  capacidad: number
+  cancelado: boolean
+}
