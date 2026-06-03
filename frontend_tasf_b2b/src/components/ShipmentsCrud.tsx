@@ -150,53 +150,33 @@ export default function ShipmentsCrud() {
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Editar envio' : 'Nuevo envio'}>
         <div className="crud-form-grid">
-          <label>
+          <label className="field">
             Pedido
             <input value={form.codigoPedido} onChange={(event) => handleChange('codigoPedido', event.target.value)} />
           </label>
-          <label>
+          <label className="field">
             Origen
             <input value={form.origen} onChange={(event) => handleChange('origen', event.target.value)} />
           </label>
-          <label>
+          <label className="field">
             Destino
             <input value={form.destino} onChange={(event) => handleChange('destino', event.target.value)} />
           </label>
-          <label>
+          <label className="field">
             Fecha
             <input value={form.fecha} onChange={(event) => handleChange('fecha', event.target.value)} placeholder="AAAAMMDD" />
           </label>
-          <label>
-            Ingreso UTC
-            <input type="datetime-local" value={form.ingresoUtc} onChange={(event) => handleChange('ingresoUtc', event.target.value)} />
-          </label>
-          <label>
+          <label className="field">
             Ingreso local
             <input type="datetime-local" value={form.ingresoLocal} onChange={(event) => handleChange('ingresoLocal', event.target.value)} />
           </label>
-          <label>
-            GMT offset
-            <input type="number" value={form.gmtOffset} onChange={(event) => handleChange('gmtOffset', Number(event.target.value))} />
-          </label>
-          <label>
-            Día index
-            <input type="number" value={form.diaIndex} onChange={(event) => handleChange('diaIndex', Number(event.target.value))} />
-          </label>
-          <label>
+          <label className="field">
             Cantidad
             <input type="number" value={form.cantidad} onChange={(event) => handleChange('cantidad', Number(event.target.value))} />
           </label>
-          <label>
+          <label className="field">
             Cliente
             <input value={form.idCliente} onChange={(event) => handleChange('idCliente', event.target.value)} />
-          </label>
-          <label>
-            SLA horas
-            <input type="number" value={form.slaHoras} onChange={(event) => handleChange('slaHoras', Number(event.target.value))} />
-          </label>
-          <label>
-            Asignado
-            <input type="checkbox" checked={form.asignado} onChange={(event) => handleChange('asignado', event.target.checked)} />
           </label>
         </div>
         <div className="crud-actions">
