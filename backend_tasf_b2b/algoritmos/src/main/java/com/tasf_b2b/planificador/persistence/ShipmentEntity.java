@@ -22,14 +22,14 @@ public class ShipmentEntity {
     @Column(name = "fecha", length = 8, nullable = false)
     public String fecha;
 
+    @Column(name = "hora_ingreso_utc", nullable = false)
+    public LocalDateTime ingresoUtc;
+
     @Column(name = "hora_ingreso_local", nullable = false)
-    public int horaIngresoLocal;
+    public LocalDateTime ingresoLocal;
 
-    @Column(name = "hora_ingreso_min", nullable = false)
-    public int horaIngresoMin;
-
-    @Column(name = "dia_index", nullable = false)
-    public int diaIndex;
+    @Column(name = "gmt_offset", nullable = false)
+    public int gmtOffset;
 
     @Column(name = "cantidad", nullable = false)
     public int cantidad;

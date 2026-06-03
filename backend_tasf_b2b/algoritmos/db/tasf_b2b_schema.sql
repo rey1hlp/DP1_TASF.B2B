@@ -44,6 +44,7 @@ CREATE TABLE shipment (
   codigo_pedido   VARCHAR(40) NOT NULL,
   origen          CHAR(4) NOT NULL,
   destino         CHAR(4) NOT NULL,
+  fecha           CHAR(8) NOT NULL,
   cantidad        INT NOT NULL,
   id_cliente      VARCHAR(64) NOT NULL,
   sla_horas       INT NOT NULL,
@@ -54,8 +55,6 @@ CREATE TABLE shipment (
   hora_ingreso_local   DATETIME NOT NULL,
   -- Offset en el momento del registro (puede cambiar por DST)
   gmt_offset      INT NOT NULL,
-
-  dia_index       INT NOT NULL,
   asignado        TINYINT(1) NOT NULL DEFAULT 0,
   audit_date_ins  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

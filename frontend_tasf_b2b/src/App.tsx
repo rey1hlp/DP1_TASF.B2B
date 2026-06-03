@@ -8,11 +8,12 @@ import SimulationControls from './components/SimulationControls'
 import UploadEnvios from './components/UploadEnvios'
 import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
+import ShipmentsCrud from './components/ShipmentsCrud'
 import { formatCompactDate, getDayIndexFromDateString, getInclusiveDaySpan } from './utils/time'
 
 export default function App() {
   const ENVIOS_KEY_STORAGE = 'enviosKey'
-  const [activeSection, setActiveSection] = useState<'sim' | 'flights' | 'airports'>('sim')
+  const [activeSection, setActiveSection] = useState<'sim' | 'flights' | 'airports' | 'shipments'>('sim')
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [simId, setSimId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -285,7 +286,12 @@ export default function App() {
         </div>
         <nav className="nav">
           <button className="nav-item">Operación diaria</button>
-          <button className="nav-item">Envios</button>
+          <button
+            className={`nav-item ${activeSection === 'shipments' ? 'active' : ''}`}
+            onClick={() => setActiveSection('shipments')}
+          >
+            Envios
+          </button>
           <button
             className={`nav-item ${activeSection === 'flights' ? 'active' : ''}`}
             onClick={() => setActiveSection('flights')}
@@ -380,6 +386,7 @@ export default function App() {
 
         {activeSection === 'flights' ? <FlightsCrud /> : null}
         {activeSection === 'airports' ? <AirportsCrud /> : null}
+        {activeSection === 'shipments' ? <ShipmentsCrud /> : null}
       </main>
     </div>
   )
