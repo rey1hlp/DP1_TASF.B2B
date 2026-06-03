@@ -284,6 +284,7 @@ export default function App() {
           </div>
         </div>
         <nav className="nav">
+          <button className="nav-item">Operación diaria</button>
           <button className="nav-item">Envios</button>
           <button
             className={`nav-item ${activeSection === 'flights' ? 'active' : ''}`}
@@ -301,10 +302,10 @@ export default function App() {
             className={`nav-item ${activeSection === 'sim' ? 'active' : ''}`}
             onClick={() => setActiveSection('sim')}
           >
-            Simulacion
+            Simulación
           </button>
           <button className="nav-item">Reportes</button>
-          <button className="nav-item">Configuracion</button>
+          <button className="nav-item">Configuración</button>
         </nav>
       </header>
 

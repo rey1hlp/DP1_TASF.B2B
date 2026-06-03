@@ -14,6 +14,7 @@ public class Envio {
     public final String idCliente;
     public final int    slaHoras;
     public boolean      asignado;
+    public final int gmtOffset;
  
     /**
      * Constructor principal — requiere el aeropuerto origen para normalizar a UTC.
@@ -30,7 +31,8 @@ public class Envio {
         this.idCliente     = idCliente;
         this.slaHoras      = slaHoras;
         this.asignado      = false;
- 
+        this.gmtOffset = (aeropuertoOrigen != null) ? aeropuertoOrigen.gmt : 0; 
+
         this.horaIngresoLocal = (hh * 60) + mm;
         int gmt = (aeropuertoOrigen != null) ? aeropuertoOrigen.gmt : 0;
         int horaIngresoUtc = horaIngresoLocal - (gmt * 60);
