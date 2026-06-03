@@ -77,7 +77,7 @@ function toWsUrl(httpUrl: string) {
 }
 
 function getCurrentMinuteOfDay(date: Date) {
-  return date.getHours() * 60 + date.getMinutes()
+  return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
 }
 
 function formatDateTime(date: Date) {
@@ -126,7 +126,21 @@ export default function DailyOperationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
-  const currentMinute = backendMinute ?? getCurrentMinuteOfDay(now)
+  const displayMinute = useMemo(() => {
+    if (backendMinute === null) {
+      return getCurrentMinuteOfDay(now)
+    }
+
+    if (!lastSyncAt) {
+      return backendMinute
+    }
+
+    const syncedAt = new Date(lastSyncAt).getTime()
+    const elapsedMinutes = (now.getTime() - syncedAt) / 60000
+    return backendMinute + elapsedMinutes
+  }, [backendMinute, lastSyncAt, now])
+
+  const currentMinute = displayMinute
 
   const applySnapshot = useCallback((snapshot: DailyOperationSnapshot) => {
     if (snapshot.currentMinute !== undefined) {
@@ -189,7 +203,7 @@ export default function DailyOperationPage() {
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setNow(new Date())
-    }, 30_000)
+    }, 1000)
 
     return () => {
       window.clearInterval(intervalId)
@@ -197,7 +211,7 @@ export default function DailyOperationPage() {
   }, [])
 
   useEffect(() => {
-    const socketUrl = `${toWsUrl(API_BASE_URL)}/operation/daily/stream`
+    const socketUrl = `${toWsUrl(API_BASE_URL)}/api/operation/daily/stream`
     const socket = new WebSocket(socketUrl)
 
     socket.onopen = () => {
