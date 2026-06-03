@@ -130,3 +130,20 @@ export type FlightCrudDto = {
   capacidad: number
   cancelado: boolean
 }
+
+export type ShipmentCrudDto = {
+  id?: number
+  codigoPedido: string
+  origen: string
+  destino: string
+  fecha: string
+  diaIndex: number
+  ingresoUtc: string
+  ingresoLocal: string
+  gmtOffset: number
+  cantidad: number
+  idCliente: string
+  slaHoras: number
+  asignado: boolean
+  auditDateIns?: string
+}

@@ -3,6 +3,7 @@ import type {
   AirportCrudDto,
   FlightCrudDto,
   PageResponse,
+  ShipmentCrudDto,
   SimulationRequest,
   SimulationResponse,
 } from '../types/sim'
@@ -142,6 +143,49 @@ export async function deleteFlight(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/db/flights/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     throw new Error('No se pudo eliminar vuelo')
+  }
+}
+
+export async function listShipments(page = 0, size = 20, query = ''): Promise<PageResponse<ShipmentCrudDto>> {
+  const params = new URLSearchParams({ page: `${page}`, size: `${size}` })
+  if (query) {
+    params.set('query', query)
+  }
+  const res = await fetch(`${API_BASE}/api/db/shipments?${params.toString()}`)
+  if (!res.ok) {
+    throw new Error('No se pudo cargar envios')
+  }
+  return res.json()
+}
+
+export async function createShipment(payload: ShipmentCrudDto): Promise<ShipmentCrudDto> {
+  const res = await fetch(`${API_BASE}/api/db/shipments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error('No se pudo crear envio')
+  }
+  return res.json()
+}
+
+export async function updateShipment(id: number, payload: ShipmentCrudDto): Promise<ShipmentCrudDto> {
+  const res = await fetch(`${API_BASE}/api/db/shipments/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error('No se pudo actualizar envio')
+  }
+  return res.json()
+}
+
+export async function deleteShipment(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/db/shipments/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    throw new Error('No se pudo eliminar envio')
   }
 }
 
