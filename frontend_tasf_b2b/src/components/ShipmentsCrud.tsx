@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { ShipmentCrudDto } from '../types/sim'
 import { createShipment, deleteShipment, listShipments, updateShipment } from '../services/api'
+import Modal from './ui/Modal'
+import Button from './ui/Button'
+import Pager from './ui/Pager'
 
 const EMPTY_FORM: ShipmentCrudDto = {
   codigoPedido: '',
@@ -47,7 +50,7 @@ export default function ShipmentsCrud() {
   }, [page, query])
 
   const resetForm = () => {
-    setForm(EMPTY_FORM)
+    setForm({ ...EMPTY_FORM })
   }
 
   const handleSubmit = async () => {
@@ -83,7 +86,7 @@ export default function ShipmentsCrud() {
   }
 
   const handleDelete = async (id?: number) => {
-    if (!id) {
+    if (id == null) {
       return
     }
     await deleteShipment(id)
@@ -96,7 +99,7 @@ export default function ShipmentsCrud() {
 
   return (
     <div className="crud-panel">
-      <div className="crud-header">
+        <div className="crud-header">
         <h2>Envios</h2>
         <div className="crud-search">
           <input
@@ -108,118 +111,99 @@ export default function ShipmentsCrud() {
               setQuery(event.target.value)
             }}
           />
-          <button onClick={() => { resetForm(); setIsModalOpen(true) }}>Nuevo envio</button>
+          <Button variant="primary" onClick={() => { resetForm(); setIsModalOpen(true) }}>Nuevo envio</Button>
         </div>
       </div>
 
       {error ? <div className="error">{error}</div> : null}
       {loading ? <div className="prep-overlay">Cargando envios...</div> : null}
 
-      <div className="crud-table-wrap">
-        <table className="crud-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Pedido</th>
-              <th>Origen</th>
-              <th>Destino</th>
-              <th>Fecha</th>
-              <th>Ingreso UTC</th>
-              <th>Cantidad</th>
-              <th>Cliente</th>
-              <th>Asignado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id ?? item.codigoPedido}>
-                <td>{item.id ?? '-'}</td>
-                <td>{item.codigoPedido}</td>
-                <td>{item.origen}</td>
-                <td>{item.destino}</td>
-                <td>{item.fecha}</td>
-                <td>{item.ingresoUtc}</td>
-                <td>{item.cantidad}</td>
-                <td>{item.idCliente}</td>
-                <td>{item.asignado ? 'Si' : 'No'}</td>
-                <td className="crud-actions">
-                  <button onClick={() => handleEdit(item)}>Editar</button>
-                  <button onClick={() => handleDelete(item.id)} className="secondary">Eliminar</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="crud-pager">
-        <button disabled={page <= 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Anterior</button>
-        <span>Página {page + 1} de {Math.max(1, totalPages)}</span>
-        <button disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>Siguiente</button>
-      </div>
-
-      {isModalOpen ? (
-        <div className="crud-modal-backdrop" onClick={() => setIsModalOpen(false)}>
-          <div className="crud-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>{form.id ? 'Editar envio' : 'Nuevo envio'}</h3>
-            <div className="crud-form-grid">
-              <label>
-                Pedido
-                <input value={form.codigoPedido} onChange={(event) => handleChange('codigoPedido', event.target.value)} />
-              </label>
-              <label>
-                Origen
-                <input value={form.origen} onChange={(event) => handleChange('origen', event.target.value)} />
-              </label>
-              <label>
-                Destino
-                <input value={form.destino} onChange={(event) => handleChange('destino', event.target.value)} />
-              </label>
-              <label>
-                Fecha
-                <input value={form.fecha} onChange={(event) => handleChange('fecha', event.target.value)} placeholder="AAAAMMDD" />
-              </label>
-              <label>
-                Ingreso UTC
-                <input type="datetime-local" value={form.ingresoUtc} onChange={(event) => handleChange('ingresoUtc', event.target.value)} />
-              </label>
-              <label>
-                Ingreso local
-                <input type="datetime-local" value={form.ingresoLocal} onChange={(event) => handleChange('ingresoLocal', event.target.value)} />
-              </label>
-              <label>
-                GMT offset
-                <input type="number" value={form.gmtOffset} onChange={(event) => handleChange('gmtOffset', Number(event.target.value))} />
-              </label>
-              <label>
-                Día index
-                <input type="number" value={form.diaIndex} onChange={(event) => handleChange('diaIndex', Number(event.target.value))} />
-              </label>
-              <label>
-                Cantidad
-                <input type="number" value={form.cantidad} onChange={(event) => handleChange('cantidad', Number(event.target.value))} />
-              </label>
-              <label>
-                Cliente
-                <input value={form.idCliente} onChange={(event) => handleChange('idCliente', event.target.value)} />
-              </label>
-              <label>
-                SLA horas
-                <input type="number" value={form.slaHoras} onChange={(event) => handleChange('slaHoras', Number(event.target.value))} />
-              </label>
-              <label>
-                Asignado
-                <input type="checkbox" checked={form.asignado} onChange={(event) => handleChange('asignado', event.target.checked)} />
-              </label>
-            </div>
-            <div className="crud-actions">
-              <button onClick={handleSubmit}>Guardar</button>
-              <button className="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>
+      <div className="crud-table">
+        <div className="crud-row shipments header">
+          <span>Pedido</span>
+          <span>Origen</span>
+          <span>Destino</span>
+          <span>Fecha Ingreso UTC</span>
+          <span>Cantidad</span>
+          <span>Cliente</span>
+          <span></span>
+        </div>
+        {loading ? <div className="crud-empty">Cargando envios...</div> : null}
+        {!loading && items.length === 0 ? <div className="crud-empty">Sin registros</div> : null}
+        {items.map((item) => (
+          <div className="crud-row shipments" key={item.id ?? item.codigoPedido}>
+            <span>{item.codigoPedido}</span>
+            <span>{item.origen}</span>
+            <span>{item.destino}</span>
+            <span>{item.ingresoUtc}</span>
+            <span>{item.cantidad}</span>
+            <span>{item.idCliente}</span>
+            <div className="crud-row-actions">
+              <Button onClick={() => handleEdit(item)}>Editar</Button>
+              <Button variant="secondary" onClick={() => handleDelete(item.id)}>Eliminar</Button>
             </div>
           </div>
+        ))}
+      </div>
+
+      <Pager page={page} totalPages={totalPages} onPrev={() => setPage((current) => Math.max(0, current - 1))} onNext={() => setPage((current) => current + 1)} />
+
+      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Editar envio' : 'Nuevo envio'}>
+        <div className="crud-form-grid">
+          <label>
+            Pedido
+            <input value={form.codigoPedido} onChange={(event) => handleChange('codigoPedido', event.target.value)} />
+          </label>
+          <label>
+            Origen
+            <input value={form.origen} onChange={(event) => handleChange('origen', event.target.value)} />
+          </label>
+          <label>
+            Destino
+            <input value={form.destino} onChange={(event) => handleChange('destino', event.target.value)} />
+          </label>
+          <label>
+            Fecha
+            <input value={form.fecha} onChange={(event) => handleChange('fecha', event.target.value)} placeholder="AAAAMMDD" />
+          </label>
+          <label>
+            Ingreso UTC
+            <input type="datetime-local" value={form.ingresoUtc} onChange={(event) => handleChange('ingresoUtc', event.target.value)} />
+          </label>
+          <label>
+            Ingreso local
+            <input type="datetime-local" value={form.ingresoLocal} onChange={(event) => handleChange('ingresoLocal', event.target.value)} />
+          </label>
+          <label>
+            GMT offset
+            <input type="number" value={form.gmtOffset} onChange={(event) => handleChange('gmtOffset', Number(event.target.value))} />
+          </label>
+          <label>
+            Día index
+            <input type="number" value={form.diaIndex} onChange={(event) => handleChange('diaIndex', Number(event.target.value))} />
+          </label>
+          <label>
+            Cantidad
+            <input type="number" value={form.cantidad} onChange={(event) => handleChange('cantidad', Number(event.target.value))} />
+          </label>
+          <label>
+            Cliente
+            <input value={form.idCliente} onChange={(event) => handleChange('idCliente', event.target.value)} />
+          </label>
+          <label>
+            SLA horas
+            <input type="number" value={form.slaHoras} onChange={(event) => handleChange('slaHoras', Number(event.target.value))} />
+          </label>
+          <label>
+            Asignado
+            <input type="checkbox" checked={form.asignado} onChange={(event) => handleChange('asignado', event.target.checked)} />
+          </label>
         </div>
-      ) : null}
+        <div className="crud-actions">
+          <Button variant="primary" onClick={handleSubmit}>Guardar</Button>
+          <Button onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+        </div>
+      </Modal>
     </div>
   )
 }

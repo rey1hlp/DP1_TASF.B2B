@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AirportCrudDto } from '../types/sim'
 import { createAirport, deleteAirport, listAirports, updateAirport, uploadAirportsCsv } from '../services/api'
+import Modal from './ui/Modal'
+import Button from './ui/Button'
+import Pager from './ui/Pager'
 
 export default function AirportsCrud() {
   const [items, setItems] = useState<AirportCrudDto[]>([])
@@ -263,8 +266,8 @@ export default function AirportsCrud() {
             }}
           />
         </div>
-        <button className="btn primary" onClick={handleNew}>Nuevo aeropuerto</button>
-        <button className="btn ghost" onClick={() => setIsUploadOpen(true)}>Cargar CSV</button>
+        <Button variant="primary" onClick={handleNew}>Nuevo aeropuerto</Button>
+        <Button variant="ghost" onClick={() => setIsUploadOpen(true)}>Cargar CSV</Button>
       </div>
       {error ? <div className="crud-error">{error}</div> : null}
 
@@ -287,175 +290,155 @@ export default function AirportsCrud() {
             <span>{item.gmt}</span>
             <span>{item.capacidad}</span>
             <div className="crud-row-actions">
-              <button className="btn" onClick={() => handleEdit(item)}>Editar</button>
-              <button className="btn" onClick={() => handleDelete(item.id)}>Eliminar</button>
+              <Button onClick={() => handleEdit(item)}>Editar</Button>
+              <Button variant="secondary" onClick={() => handleDelete(item.id)}>Eliminar</Button>
             </div>
           </div>
         ))}
       </div>
+      <Pager page={page} totalPages={totalPages} onPrev={() => setPage((p) => Math.max(0, p - 1))} onNext={() => setPage((p) => p + 1)} />
 
-      <div className="crud-pagination">
-        <button className="btn" disabled={page <= 0} onClick={() => setPage(page - 1)}>
-          Anterior
-        </button>
-        <span>{`${page + 1} / ${Math.max(1, totalPages)}`}</span>
-        <button className="btn" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>
-          Siguiente
-        </button>
-      </div>
-
-      {isModalOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{form.id ? 'Editar aeropuerto' : 'Nuevo aeropuerto'}</h3>
-              <button className="btn" onClick={() => setIsModalOpen(false)}>Cerrar</button>
-            </div>
-            <div className="modal-body">
-              <label className="field">
-                Codigo OACI
-                <input
-                  type="text"
-                  value={form.codigoOaci}
-                  onChange={(event) => setForm({ ...form, codigoOaci: event.target.value.toUpperCase() })}
-                />
-              </label>
-              <label className="field">
-                Nombre
-                <input
-                  type="text"
-                  value={form.nombre}
-                  onChange={(event) => setForm({ ...form, nombre: event.target.value })}
-                />
-              </label>
-              <label className="field">
-                Pais
-                <input
-                  type="text"
-                  value={form.pais}
-                  onChange={(event) => handleCountryChange(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                Ciudad
-                <input
-                  type="text"
-                  value={form.ciudad}
-                  onChange={(event) => setForm({ ...form, ciudad: event.target.value })}
-                />
-              </label>
-              <label className="field">
-                Continente
-                <input
-                  type="text"
-                  value={form.continente}
-                  readOnly={!allowContinentEdit}
-                  onChange={(event) => setForm({ ...form, continente: event.target.value })}
-                />
-              </label>
-              <label className="crud-checkbox">
-                <input
-                  type="checkbox"
-                  checked={allowContinentEdit}
-                  onChange={(event) => setAllowContinentEdit(event.target.checked)}
-                />
-                Editar continente manualmente
-              </label>
-              <label className="field">
-                GMT
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={gmtText}
-                  onChange={(event) => handleIntChange(event.target.value, setGmtText)}
-                />
-              </label>
-              <label className="field">
-                Capacidad
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={capacidadText}
-                  onChange={(event) => handleIntChange(event.target.value, setCapacidadText)}
-                />
-              </label>
-              <label className="field">
-                Latitud
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={latitudText}
-                  onChange={(event) => handleDecimalChange(event.target.value, setLatitudText)}
-                />
-              </label>
-              <label className="field">
-                Longitud
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={longitudText}
-                  onChange={(event) => handleDecimalChange(event.target.value, setLongitudText)}
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button className="btn primary" onClick={handleSubmit}>
-                {form.id ? 'Actualizar' : 'Crear'}
-              </button>
-              <button className="btn" onClick={resetForm}>Limpiar</button>
-            </div>
-          </div>
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={form.id ? 'Editar aeropuerto' : 'Nuevo aeropuerto'}
+        headerActions={<Button onClick={() => setIsModalOpen(false)}>Cerrar</Button>}
+      >
+        <div className="modal-body">
+          <label className="field">
+            Codigo OACI
+            <input
+              type="text"
+              value={form.codigoOaci}
+              onChange={(event) => setForm({ ...form, codigoOaci: event.target.value.toUpperCase() })}
+            />
+          </label>
+          <label className="field">
+            Nombre
+            <input
+              type="text"
+              value={form.nombre}
+              onChange={(event) => setForm({ ...form, nombre: event.target.value })}
+            />
+          </label>
+          <label className="field">
+            Pais
+            <input
+              type="text"
+              value={form.pais}
+              onChange={(event) => handleCountryChange(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            Ciudad
+            <input
+              type="text"
+              value={form.ciudad}
+              onChange={(event) => setForm({ ...form, ciudad: event.target.value })}
+            />
+          </label>
+          <label className="field">
+            Continente
+            <input
+              type="text"
+              value={form.continente}
+              readOnly={!allowContinentEdit}
+              onChange={(event) => setForm({ ...form, continente: event.target.value })}
+            />
+          </label>
+          <label className="crud-checkbox">
+            <input
+              type="checkbox"
+              checked={allowContinentEdit}
+              onChange={(event) => setAllowContinentEdit(event.target.checked)}
+            />
+            Editar continente manualmente
+          </label>
+          <label className="field">
+            GMT
+            <input
+              type="text"
+              inputMode="numeric"
+              value={gmtText}
+              onChange={(event) => handleIntChange(event.target.value, setGmtText)}
+            />
+          </label>
+          <label className="field">
+            Capacidad
+            <input
+              type="text"
+              inputMode="numeric"
+              value={capacidadText}
+              onChange={(event) => handleIntChange(event.target.value, setCapacidadText)}
+            />
+          </label>
+          <label className="field">
+            Latitud
+            <input
+              type="text"
+              inputMode="decimal"
+              value={latitudText}
+              onChange={(event) => handleDecimalChange(event.target.value, setLatitudText)}
+            />
+          </label>
+          <label className="field">
+            Longitud
+            <input
+              type="text"
+              inputMode="decimal"
+              value={longitudText}
+              onChange={(event) => handleDecimalChange(event.target.value, setLongitudText)}
+            />
+          </label>
         </div>
-      ) : null}
+        <div className="modal-actions">
+          <Button variant="primary" onClick={handleSubmit}>
+            {form.id ? 'Actualizar' : 'Crear'}
+          </Button>
+          <Button onClick={resetForm}>Limpiar</Button>
+        </div>
+      </Modal>
 
-      {isUploadOpen ? (
-        <div className="modal-backdrop" onClick={closeUploadModal}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Cargar aeropuertos por CSV</h3>
-              <button className="btn" onClick={closeUploadModal}>Cerrar</button>
+      <Modal open={isUploadOpen} onClose={closeUploadModal} title="Cargar aeropuertos por CSV" headerActions={<Button onClick={closeUploadModal}>Cerrar</Button>}>
+        <div className="modal-body">
+          <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
+            <h2>Archivo CSV de aeropuertos</h2>
+            <p>Usa columnas: codigo_oaci,nombre,pais,ciudad,continente,gmt,capacidad,latitud,longitud</p>
+            <div className="upload-actions">
+              <label className="btn ghost">
+                Seleccionar archivo
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  hidden
+                />
+              </label>
             </div>
-            <div className="modal-body">
-              <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
-                <h2>Archivo CSV de aeropuertos</h2>
-                <p>Usa columnas: codigo_oaci,nombre,pais,ciudad,continente,gmt,capacidad,latitud,longitud</p>
-                <div className="upload-actions">
-                  <label className="btn ghost">
-                    Seleccionar archivo
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-                      hidden
-                    />
-                  </label>
-                </div>
-                <div className="upload-summary">
-                  <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
-                  <span>{`Tamano: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
-                </div>
-                {uploadError ? <div className="upload-error">{uploadError}</div> : null}
-                {uploadResult ? (
-                  <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
-                    <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
-                    {uploadResult.invalidFormatLines.length > 0 ? (
-                      <div>
-                        <div>Los siguientes registros no siguen el formato correcto:</div>
-                        <pre className="upload-list">{uploadResult.invalidFormatLines.join('\n')}</pre>
-                      </div>
-                    ) : null}
+            <div className="upload-summary">
+              <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
+              <span>{`Tamano: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
+            </div>
+            {uploadError ? <div className="upload-error">{uploadError}</div> : null}
+            {uploadResult ? (
+              <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
+                <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
+                {uploadResult.invalidFormatLines.length > 0 ? (
+                  <div>
+                    <div>Los siguientes registros no siguen el formato correcto:</div>
+                    <pre className="upload-list">{uploadResult.invalidFormatLines.join('\n')}</pre>
                   </div>
                 ) : null}
-                <div className="upload-footer">
-                  <button className="btn primary" onClick={handleUpload} disabled={uploadLoading}>
-                    {uploadLoading ? 'Cargando...' : 'Cargar aeropuertos'}
-                  </button>
-                </div>
               </div>
+            ) : null}
+            <div className="upload-footer">
+              <Button variant="primary" onClick={handleUpload} disabled={uploadLoading}>
+                {uploadLoading ? 'Cargando...' : 'Cargar aeropuertos'}
+              </Button>
             </div>
           </div>
         </div>
-      ) : null}
+      </Modal>
     </div>
   )
 }
