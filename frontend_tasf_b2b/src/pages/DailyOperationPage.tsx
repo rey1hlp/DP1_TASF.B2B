@@ -160,7 +160,7 @@ export default function DailyOperationPage() {
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/operation/daily`)
+      const response = await fetch(`${API_BASE_URL}/api/operation/daily`)
 
       if (!response.ok) {
         throw new Error('No se pudo obtener la operación diaria.')
