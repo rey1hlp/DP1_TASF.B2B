@@ -145,6 +145,18 @@ export async function deleteFlight(id: number): Promise<void> {
   }
 }
 
+export async function deleteAllFlights(resetIds = false): Promise<void> {
+  const params = new URLSearchParams()
+  if (resetIds) {
+    params.set('resetIds', 'true')
+  }
+  const url = `${API_BASE}/api/db/flights${params.toString() ? `?${params.toString()}` : ''}`
+  const res = await fetch(url, { method: 'DELETE' })
+  if (!res.ok) {
+    throw new Error('No se pudo eliminar todos los vuelos')
+  }
+}
+
 export type BulkImportResult = {
   total: number
   inserted: number

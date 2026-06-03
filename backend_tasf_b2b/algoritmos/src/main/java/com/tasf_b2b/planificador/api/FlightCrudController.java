@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,13 +25,14 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
+@CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api/db/flights")
 public class FlightCrudController {
     private final FlightRepository repository;
     private final AirportRepository airportRepository;
     private final JdbcTemplate jdbcTemplate;
-    private static final int BATCH_SIZE = 500;
+    private static final int BATCH_SIZE = 1000;
 
     public FlightCrudController(
         FlightRepository repository,
@@ -70,6 +72,13 @@ public class FlightCrudController {
             return ResponseEntity.badRequest().build();
         }
 
+        // Cachear todos los aeropuertos en memoria para evitar queries repetidas
+        java.util.List<AirportEntity> allAirports = airportRepository.findAll();
+        java.util.Map<String, AirportEntity> airportCache = new java.util.HashMap<>();
+        for (AirportEntity airport : allAirports) {
+            airportCache.put(airport.codigoOaci, airport);
+        }
+
         int total = 0;
         int inserted = 0;
         int updated = 0;
@@ -104,8 +113,8 @@ public class FlightCrudController {
                 String llegadaTxt = parts[3].trim();
                 String capacidadTxt = parts[4].trim();
 
-                AirportEntity origen = airportRepository.findByCodigoOaci(origenOaci);
-                AirportEntity destino = airportRepository.findByCodigoOaci(destinoOaci);
+                AirportEntity origen = airportCache.get(origenOaci);
+                AirportEntity destino = airportCache.get(destinoOaci);
                 if (origen == null || destino == null) {
                     skipped++;
                     invalidAirport.add(line);
@@ -201,6 +210,15 @@ public class FlightCrudController {
             return ResponseEntity.notFound().build();
         }
         repository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Void> deleteAll(@RequestParam(defaultValue = "false") boolean resetIds) {
+        jdbcTemplate.execute("DELETE FROM flight");
+        if (resetIds) {
+            jdbcTemplate.execute("ALTER TABLE flight AUTO_INCREMENT = 1");
+        }
         return ResponseEntity.noContent().build();
     }
 

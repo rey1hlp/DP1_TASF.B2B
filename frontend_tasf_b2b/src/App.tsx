@@ -8,15 +8,20 @@ import SimulationControls from './components/SimulationControls'
 import UploadEnvios from './components/UploadEnvios'
 import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
+import LoginScreen from './components/LoginScreen'
 import { formatCompactDate, getDayIndexFromDateString, getInclusiveDaySpan } from './utils/time'
 
 export default function App() {
   const ENVIOS_KEY_STORAGE = 'enviosKey'
+  const AUTH_USER_STORAGE = 'authUser'
   const [activeSection, setActiveSection] = useState<'sim' | 'flights' | 'airports'>('sim')
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [simId, setSimId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [enviosKey, setEnviosKey] = useState<string | null>(null)
+  const [loggedIn, setLoggedIn] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [loginError, setLoginError] = useState<string | null>(null)
   const [requestedStart, setRequestedStart] = useState<string | null>(null)
   const [requestedDays, setRequestedDays] = useState<number | null>(null)
   const [displayOffset, setDisplayOffset] = useState<number | null>(null)
@@ -28,23 +33,68 @@ export default function App() {
   const { status, statusMessage, currentMinute, segments, meta, pause, resume } = useSimulationSocket(simId)
 
   useEffect(() => {
+    if (!loggedIn) {
+      return
+    }
     fetchAirports()
       .then(setAirports)
       .catch((err) => setError(err.message))
-  }, [])
+  }, [loggedIn])
 
   useEffect(() => {
-    const stored = localStorage.getItem(ENVIOS_KEY_STORAGE)
-    if (!stored) {
-      return
+    // restore auth and envios from localStorage so refresh doesn't log out the user
+    const storedUser = localStorage.getItem(AUTH_USER_STORAGE)
+    if (storedUser) {
+      setUserEmail(storedUser)
+      setLoggedIn(true)
     }
-    localStorage.removeItem(ENVIOS_KEY_STORAGE)
-    deleteEnvios(stored).catch(() => {})
+    const storedEnvios = localStorage.getItem(ENVIOS_KEY_STORAGE)
+    if (storedEnvios) {
+      setEnviosKey(storedEnvios)
+    }
   }, [])
 
   const handleEnviosUploaded = (key: string) => {
     setEnviosKey(key)
     localStorage.setItem(ENVIOS_KEY_STORAGE, key)
+  }
+
+  const handleLogin = (email: string, password: string) => {
+    const expectedEmail = 'grupo7g2026@gmail.com'
+    const expectedPassword = 'grupo7G_pucp2026'
+
+    if (email !== expectedEmail || password !== expectedPassword) {
+      setLoginError('Credenciales incorrectas. Usa el correo y contraseña válidos.')
+      return
+    }
+
+    setUserEmail(email)
+    setLoggedIn(true)
+    localStorage.setItem(AUTH_USER_STORAGE, email)
+    setLoginError(null)
+    setError(null)
+  }
+
+  const handleLogout = () => {
+    // try to clean uploaded envios on the server (best-effort)
+    if (enviosKey) {
+      deleteEnvios(enviosKey).catch(() => {})
+      localStorage.removeItem(ENVIOS_KEY_STORAGE)
+    }
+
+    setEnviosKey(null)
+    setSimId(null)
+    setRequestedStart(null)
+    setRequestedDays(null)
+    setDisplayOffset(null)
+    setLocalCompleted(false)
+    setSelectedFlightId(null)
+    setSelectedAirportCode(null)
+    setUserEmail(null)
+    setLoggedIn(false)
+    setLoginError(null)
+    localStorage.removeItem(AUTH_USER_STORAGE)
+    setError(null)
   }
 
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
@@ -266,6 +316,10 @@ export default function App() {
     setSelectedAirportCode((prev) => (prev === codigoOaci ? null : codigoOaci))
   }
 
+  if (!loggedIn) {
+    return <LoginScreen onLogin={handleLogin} errorMessage={loginError} />
+  }
+
   return (
     <div className="app">
       <header className="sidebar">
@@ -306,6 +360,9 @@ export default function App() {
           <button className="nav-item">Reportes</button>
           <button className="nav-item">Configuracion</button>
         </nav>
+        <div className="sidebar-footer">
+          <button className="nav-item logout" onClick={handleLogout}>Cerrar Sesión</button>
+        </div>
       </header>
 
       <main className="main">

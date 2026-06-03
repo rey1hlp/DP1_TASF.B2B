@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FlightCrudDto } from '../types/sim'
-import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
+import { createFlight, deleteAllFlights, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
 
 export default function FlightsCrud() {
@@ -12,6 +12,7 @@ export default function FlightsCrud() {
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isUploadOpen, setIsUploadOpen] = useState(false)
+  const [isDeleteAllConfirmOpen, setIsDeleteAllConfirmOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -105,6 +106,30 @@ export default function FlightsCrud() {
     }
     await deleteFlight(id)
     await load()
+  }
+
+  const openDeleteAllConfirm = () => {
+    setIsDeleteAllConfirmOpen(true)
+  }
+
+  const cancelDeleteAll = () => {
+    setIsDeleteAllConfirmOpen(false)
+  }
+
+  const handleDeleteAll = async () => {
+    setIsDeleteAllConfirmOpen(false)
+    setLoading(true)
+    setError(null)
+    try {
+      await deleteAllFlights(true)
+      setPage(0)
+      await load()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado'
+      setError(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleNew = () => {
@@ -212,6 +237,9 @@ export default function FlightsCrud() {
           />
         </div>
         <button className="btn primary" onClick={handleNew}>Nuevo vuelo</button>
+        {items.length > 0 ? (
+          <button className="btn danger" onClick={openDeleteAllConfirm}>Eliminar todo</button>
+        ) : null}
         <button className="btn ghost" onClick={() => setIsUploadOpen(true)}>Cargar TXT</button>
       </div>
       {error ? <div className="crud-error">{error}</div> : null}
@@ -406,6 +434,9 @@ export default function FlightsCrud() {
                   <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
                   <span>{`Tamano: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
                 </div>
+                {uploadFile ? (
+                  <div className="upload-note">Esto puede tardar unos minutos si el archivo contiene muchos vuelos.</div>
+                ) : null}
                 {uploadError ? <div className="upload-error">{uploadError}</div> : null}
                 {uploadResult ? (
                   <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
@@ -430,6 +461,23 @@ export default function FlightsCrud() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isDeleteAllConfirmOpen ? (
+        <div className="modal-backdrop" onClick={cancelDeleteAll}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirmar eliminación</h3>
+            </div>
+            <div className="modal-body" style={{ gridTemplateColumns: '1fr' }}>
+              <p>¿Desea eliminar todos los vuelos?</p>
+            </div>
+            <div className="modal-actions">
+              <button className="btn" onClick={cancelDeleteAll}>Cancelar</button>
+              <button className="btn danger" onClick={handleDeleteAll}>Aceptar</button>
             </div>
           </div>
         </div>

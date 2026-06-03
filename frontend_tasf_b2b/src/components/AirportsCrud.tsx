@@ -144,7 +144,6 @@ export default function AirportsCrud() {
       "united states of america": 'America',
       spain: 'Europa',
       espana: 'Europa',
-      espana: 'Europa',
       portugal: 'Europa',
       france: 'Europa',
       francia: 'Europa',
