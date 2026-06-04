@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FlightCrudDto } from '../types/sim'
-import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
+import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt, cancelFlightDay, removeCancelFlightDay, getCancelledDays } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
 
 export default function FlightsCrud() {
@@ -25,6 +25,15 @@ export default function FlightsCrud() {
   } | null>(null)
   const [airports, setAirports] = useState<AirportCrudDto[]>([])
   const [airportsLoaded, setAirportsLoaded] = useState(false)
+  
+  // Cancellations state
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [flightToCancel, setFlightToCancel] = useState<FlightCrudDto | null>(null)
+  const [cancelDate, setCancelDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [cancelMessage, setCancelMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null)
+  const [cancelledDaysMap, setCancelledDaysMap] = useState<Record<number, string[]>>({})
+  const [isCancelledDate, setIsCancelledDate] = useState(false)
+
   const [activeOaciList, setActiveOaciList] = useState<'origen' | 'destino' | null>(null)
   const [form, setForm] = useState<FlightCrudDto>({
     codigo: '',
