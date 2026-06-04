@@ -25,6 +25,8 @@ import com.tasf_b2b.planificador.utils.ReporteRutas;
 import com.tasf_b2b.planificador.utils.ReporteSinRuta;
 import com.tasf_b2b.planificador.utils.RutaResolver;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
+import com.tasf_b2b.planificador.persistence.FlightDayCancellationEntity;
+import com.tasf_b2b.planificador.persistence.FlightDayCancellationRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,18 +59,21 @@ public class SimulationService {
     private final SimulationRunRepository simulationRunRepository;
     private final AirportRepository airportRepository;
     private final FlightRepository flightRepository;
+    private final FlightDayCancellationRepository cancellationRepository;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
     public SimulationService(
         SimulationRegistry registry,
         SimulationRunRepository simulationRunRepository,
         AirportRepository airportRepository,
-        FlightRepository flightRepository
+        FlightRepository flightRepository,
+        FlightDayCancellationRepository cancellationRepository
     ) {
         this.registry = registry;
         this.simulationRunRepository = simulationRunRepository;
         this.airportRepository = airportRepository;
         this.flightRepository = flightRepository;
+        this.cancellationRepository = cancellationRepository;
     }
 
     public SimulationResponse startSimulation(SimulationRequest request) {
@@ -290,6 +295,14 @@ public class SimulationService {
                     diaMin,
                     diaMax + Math.max(0, diasExtra)
                 );
+
+            List<FlightDayCancellationEntity> cancellations = cancellationRepository.findAll();
+            java.util.Set<String> cancelledKeys = new java.util.HashSet<>();
+            for (FlightDayCancellationEntity c : cancellations) {
+                String dateStr = c.fechaCancelacion.format(DateTimeFormatter.BASIC_ISO_DATE);
+                cancelledKeys.add(c.flightId + "_" + dateStr);
+            }
+            vuelos.removeIf(v -> cancelledKeys.contains(v.idPlan + "_" + v.fecha));
     
             log.info(
                 "[SIM:{}] Instantiated {} flights in {} ms",
@@ -532,6 +545,9 @@ public class SimulationService {
         List<FlightEntity> entities = flightRepository.findAll();
         int id = 0;
         for (FlightEntity entity : entities) {
+            if (entity.cancelado) {
+                continue;
+            }
             if (entity.origen == null || entity.destino == null || entity.salida == null || entity.llegada == null) {
                 continue;
             }
@@ -713,3 +729,4 @@ public class SimulationService {
         );
     }
 }
+

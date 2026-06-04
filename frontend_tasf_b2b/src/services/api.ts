@@ -223,3 +223,37 @@ export async function uploadFlightsTxt(file: File): Promise<BulkImportResult> {
   }
   return res.json()
 }
+
+export async function cancelFlightDay(id: number, fecha: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flightId: id, fecha }),
+  })
+  if (res.status === 409) {
+    throw new Error('Este vuelo ya está cancelado para ese día')
+  }
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Vuelo no encontrado')
+    throw new Error('No se pudo cancelar el vuelo')
+  }
+}
+
+export async function removeCancelFlightDay(id: number, fecha: string): Promise<void> {
+  const params = new URLSearchParams({ fecha })
+  const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancel?${params.toString()}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Vuelo no encontrado o no estaba cancelado')
+    throw new Error('No se pudo reactivar el vuelo')
+  }
+}
+
+export async function getCancelledDays(id: number): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancels`)
+  if (!res.ok) {
+    throw new Error('No se pudieron cargar los días cancelados')
+  }
+  return res.json()
+}
