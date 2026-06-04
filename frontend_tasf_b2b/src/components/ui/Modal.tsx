@@ -1,11 +1,11 @@
-import React from 'react'
+import type { ReactNode } from 'react'
 
 type ModalProps = {
   open: boolean
   onClose: () => void
   title?: string
-  headerActions?: React.ReactNode
-  children?: React.ReactNode
+  headerActions?: ReactNode
+  children?: ReactNode
 }
 
 export default function Modal({ open, onClose, title, headerActions, children }: ModalProps) {
