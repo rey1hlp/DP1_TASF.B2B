@@ -246,7 +246,9 @@ export default function FlightsCrud() {
             <span>{item.salida}</span>
             <span>{item.llegada}</span>
             <span>{item.capacidad}</span>
-            <span>{item.cancelado ? 'Cancelado' : 'Activo'}</span>
+            <span className={`status-badge ${item.cancelado ? 'cancelled' : 'active'}`}>
+              {item.cancelado ? 'Cancelado' : 'Activo'}
+            </span>
             <div className="crud-row-actions">
               <button className="btn" onClick={() => handleEdit(item)}>Editar</button>
               <button className="btn" onClick={() => handleDelete(item.id)}>Eliminar</button>

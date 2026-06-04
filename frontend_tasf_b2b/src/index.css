@@ -770,6 +770,25 @@ body {
   grid-template-columns: 90px 1fr 1fr 70px 120px 140px;
 }
 
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.status-badge.active {
+  background: rgba(56, 163, 85, 0.14);
+  color: #1f7a39;
+}
+
+.status-badge.cancelled {
+  background: rgba(220, 72, 72, 0.12);
+  color: #a53939;
+}
+
 .crud-row.header {
   background: #eaf0fb;
   font-weight: 600;
