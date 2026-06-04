@@ -189,6 +189,19 @@ export async function deleteShipment(id: number): Promise<void> {
   }
 }
 
+export async function uploadShipmentsTxt(file: File): Promise<BulkImportResult> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_BASE}/api/db/shipments/import-txt`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    throw new Error('No se pudo cargar envios desde TXT')
+  }
+  return res.json()
+}
+
 export type BulkImportResult = {
   total: number
   inserted: number

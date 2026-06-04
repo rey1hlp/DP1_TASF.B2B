@@ -6,16 +6,29 @@ import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
+import com.tasf_b2b.planificador.utils.UtilArchivos;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Objects;
 
 @RestController
@@ -23,6 +36,7 @@ import java.util.Objects;
 public class ShipmentCrudController {
     private static final Logger log = LoggerFactory.getLogger(ShipmentCrudController.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
+    private static final Pattern PATRON_ORIGEN = Pattern.compile("_envios_([A-Za-z0-9]{4})_");
 
     private final ShipmentRepository repository;
     private final AirportRepository airportRepository;
@@ -83,6 +97,145 @@ public class ShipmentCrudController {
         );
         dailyPlanningService.replanNow("SHIPMENT_CREATE", "nuevo envio");
         return ResponseEntity.ok(toDto(saved));
+    }
+
+    @PostMapping("/import-txt")
+    public ResponseEntity<BulkImportResult> importTxt(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        String originOaci = extractOrigin(file.getOriginalFilename());
+        if (originOaci == null) {
+            log.warn("[SHIPMENT_CRUD] import rejected because filename does not match standard");
+            return ResponseEntity.badRequest().build();
+        }
+
+        AirportEntity originAirport = airportRepository.findByCodigoOaci(originOaci);
+        if (originAirport == null) {
+            log.warn("[SHIPMENT_CRUD] import rejected because origin airport does not exist origin={}", originOaci);
+            return ResponseEntity.badRequest().build();
+        }
+
+        int total = 0;
+        int inserted = 0;
+        int updated = 0;
+        int skipped = 0;
+        List<String> invalidFormat = new ArrayList<>();
+        List<String> invalidAirport = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                total++;
+
+                String[] parts = trimmed.split("-");
+                if (parts.length < 7) {
+                    skipped++;
+                    invalidFormat.add(line);
+                    continue;
+                }
+
+                String codigoPedido = parts[0].trim();
+                String fecha = parts[1].trim();
+                String hhTxt = parts[2].trim();
+                String mmTxt = parts[3].trim();
+                String destinoOaci = parts[4].trim().toUpperCase(Locale.ROOT);
+                String cantidadTxt = parts[5].trim();
+                String idCliente = parts[6].trim();
+
+                if (codigoPedido.isBlank() || idCliente.isBlank()) {
+                    skipped++;
+                    invalidFormat.add(line);
+                    continue;
+                }
+
+                AirportEntity destinoAirport = airportRepository.findByCodigoOaci(destinoOaci);
+                if (destinoAirport == null) {
+                    skipped++;
+                    invalidAirport.add(line);
+                    continue;
+                }
+
+                int hh;
+                int mm;
+                int cantidad;
+                try {
+                    hh = Integer.parseInt(hhTxt);
+                    mm = Integer.parseInt(mmTxt);
+                    cantidad = Integer.parseInt(cantidadTxt);
+                } catch (NumberFormatException ex) {
+                    skipped++;
+                    invalidFormat.add(line);
+                    continue;
+                }
+
+                if (hh < 0 || hh > 23 || mm < 0 || mm > 59 || cantidad < 0) {
+                    skipped++;
+                    invalidFormat.add(line);
+                    continue;
+                }
+
+                LocalDate date;
+                LocalTime localTime;
+                try {
+                    date = LocalDate.parse(fecha, DATE_FORMAT);
+                    localTime = LocalTime.of(hh, mm);
+                } catch (Exception ex) {
+                    skipped++;
+                    invalidFormat.add(line);
+                    continue;
+                }
+
+                LocalDateTime ingresoLocal = LocalDateTime.of(date, localTime);
+                LocalDateTime ingresoUtc = ingresoLocal.minusHours(originAirport.gmt);
+                int slaHoras = computeSla(originAirport, destinoAirport);
+
+                ShipmentEntity entity = repository.findByCodigoPedido(codigoPedido);
+                boolean existed = entity != null;
+                if (!existed) {
+                    entity = new ShipmentEntity();
+                }
+
+                entity.codigoPedido = codigoPedido;
+                entity.origen = originAirport;
+                entity.destino = destinoAirport;
+                entity.fecha = fecha;
+                entity.ingresoLocal = ingresoLocal;
+                entity.ingresoUtc = ingresoUtc;
+                entity.gmtOffset = originAirport.gmt;
+                entity.cantidad = cantidad;
+                entity.idCliente = idCliente;
+                entity.slaHoras = slaHoras;
+                entity.asignado = false;
+
+                repository.save(entity);
+                if (existed) {
+                    updated++;
+                } else {
+                    inserted++;
+                }
+            }
+        }
+
+        if (inserted + updated > 0) {
+            dailyPlanningService.replanNow("SHIPMENT_IMPORT", "txt masivo");
+        }
+
+        log.info(
+            "[SHIPMENT_CRUD] import finished file={} origin={} total={} inserted={} updated={} skipped={}",
+            file.getOriginalFilename(),
+            originOaci,
+            total,
+            inserted,
+            updated,
+            skipped
+        );
+        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport));
     }
 
     @PutMapping("/{id}")
@@ -202,4 +355,34 @@ public class ShipmentCrudController {
         }
         return dto.ingresoLocal.format(DATE_FORMAT);
     }
+
+    private String extractOrigin(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return null;
+        }
+        Matcher matcher = PATRON_ORIGEN.matcher(filename);
+        if (!matcher.find()) {
+            return null;
+        }
+        return matcher.group(1).toUpperCase(Locale.ROOT);
+    }
+
+    private int computeSla(AirportEntity origen, AirportEntity destino) {
+        String origenContinente = origen != null && origen.continente != null && !origen.continente.isBlank()
+            ? origen.continente.trim()
+            : UtilArchivos.obtenerContinente(origen.codigoOaci);
+        String destinoContinente = destino != null && destino.continente != null && !destino.continente.isBlank()
+            ? destino.continente.trim()
+            : UtilArchivos.obtenerContinente(destino.codigoOaci);
+        return origenContinente.equalsIgnoreCase(destinoContinente) ? 24 : 48;
+    }
+
+    public record BulkImportResult(
+        int total,
+        int inserted,
+        int updated,
+        int skipped,
+        List<String> invalidFormatLines,
+        List<String> invalidAirportLines
+    ) {}
 }

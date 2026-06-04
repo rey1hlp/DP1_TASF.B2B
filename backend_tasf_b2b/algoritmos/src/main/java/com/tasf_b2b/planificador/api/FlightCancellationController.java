@@ -1,6 +1,7 @@
 package com.tasf_b2b.planificador.api;
 
 import com.tasf_b2b.planificador.api.dto.FlightDayCancellationDto;
+import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationEntity;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationRepository;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
@@ -12,6 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +26,7 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*")
 public class FlightCancellationController {
     private static final Logger log = LoggerFactory.getLogger(FlightCancellationController.class);
+    private static final ZoneId ZONE = ZoneId.of("America/Lima");
 
     private final FlightDayCancellationRepository cancellationRepository;
     private final FlightRepository flightRepository;
@@ -40,7 +45,8 @@ public class FlightCancellationController {
     @PostMapping("/{id}/day-cancel")
     public ResponseEntity<?> cancelFlightDay(@PathVariable Long id, @RequestBody FlightDayCancellationDto dto) {
         log.info("[FLIGHT_CANCEL] request cancel flightId={} fecha={}", id, dto != null ? dto.fecha : null);
-        if (!flightRepository.existsById(id)) {
+        FlightEntity flight = flightRepository.findById(id).orElse(null);
+        if (flight == null) {
             log.warn("[FLIGHT_CANCEL] cancel rejected because flight does not exist id={}", id);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Vuelo no encontrado");
         }
@@ -57,7 +63,12 @@ public class FlightCancellationController {
         entity.fechaCancelacion = date;
         cancellationRepository.save(entity);
         log.info("[FLIGHT_CANCEL] cancel saved flightId={} fecha={}", id, dto.fecha);
-        dailyPlanningService.replanNow("FLIGHT_CANCEL", "cancel day");
+        if (shouldReplan(flight, date)) {
+            log.info("[FLIGHT_CANCEL] replan triggered flightId={} fecha={}", id, dto.fecha);
+            dailyPlanningService.replanNow("FLIGHT_CANCEL", "cancel day");
+        } else {
+            log.info("[FLIGHT_CANCEL] replan skipped because flight already departed flightId={} fecha={}", id, dto.fecha);
+        }
 
         return ResponseEntity.ok().build();
     }
@@ -65,6 +76,7 @@ public class FlightCancellationController {
     @DeleteMapping("/{id}/day-cancel")
     public ResponseEntity<?> removeCancelFlightDay(@PathVariable Long id, @RequestParam String fecha) {
         log.info("[FLIGHT_CANCEL] request remove cancel flightId={} fecha={}", id, fecha);
+        FlightEntity flight = flightRepository.findById(id).orElse(null);
         LocalDate date = LocalDate.parse(fecha, DateTimeFormatter.ISO_LOCAL_DATE);
         Optional<FlightDayCancellationEntity> opt = cancellationRepository.findByFlightIdAndFechaCancelacion(id, date);
         
@@ -75,8 +87,28 @@ public class FlightCancellationController {
 
         cancellationRepository.delete(opt.get());
         log.info("[FLIGHT_CANCEL] cancellation removed flightId={} fecha={}", id, fecha);
-        dailyPlanningService.replanNow("FLIGHT_CANCEL", "remove cancel");
+        if (shouldReplan(flight, date)) {
+            dailyPlanningService.replanNow("FLIGHT_CANCEL", "remove cancel");
+        }
         return ResponseEntity.ok().build();
+    }
+
+    private boolean shouldReplan(FlightEntity flight, LocalDate date) {
+        if (flight == null || flight.salida == null) {
+            return false;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZONE);
+        LocalDate today = now.toLocalDate();
+        LocalDateTime salida = flight.salida;
+
+        if (date.isAfter(today)) {
+            return true;
+        }
+        if (date.isBefore(today)) {
+            return false;
+        }
+        return !now.toLocalTime().isAfter(salida.toLocalTime());
     }
 
     @GetMapping("/{id}/day-cancels")

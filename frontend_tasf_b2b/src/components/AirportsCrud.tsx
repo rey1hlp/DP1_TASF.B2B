@@ -254,7 +254,9 @@ export default function AirportsCrud() {
   return (
     <div className="crud-panel">
       <div className="crud-header">
-        <h2>Aeropuertos</h2>
+        <div className="crud-header-main">
+          <h2>Aeropuertos</h2>
+        </div>
         <div className="crud-search">
           <input
             type="text"
@@ -266,8 +268,10 @@ export default function AirportsCrud() {
             }}
           />
         </div>
-        <Button variant="primary" onClick={handleNew}>Nuevo aeropuerto</Button>
-        <Button variant="ghost" onClick={() => setIsUploadOpen(true)}>Cargar CSV</Button>
+        <div className="crud-header-actions">
+          <Button variant="primary" onClick={handleNew}>Nuevo aeropuerto</Button>
+          <Button variant="ghost" onClick={() => setIsUploadOpen(true)}>Cargar CSV</Button>
+        </div>
       </div>
       {error ? <div className="crud-error">{error}</div> : null}
 

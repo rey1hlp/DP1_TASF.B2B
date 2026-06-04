@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AirportCrudDto, ShipmentCrudDto } from '../types/sim'
-import { createShipment, deleteShipment, listAirports, listShipments, updateShipment } from '../services/api'
+import { createShipment, deleteShipment, listAirports, listShipments, updateShipment, uploadShipmentsTxt } from '../services/api'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
@@ -32,6 +32,18 @@ export default function ShipmentsCrud() {
   const [airports, setAirports] = useState<AirportCrudDto[]>([])
   const [airportsLoaded, setAirportsLoaded] = useState(false)
   const [activeOaciList, setActiveOaciList] = useState<'origen' | 'destino' | null>(null)
+  const [isUploadOpen, setIsUploadOpen] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadLoading, setUploadLoading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadResult, setUploadResult] = useState<{
+    total: number
+    inserted: number
+    updated: number
+    skipped: number
+    invalidFormatLines: string[]
+    invalidAirportLines: string[]
+  } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -156,6 +168,34 @@ export default function ShipmentsCrud() {
     await load()
   }
 
+  const closeUploadModal = () => {
+    setIsUploadOpen(false)
+    setUploadFile(null)
+    setUploadError(null)
+    setUploadResult(null)
+  }
+
+  const handleUpload = async () => {
+    if (!uploadFile) {
+      setUploadError('Selecciona un archivo .txt')
+      return
+    }
+
+    setUploadLoading(true)
+    setUploadError(null)
+    setUploadResult(null)
+    try {
+      const result = await uploadShipmentsTxt(uploadFile)
+      setUploadResult(result)
+      await load()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado'
+      setUploadError(msg)
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
   const handleChange = (key: keyof ShipmentCrudDto, value: string | number | boolean) => {
     setForm((current) => ({ ...current, [key]: value }))
   }
@@ -186,8 +226,10 @@ export default function ShipmentsCrud() {
 
   return (
     <div className="crud-panel">
-        <div className="crud-header">
-        <h2>Envios</h2>
+      <div className="crud-header">
+        <div className="crud-header-main">
+          <h2>Envios</h2>
+        </div>
         <div className="crud-search">
           <input
             type="text"
@@ -198,7 +240,10 @@ export default function ShipmentsCrud() {
               setQuery(event.target.value)
             }}
           />
+        </div>
+        <div className="crud-header-actions">
           <Button variant="primary" onClick={handleNew}>Nuevo envio</Button>
+          <Button variant="ghost" onClick={() => setIsUploadOpen(true)}>Cargar TXT</Button>
         </div>
       </div>
 
@@ -234,6 +279,54 @@ export default function ShipmentsCrud() {
       </div>
 
       <Pager page={page} totalPages={totalPages} onPrev={() => setPage((current) => Math.max(0, current - 1))} onNext={() => setPage((current) => current + 1)} />
+
+      <Modal open={isUploadOpen} onClose={closeUploadModal} title="Cargar envios por TXT" headerActions={<Button onClick={closeUploadModal}>Cerrar</Button>}>
+        <div className="modal-body">
+          <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
+            <h2>Archivo TXT de envios</h2>
+            <p>Formato: codigoPedido-AAAAMMDD-HH-MM-DESTINO-CANTIDAD-IDCLIENTE</p>
+            <p>Nombre requerido: <code>_envios_OACI_.txt</code>, por ejemplo <code>_envios_EBCI_.txt</code></p>
+            <div className="upload-actions">
+              <label className="btn ghost">
+                Seleccionar archivo
+                <input
+                  type="file"
+                  accept=".txt"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  hidden
+                />
+              </label>
+            </div>
+            <div className="upload-summary">
+              <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
+              <span>{`Tamano: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
+            </div>
+            {uploadError ? <div className="upload-error">{uploadError}</div> : null}
+            {uploadResult ? (
+              <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
+                <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
+                {uploadResult.invalidAirportLines.length > 0 ? (
+                  <div>
+                    <div>Los siguientes registros referencian aeropuertos que no existen:</div>
+                    <pre className="upload-list">{uploadResult.invalidAirportLines.join('\n')}</pre>
+                  </div>
+                ) : null}
+                {uploadResult.invalidFormatLines.length > 0 ? (
+                  <div>
+                    <div>Los siguientes registros no siguen el formato correcto:</div>
+                    <pre className="upload-list">{uploadResult.invalidFormatLines.join('\n')}</pre>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="upload-footer">
+              <Button variant="primary" onClick={handleUpload} disabled={uploadLoading}>
+                {uploadLoading ? 'Cargando...' : 'Cargar envios'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Editar envio' : 'Nuevo envio'}>
         <div className="crud-form-grid">

@@ -208,7 +208,9 @@ export default function FlightsCrud() {
   return (
     <div className="crud-panel">
       <div className="crud-header">
-        <h2>Vuelos</h2>
+        <div className="crud-header-main">
+          <h2>Vuelos</h2>
+        </div>
         <div className="crud-search">
           <input
             type="text"
@@ -220,8 +222,10 @@ export default function FlightsCrud() {
             }}
           />
         </div>
-        <button className="btn primary" onClick={handleNew}>Nuevo vuelo</button>
-        <button className="btn ghost" onClick={() => setIsUploadOpen(true)}>Cargar TXT</button>
+        <div className="crud-header-actions">
+          <button className="btn primary" onClick={handleNew}>Nuevo vuelo</button>
+          <button className="btn ghost" onClick={() => setIsUploadOpen(true)}>Cargar TXT</button>
+        </div>
       </div>
       {error ? <div className="crud-error">{error}</div> : null}
 

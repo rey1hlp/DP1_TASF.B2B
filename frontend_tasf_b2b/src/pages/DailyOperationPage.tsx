@@ -115,7 +115,6 @@ export default function DailyOperationPage() {
   const [alerts, setAlerts] = useState<OperationAlert[]>([])
 
   const [now, setNow] = useState(() => new Date())
-  const [backendMinute, setBackendMinute] = useState<number | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(true)
@@ -126,28 +125,10 @@ export default function DailyOperationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
-  const displayMinute = useMemo(() => {
-    if (backendMinute === null) {
-      return getCurrentMinuteOfDay(now)
-    }
-
-    if (!lastSyncAt) {
-      return backendMinute
-    }
-
-    const syncedAt = new Date(lastSyncAt).getTime()
-    const elapsedMinutes = (now.getTime() - syncedAt) / 60000
-    return backendMinute + elapsedMinutes
-  }, [backendMinute, lastSyncAt, now])
-
-  const currentMinute = displayMinute
+  const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
 
   const applySnapshot = useCallback((snapshot: DailyOperationSnapshot) => {
     console.debug('[DailyOperationPage] applySnapshot', snapshot)
-    if (snapshot.currentMinute !== undefined) {
-      setBackendMinute(snapshot.currentMinute)
-    }
-
     if (snapshot.segments) {
       setSegments(snapshot.segments)
     }
