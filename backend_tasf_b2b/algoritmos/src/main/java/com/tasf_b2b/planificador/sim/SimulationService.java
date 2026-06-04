@@ -545,6 +545,9 @@ public class SimulationService {
         List<FlightEntity> entities = flightRepository.findAll();
         int id = 0;
         for (FlightEntity entity : entities) {
+            if (entity.cancelado) {
+                continue;
+            }
             if (entity.origen == null || entity.destino == null || entity.salida == null || entity.llegada == null) {
                 continue;
             }
@@ -726,3 +729,4 @@ public class SimulationService {
         );
     }
 }
+
