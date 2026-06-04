@@ -135,7 +135,9 @@ export type ShipmentCrudDto = {
   id?: number
   codigoPedido: string
   origen: string
+  origenCiudad?: string
   destino: string
+  destinoCiudad?: string
   fecha: string
   diaIndex: number
   ingresoUtc: string

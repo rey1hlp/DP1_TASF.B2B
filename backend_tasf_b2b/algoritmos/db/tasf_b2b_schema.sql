@@ -42,8 +42,8 @@ CREATE TABLE flight (
 CREATE TABLE shipment (
   id              BIGINT NOT NULL AUTO_INCREMENT,
   codigo_pedido   VARCHAR(40) NOT NULL,
-  origen          CHAR(4) NOT NULL,
-  destino         CHAR(4) NOT NULL,
+  origen_id       BIGINT NOT NULL,
+  destino_id      BIGINT NOT NULL,
   fecha           CHAR(8) NOT NULL,
   cantidad        INT NOT NULL,
   id_cliente      VARCHAR(64) NOT NULL,
@@ -61,7 +61,11 @@ CREATE TABLE shipment (
   PRIMARY KEY (id),
   UNIQUE KEY uk_shipment_codigo_pedido (codigo_pedido),
   INDEX idx_shipment_ingreso_utc (hora_ingreso_utc),
-  INDEX idx_shipment_origen_fecha (origen, hora_ingreso_utc)
+  INDEX idx_shipment_origen_fecha (origen_id, hora_ingreso_utc),
+  CONSTRAINT fk_shipment_origen FOREIGN KEY (origen_id)
+    REFERENCES airport(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_shipment_destino FOREIGN KEY (destino_id)
+    REFERENCES airport(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE simulation_run (
@@ -79,4 +83,49 @@ CREATE TABLE simulation_run (
   finalizado_en DATETIME NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_simulation_run (simulation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE flight_day_cancellation (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  flight_id BIGINT NOT NULL,
+  fecha_cancelacion DATE NOT NULL,
+  audit_date_ins DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_flight_day_cancellation (flight_id, fecha_cancelacion)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE daily_plan_run (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  plan_date VARCHAR(16) NOT NULL,
+  window_start_min INT NOT NULL,
+  window_end_min INT NOT NULL,
+  trigger_type VARCHAR(32) NOT NULL,
+  trigger_detail VARCHAR(120) NULL,
+  total_envios INT NOT NULL,
+  total_maletas BIGINT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_daily_plan_run_date_window (plan_date, window_start_min, created_at),
+  INDEX idx_daily_plan_run_date_created (plan_date, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE daily_plan_segment (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  plan_run_id BIGINT NOT NULL,
+  flight_id BIGINT NOT NULL,
+  plan_id BIGINT NOT NULL,
+  origen CHAR(4) NOT NULL,
+  destino CHAR(4) NOT NULL,
+  salida_min INT NOT NULL,
+  llegada_min INT NOT NULL,
+  carga BIGINT NOT NULL,
+  capacidad INT NOT NULL,
+  origen_lat DOUBLE NOT NULL,
+  origen_lon DOUBLE NOT NULL,
+  destino_lat DOUBLE NOT NULL,
+  destino_lon DOUBLE NOT NULL,
+  PRIMARY KEY (id),
+  INDEX idx_daily_plan_segment_run (plan_run_id),
+  CONSTRAINT fk_daily_plan_segment_run FOREIGN KEY (plan_run_id)
+    REFERENCES daily_plan_run(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

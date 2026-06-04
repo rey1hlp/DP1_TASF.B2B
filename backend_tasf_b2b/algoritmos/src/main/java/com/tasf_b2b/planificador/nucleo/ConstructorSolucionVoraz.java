@@ -188,7 +188,8 @@ public final class ConstructorSolucionVoraz {
                 continue;
             }
 
-            int tiempoMinimoSalida = actual.tiempo + minEscalaMin;
+            int esperaMinima = actual.vueloPrevio == null ? 0 : minEscalaMin;
+            int tiempoMinimoSalida = actual.tiempo + esperaMinima;
             for (Vuelo vuelo : grafo.obtenerVuelosDesde(actual.aeropuerto, tiempoMinimoSalida)) {
                 if (vuelo.salidaMin < tiempoMinimoSalida) {
                     continue;

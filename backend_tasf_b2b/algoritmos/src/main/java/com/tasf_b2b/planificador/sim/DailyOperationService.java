@@ -7,11 +7,11 @@ import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
 import com.tasf_b2b.planificador.api.dto.OperationAlertDto;
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
-import com.tasf_b2b.planificador.persistence.FlightEntity;
-import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -28,22 +28,23 @@ import java.util.stream.Collectors;
 
 @Service
 public class DailyOperationService {
+    private static final Logger log = LoggerFactory.getLogger(DailyOperationService.class);
     private static final ZoneId ZONE = ZoneId.of("America/Lima");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     private final AirportRepository airportRepository;
-    private final FlightRepository flightRepository;
     private final ShipmentRepository shipmentRepository;
+    private final DailyPlanningService dailyPlanningService;
 
     public DailyOperationService(
         AirportRepository airportRepository,
-        FlightRepository flightRepository,
-        ShipmentRepository shipmentRepository
+        ShipmentRepository shipmentRepository,
+        DailyPlanningService dailyPlanningService
     ) {
         this.airportRepository = airportRepository;
-        this.flightRepository = flightRepository;
         this.shipmentRepository = shipmentRepository;
+        this.dailyPlanningService = dailyPlanningService;
     }
 
     public DailyOperationSnapshotDto buildSnapshot(String dateText, String airportText, String windowText) {
@@ -52,6 +53,15 @@ public class DailyOperationService {
 
         OffsetDateTime now = OffsetDateTime.now(ZONE);
         int currentMinute = now.getHour() * 60 + now.getMinute();
+        log.info(
+            "[DAILY_OP] buildSnapshot dateText={} airportText={} windowText={} selectedDate={} airportFilter={} currentMinute={}",
+            dateText,
+            airportText,
+            windowText,
+            selectedDate,
+            airportFilter,
+            currentMinute
+        );
 
         Map<String, AirportEntity> airportEntities = airportRepository.findAll().stream()
             .filter(entity -> entity.codigoOaci != null && !entity.codigoOaci.isBlank())
@@ -66,19 +76,18 @@ public class DailyOperationService {
             .filter(this::isValidShipment)
             .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipment.fecha))
             .filter(shipment -> airportFilter == null
-                || airportFilter.equals(normalizeAirport(shipment.origen))
-                || airportFilter.equals(normalizeAirport(shipment.destino)))
+                || airportFilter.equals(shipmentOrigen(shipment))
+                || airportFilter.equals(shipmentDestino(shipment)))
             .collect(Collectors.toList());
+        log.info("[DAILY_OP] shipments matched snapshot={}", shipments.size());
 
-        List<FlightSegmentDto> segments = flightRepository.findAll().stream()
-            .filter(this::isValidFlight)
-            .map(entity -> toSegment(entity, airportEntities))
-            .filter(segment -> segment != null)
+        List<FlightSegmentDto> segments = dailyPlanningService.getCurrentPlanSegments().stream()
             .filter(segment -> airportFilter == null
                 || airportFilter.equals(normalizeAirport(segment.origen))
                 || airportFilter.equals(normalizeAirport(segment.destino)))
             .sorted(Comparator.comparingInt(segment -> segment.salidaMin))
             .collect(Collectors.toList());
+        log.info("[DAILY_OP] segments matched snapshot={}", segments.size());
 
         Map<String, DailyWarehouseSnapshotDto> warehouseSnapshot = buildWarehouseSnapshot(
             airportEntities,
@@ -89,6 +98,7 @@ public class DailyOperationService {
         DailyShipmentSummaryDto shipmentSummary = buildShipmentSummary(shipments);
 
         List<OperationAlertDto> alerts = buildAlerts(warehouseSnapshot);
+        log.info("[DAILY_OP] alerts generated={}", alerts.size());
 
         DailyOperationSnapshotDto snapshot = new DailyOperationSnapshotDto();
         snapshot.timestamp = TIMESTAMP_FORMAT.format(now);
@@ -108,15 +118,16 @@ public class DailyOperationService {
         Map<String, Long> ocupacionPorAeropuerto = new HashMap<>();
 
         for (ShipmentEntity shipment : shipments) {
-            if (shipment.origen == null || shipment.origen.isBlank()) {
+            String origen = shipmentOrigen(shipment);
+            if (origen == null) {
                 continue;
             }
             if (shipment.asignado) {
                 continue;
             }
-            String codigo = normalizeAirport(shipment.origen);
-            ocupacionPorAeropuerto.merge(codigo, (long) Math.max(0, shipment.cantidad), Long::sum);
+            ocupacionPorAeropuerto.merge(origen, (long) Math.max(0, shipment.cantidad), Long::sum);
         }
+        log.info("[DAILY_OP] warehouse occupancy airports={}", ocupacionPorAeropuerto.size());
 
         Map<String, DailyWarehouseSnapshotDto> result = new LinkedHashMap<>();
         for (AirportEntity airport : airportEntities.values()) {
@@ -181,57 +192,20 @@ public class DailyOperationService {
         return alerts;
     }
 
-    private FlightSegmentDto toSegment(FlightEntity entity, Map<String, AirportEntity> airports) {
-        if (entity.origen == null || entity.destino == null || entity.salida == null || entity.llegada == null) {
-            return null;
-        }
-
-        String origen = normalizeAirport(entity.origen.codigoOaci);
-        String destino = normalizeAirport(entity.destino.codigoOaci);
-
-        if (origen == null || destino == null) {
-            return null;
-        }
-
-        FlightSegmentDto segment = new FlightSegmentDto();
-        segment.flightId = entity.id != null ? entity.id.intValue() : 0;
-        segment.planId = entity.id != null ? entity.id.intValue() : 0;
-        segment.origen = origen;
-        segment.destino = destino;
-        segment.salidaMin = entity.salida.getHour() * 60 + entity.salida.getMinute();
-        segment.llegadaMin = entity.llegada.getHour() * 60 + entity.llegada.getMinute();
-        segment.carga = 0L;
-        segment.capacidad = entity.capacidad;
-
-        AirportEntity origenEntity = airports.get(origen);
-        AirportEntity destinoEntity = airports.get(destino);
-        if (origenEntity != null) {
-            segment.origenLat = origenEntity.latitud;
-            segment.origenLon = origenEntity.longitud;
-        }
-        if (destinoEntity != null) {
-            segment.destinoLat = destinoEntity.latitud;
-            segment.destinoLon = destinoEntity.longitud;
-        }
-
-        return segment;
-    }
-
     private boolean isValidShipment(ShipmentEntity shipment) {
         return shipment != null
             && shipment.codigoPedido != null && !shipment.codigoPedido.isBlank()
-            && shipment.origen != null && !shipment.origen.isBlank()
-            && shipment.destino != null && !shipment.destino.isBlank()
+            && shipmentOrigen(shipment) != null
+            && shipmentDestino(shipment) != null
             && shipment.fecha != null && !shipment.fecha.isBlank();
     }
 
-    private boolean isValidFlight(FlightEntity flight) {
-        return flight != null
-            && flight.cancelado == false
-            && flight.origen != null
-            && flight.destino != null
-            && flight.origen.codigoOaci != null
-            && flight.destino.codigoOaci != null;
+    private String shipmentOrigen(ShipmentEntity shipment) {
+        return shipment != null && shipment.origen != null ? normalizeAirport(shipment.origen.codigoOaci) : null;
+    }
+
+    private String shipmentDestino(ShipmentEntity shipment) {
+        return shipment != null && shipment.destino != null ? normalizeAirport(shipment.destino.codigoOaci) : null;
     }
 
     private int cantidadSegura(ShipmentEntity shipment) {

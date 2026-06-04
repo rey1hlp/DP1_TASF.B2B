@@ -13,11 +13,13 @@ public class ShipmentEntity {
     @Column(name = "codigo_pedido", length = 40, nullable = false, unique = true)
     public String codigoPedido;
 
-    @Column(name = "origen", length = 4, nullable = false)
-    public String origen;
+    @ManyToOne(optional = false, fetch = FetchType.EAGER)
+    @JoinColumn(name = "origen_id")
+    public AirportEntity origen;
 
-    @Column(name = "destino", length = 4, nullable = false)
-    public String destino;
+    @ManyToOne(optional = false, fetch = FetchType.EAGER)
+    @JoinColumn(name = "destino_id")
+    public AirportEntity destino;
 
     @Column(name = "fecha", length = 8, nullable = false)
     public String fecha;

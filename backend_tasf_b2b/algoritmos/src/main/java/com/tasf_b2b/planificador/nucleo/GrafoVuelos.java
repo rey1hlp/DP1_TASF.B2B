@@ -63,7 +63,8 @@ public class GrafoVuelos {
             boolean llego = false;
 
             for (int i = 0; i < maxEscalas; i++) {
-                int tiempoMinimoSalida = tiempoActual + minEscalaMin;
+                int esperaMinima = ruta.isEmpty() ? 0 : minEscalaMin;
+                int tiempoMinimoSalida = tiempoActual + esperaMinima;
                 final String aeropuertoActual = actual;
 
                 List<Vuelo> validos = obtenerVuelosDesde(actual, tiempoMinimoSalida).stream()

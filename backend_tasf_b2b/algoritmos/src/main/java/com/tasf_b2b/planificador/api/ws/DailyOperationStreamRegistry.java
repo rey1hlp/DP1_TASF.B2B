@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tasf_b2b.planificador.api.dto.DailyOperationSnapshotDto;
 import com.tasf_b2b.planificador.sim.DailyOperationService;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -18,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class DailyOperationStreamRegistry {
     private static final long TICK_MS = 10_000L;
+    private static final Logger log = LoggerFactory.getLogger(DailyOperationStreamRegistry.class);
 
     private final ObjectMapper mapper;
     private final DailyOperationService dailyOperationService;
@@ -32,6 +35,13 @@ public class DailyOperationStreamRegistry {
 
     public void registerSession(WebSocketSession session, String date, String airport, String window) {
         sessions.put(session.getId(), new SessionContext(session, date, airport, window));
+        log.info(
+            "[DAILY_OP_WS] register sessionId={} date={} airport={} window={}",
+            session != null ? session.getId() : null,
+            date,
+            airport,
+            window
+        );
         sendSnapshot(session.getId());
     }
 

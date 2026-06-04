@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { ShipmentCrudDto } from '../types/sim'
-import { createShipment, deleteShipment, listShipments, updateShipment } from '../services/api'
+import type { AirportCrudDto, ShipmentCrudDto } from '../types/sim'
+import { createShipment, deleteShipment, listAirports, listShipments, updateShipment } from '../services/api'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
@@ -29,16 +29,22 @@ export default function ShipmentsCrud() {
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [form, setForm] = useState<ShipmentCrudDto>(EMPTY_FORM)
+  const [airports, setAirports] = useState<AirportCrudDto[]>([])
+  const [airportsLoaded, setAirportsLoaded] = useState(false)
+  const [activeOaciList, setActiveOaciList] = useState<'origen' | 'destino' | null>(null)
 
   const load = async () => {
     setLoading(true)
     setError(null)
+    console.debug('[ShipmentsCrud] load', { page, query })
     try {
       const result = await listShipments(page, 10, query)
+      console.debug('[ShipmentsCrud] load result', result)
       setItems(result.content)
       setTotalPages(result.totalPages)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
+      console.error('[ShipmentsCrud] load failed', err)
       setError(msg)
     } finally {
       setLoading(false)
@@ -53,10 +59,60 @@ export default function ShipmentsCrud() {
     setForm({ ...EMPTY_FORM })
   }
 
+  const ensureAirports = async () => {
+    if (airportsLoaded) {
+      return
+    }
+    try {
+      const result = await listAirports(0, 1000, '')
+      setAirports(result.content)
+      setAirportsLoaded(true)
+    } catch {
+      setAirports([])
+    }
+  }
+
+  const computeIngresoUtc = (ingresoLocal: string, gmtOffset: number) => {
+    if (!ingresoLocal) {
+      return ''
+    }
+    const match = ingresoLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+    if (!match) {
+      return ''
+    }
+    const [, year, month, day, hour, minute] = match
+    const utcMillis = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour) - gmtOffset,
+      Number(minute),
+      0,
+      0
+    )
+    return new Date(utcMillis).toISOString().slice(0, 16)
+  }
+
+  const normalizeFecha = (fecha: string, ingresoLocal: string) => {
+    const digits = fecha.trim().replaceAll('-', '')
+    if (/^\d{8}$/.test(digits)) {
+      return digits
+    }
+    return ingresoLocal.slice(0, 10).replaceAll('-', '')
+  }
+
   const handleSubmit = async () => {
     setError(null)
-    if (!form.codigoPedido || !form.origen || !form.destino || !form.fecha || !form.ingresoUtc || !form.ingresoLocal || !form.idCliente) {
+    console.debug('[ShipmentsCrud] submit start', { form })
+    if (!form.codigoPedido || !form.origen || !form.destino || !form.fecha || !form.ingresoLocal || !form.idCliente) {
       setError('Completa los campos requeridos.')
+      return
+    }
+
+    const ingresoUtc = computeIngresoUtc(form.ingresoLocal, form.gmtOffset)
+    console.debug('[ShipmentsCrud] computed ingresoUtc', { ingresoUtc, ingresoLocal: form.ingresoLocal, gmtOffset: form.gmtOffset })
+    if (!ingresoUtc) {
+      setError('Ingresa una fecha local valida para calcular UTC.')
       return
     }
 
@@ -66,35 +122,66 @@ export default function ShipmentsCrud() {
       destino: form.destino.trim().toUpperCase(),
       codigoPedido: form.codigoPedido.trim(),
       idCliente: form.idCliente.trim(),
-      fecha: form.fecha.trim(),
+      fecha: normalizeFecha(form.fecha, form.ingresoLocal),
+      ingresoUtc,
     }
+    console.debug('[ShipmentsCrud] payload', payload)
 
     if (form.id) {
+      console.debug('[ShipmentsCrud] updateShipment', { id: form.id })
       await updateShipment(form.id, payload)
     } else {
+      console.debug('[ShipmentsCrud] createShipment')
       await createShipment(payload)
     }
 
     resetForm()
     setIsModalOpen(false)
+    console.debug('[ShipmentsCrud] submit done, reloading list')
     await load()
   }
 
   const handleEdit = (item: ShipmentCrudDto) => {
     setForm({ ...item })
     setIsModalOpen(true)
+    void ensureAirports()
   }
 
   const handleDelete = async (id?: number) => {
     if (id == null) {
       return
     }
+    console.debug('[ShipmentsCrud] deleteShipment', { id })
     await deleteShipment(id)
     await load()
   }
 
   const handleChange = (key: keyof ShipmentCrudDto, value: string | number | boolean) => {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  const handleNew = () => {
+    resetForm()
+    setIsModalOpen(true)
+    void ensureAirports()
+  }
+
+  const getFilteredAirports = (value: string) => {
+    const query = value.trim().toLowerCase()
+    if (!query) {
+      return airports
+    }
+    return airports.filter((airport) => {
+      const nombre = airport.nombre.toLowerCase()
+      const ciudad = (airport.ciudad ?? '').toLowerCase()
+      const codigo = airport.codigoOaci.toLowerCase()
+      return codigo.includes(query) || nombre.includes(query) || ciudad.includes(query)
+    })
+  }
+
+  const handleSelectAirport = (kind: 'origen' | 'destino', codigo: string) => {
+    setForm((current) => ({ ...current, [kind]: codigo }))
+    setActiveOaciList(null)
   }
 
   return (
@@ -111,7 +198,7 @@ export default function ShipmentsCrud() {
               setQuery(event.target.value)
             }}
           />
-          <Button variant="primary" onClick={() => { resetForm(); setIsModalOpen(true) }}>Nuevo envio</Button>
+          <Button variant="primary" onClick={handleNew}>Nuevo envio</Button>
         </div>
       </div>
 
@@ -155,12 +242,66 @@ export default function ShipmentsCrud() {
             <input value={form.codigoPedido} onChange={(event) => handleChange('codigoPedido', event.target.value)} />
           </label>
           <label className="field">
-            Origen
-            <input value={form.origen} onChange={(event) => handleChange('origen', event.target.value)} />
+            Origen (OACI)
+            <div className="oaci-field">
+              <input
+                value={form.origen}
+                placeholder="Buscar OACI"
+                onFocus={() => setActiveOaciList('origen')}
+                onChange={(event) => {
+                  handleChange('origen', event.target.value.toUpperCase())
+                  setActiveOaciList('origen')
+                }}
+                onBlur={() => setTimeout(() => setActiveOaciList((current) => (current === 'origen' ? null : current)), 150)}
+              />
+              {activeOaciList === 'origen' ? (
+                <div className="oaci-list">
+                  {getFilteredAirports(form.origen).map((airport) => (
+                    <button
+                      key={airport.codigoOaci}
+                      type="button"
+                      className="oaci-option"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleSelectAirport('origen', airport.codigoOaci)}
+                    >
+                      <span className="oaci-code">{airport.codigoOaci}</span>
+                      <span className="oaci-name">{airport.ciudad ?? airport.nombre}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </label>
           <label className="field">
-            Destino
-            <input value={form.destino} onChange={(event) => handleChange('destino', event.target.value)} />
+            Destino (OACI)
+            <div className="oaci-field">
+              <input
+                value={form.destino}
+                placeholder="Buscar OACI"
+                onFocus={() => setActiveOaciList('destino')}
+                onChange={(event) => {
+                  handleChange('destino', event.target.value.toUpperCase())
+                  setActiveOaciList('destino')
+                }}
+                onBlur={() => setTimeout(() => setActiveOaciList((current) => (current === 'destino' ? null : current)), 150)}
+              />
+              {activeOaciList === 'destino' ? (
+                <div className="oaci-list">
+                  {getFilteredAirports(form.destino).map((airport) => (
+                    <button
+                      key={airport.codigoOaci}
+                      type="button"
+                      className="oaci-option"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleSelectAirport('destino', airport.codigoOaci)}
+                    >
+                      <span className="oaci-code">{airport.codigoOaci}</span>
+                      <span className="oaci-name">{airport.ciudad ?? airport.nombre}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </label>
           <label className="field">
             Fecha
@@ -169,6 +310,14 @@ export default function ShipmentsCrud() {
           <label className="field">
             Ingreso local
             <input type="datetime-local" value={form.ingresoLocal} onChange={(event) => handleChange('ingresoLocal', event.target.value)} />
+          </label>
+          <label className="field">
+            GMT offset
+            <input
+              type="number"
+              value={form.gmtOffset}
+              onChange={(event) => handleChange('gmtOffset', Number(event.target.value))}
+            />
           </label>
           <label className="field">
             Cantidad

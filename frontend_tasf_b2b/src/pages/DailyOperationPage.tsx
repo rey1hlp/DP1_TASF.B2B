@@ -143,6 +143,7 @@ export default function DailyOperationPage() {
   const currentMinute = displayMinute
 
   const applySnapshot = useCallback((snapshot: DailyOperationSnapshot) => {
+    console.debug('[DailyOperationPage] applySnapshot', snapshot)
     if (snapshot.currentMinute !== undefined) {
       setBackendMinute(snapshot.currentMinute)
     }
@@ -172,6 +173,7 @@ export default function DailyOperationPage() {
 
   const fetchDailyOperationSnapshot = useCallback(async () => {
     setError(null)
+    console.debug('[DailyOperationPage] fetch snapshot')
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/operation/daily`)
@@ -181,6 +183,7 @@ export default function DailyOperationPage() {
       }
 
       const snapshot = (await response.json()) as DailyOperationSnapshot
+      console.debug('[DailyOperationPage] fetch snapshot result', snapshot)
       applySnapshot(snapshot)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error inesperado'
@@ -231,29 +234,34 @@ export default function DailyOperationPage() {
         const message = JSON.parse(event.data) as DailyOperationEvent
 
         if (message.type === 'SNAPSHOT') {
+          console.debug('[DailyOperationPage] ws SNAPSHOT', message.payload)
           applySnapshot(message.payload)
           return
         }
 
         if (message.type === 'FLIGHTS_UPDATED') {
+          console.debug('[DailyOperationPage] ws FLIGHTS_UPDATED', message.payload)
           setSegments(message.payload.segments)
           setLastSyncAt(new Date().toISOString())
           return
         }
 
         if (message.type === 'WAREHOUSE_UPDATED') {
+          console.debug('[DailyOperationPage] ws WAREHOUSE_UPDATED', message.payload)
           setWarehouseSnapshot(message.payload.warehouseSnapshot)
           setLastSyncAt(new Date().toISOString())
           return
         }
 
         if (message.type === 'SHIPMENTS_UPDATED') {
+          console.debug('[DailyOperationPage] ws SHIPMENTS_UPDATED', message.payload)
           setShipmentSummary(message.payload.shipmentSummary)
           setLastSyncAt(new Date().toISOString())
           return
         }
 
         if (message.type === 'ALERT_CREATED') {
+          console.debug('[DailyOperationPage] ws ALERT_CREATED', message.payload)
           setAlerts((prev) => [message.payload, ...prev])
           setLastSyncAt(new Date().toISOString())
         }
