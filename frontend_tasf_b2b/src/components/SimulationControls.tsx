@@ -187,11 +187,11 @@ export default function SimulationControls({
                 value={amberMax}
                 onChange={(event) => handleAmberChange(Number(event.target.value))}
               />
-              <span className="range-value">{`${greenMax}% - ${amberMax}%`}</span>
+              <span className="range-value">{`${greenMax + 1}% - ${amberMax}%`}</span>
             </div>
             <div className="range-row">
               <span className="range-label">Rojo</span>
-              <div className="range-static">{`${amberMax}% - 100%`}</div>
+              <div className="range-static">{`${amberMax + 1}% - 100%`}</div>
             </div>
           </div>
 

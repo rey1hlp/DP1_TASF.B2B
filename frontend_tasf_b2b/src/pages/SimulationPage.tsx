@@ -1,13 +1,13 @@
-// src/pages/SimulationPage.tsx
-
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react' // ✅ useState importado
 import type { AirportDto } from '../types/sim'
-import { deleteEnvios, fetchAirports, startSimulation } from '../services/api'
+import { fetchAirports, startSimulation } from '../services/api'
 import { useSimulationSocket } from '../hooks/useSimulationSocket'
 import MapView from '../components/MapView'
 import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
+import { useSimulationContext } from '../contexts/SimulationContext'
+
 import {
   formatCompactDate,
   getDayIndexFromDateString,
@@ -15,49 +15,46 @@ import {
 } from '../utils/time'
 
 export default function SimulationPage() {
-  const ENVIOS_KEY_STORAGE = 'enviosKey'
-
-  const [airports, setAirports] = useState<AirportDto[]>([])
-  const [simId, setSimId] = useState<string | null>(null)
+  const [airports, setAirports] = useState<AirportDto[]>([]) // ✅ useState con tipo
   const [error, setError] = useState<string | null>(null)
-  const [enviosKey, setEnviosKey] = useState<string | null>(null)
-  const [requestedStart, setRequestedStart] = useState<string | null>(null)
-  const [requestedDays, setRequestedDays] = useState<number | null>(null)
-  const [displayOffset, setDisplayOffset] = useState<number | null>(null)
-  const [localCompleted, setLocalCompleted] = useState(false)
-  const [ranges, setRanges] = useState({ greenMax: 30, amberMax: 70 })
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
+
+  const { enviosKey, setEnviosKey, simulation, setSimulation, resetSimulation } =
+    useSimulationContext()
+
+  const {
+    simId,
+    requestedStart,
+    requestedDays,
+    displayOffset,
+    localCompleted,
+    ranges,
+  } = simulation
 
   const { status, statusMessage, currentMinute, segments, meta, pause, resume } =
     useSimulationSocket(simId)
 
+  // Cargar aeropuertos una sola vez
   useEffect(() => {
     fetchAirports()
       .then(setAirports)
       .catch((err) => setError(err.message))
   }, [])
 
-  useEffect(() => {
-    const stored = localStorage.getItem(ENVIOS_KEY_STORAGE)
-
-    if (!stored) return
-
-    localStorage.removeItem(ENVIOS_KEY_STORAGE)
-    deleteEnvios(stored).catch(() => {})
-  }, [])
-
   const handleEnviosUploaded = (key: string) => {
     setEnviosKey(key)
-    localStorage.setItem(ENVIOS_KEY_STORAGE, key)
   }
 
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
     setError(null)
-    setRequestedStart(inicio)
-    setRequestedDays(dias)
-    setDisplayOffset(null)
-    setLocalCompleted(false)
+    setSimulation((prev) => ({
+      ...prev,
+      requestedStart: inicio,
+      requestedDays: dias,
+      displayOffset: null,
+      localCompleted: false,
+    }))
 
     try {
       if (!enviosKey) {
@@ -78,7 +75,7 @@ export default function SimulationPage() {
         speedMinPerSec: 20,
       })
 
-      setSimId(response.simulationId)
+      setSimulation((prev) => ({ ...prev, simId: response.simulationId }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
       setError(msg)
@@ -87,7 +84,6 @@ export default function SimulationPage() {
 
   const requestedStartIndex = getDayIndexFromDateString(requestedStart)
   const requestedStartMinute = requestedStartIndex !== null ? requestedStartIndex * 1440 : null
-
   const requestedEndMinute =
     requestedStartMinute !== null && requestedDays !== null
       ? requestedStartMinute + requestedDays * 1440
@@ -95,13 +91,16 @@ export default function SimulationPage() {
 
   const isPreparing = (status === 'READY' || status === 'RUNNING') && currentMinute === null
 
+  // Calcular offset entre el minuto solicitado y el real
   useEffect(() => {
     if (requestedStartMinute === null || currentMinute === null) return
-
     if (displayOffset === null) {
-      setDisplayOffset(requestedStartMinute - currentMinute)
+      setSimulation((prev) => ({
+        ...prev,
+        displayOffset: requestedStartMinute - currentMinute,
+      }))
     }
-  }, [requestedStartMinute, currentMinute, displayOffset])
+  }, [requestedStartMinute, currentMinute, displayOffset, setSimulation])
 
   const displayMinuteRaw =
     currentMinute === null
@@ -121,33 +120,26 @@ export default function SimulationPage() {
           (seg) => displayMinuteRaw >= seg.salidaMin && displayMinuteRaw <= seg.llegadaMin
         ).length
 
+  // Detectar fin de simulación (local)
   useEffect(() => {
     if (localCompleted) return
     if (requestedEndMinute === null || displayMinuteRaw === null) return
-
     if (displayMinuteRaw >= requestedEndMinute && activeSegmentsCount === 0) {
-      setLocalCompleted(true)
+      setSimulation((prev) => ({ ...prev, localCompleted: true }))
     }
-  }, [localCompleted, requestedEndMinute, displayMinuteRaw, activeSegmentsCount])
+  }, [localCompleted, requestedEndMinute, displayMinuteRaw, activeSegmentsCount, setSimulation])
 
+  // Cuando se completa localmente, limpiar todo (resetea simulación)
   useEffect(() => {
-    if (!localCompleted) return
-
-    setSimId(null)
-    setRequestedStart(null)
-    setRequestedDays(null)
-    setDisplayOffset(null)
-    setSelectedFlightId(null)
-    setSelectedAirportCode(null)
-  }, [localCompleted])
+    if (localCompleted) {
+      resetSimulation()
+    }
+  }, [localCompleted, resetSimulation])
 
   const displayMinute =
-    localCompleted && requestedEndMinute !== null
-      ? null
-      : displayMinuteRaw
+    localCompleted && requestedEndMinute !== null ? null : displayMinuteRaw
 
   const duration = requestedDays ?? (meta ? getInclusiveDaySpan(meta.inicio, meta.fin) : null)
-
   const running =
     (status === 'READY' || status === 'RUNNING' || status === 'PAUSED') && !localCompleted
 
@@ -167,48 +159,34 @@ export default function SimulationPage() {
 
   const warehouseSnapshot = useMemo(() => {
     if (!meta?.almacenes || displayMinute === null) return {}
-
     const snapshot: Record<
       string,
       { capacidad: number; ocupacion: number; porcentaje: number; libre: number }
     > = {}
-
     meta.almacenes.forEach((almacen) => {
       let ocupacion = 0
-
       for (const evento of almacen.eventos) {
         if (evento.minuto > displayMinute) break
         ocupacion += evento.delta
       }
-
       const capacidad = almacen.capacidad || 1
       const libre = Math.max(0, capacidad - ocupacion)
       const porcentaje = (ocupacion * 100) / capacidad
-
-      snapshot[almacen.codigoOaci] = {
-        capacidad,
-        ocupacion,
-        porcentaje,
-        libre,
-      }
+      snapshot[almacen.codigoOaci] = { capacidad, ocupacion, porcentaje, libre }
     })
-
     return snapshot
   }, [meta, displayMinute])
 
   const airportsByCode = useMemo(() => {
     const map: Record<string, AirportDto> = {}
-
-    airports.forEach((airport) => {
+    airports.forEach((airport: AirportDto) => { // ✅ tipo explícito
       map[airport.codigoOaci] = airport
     })
-
     return map
   }, [airports])
 
   const activeSegments = useMemo(() => {
     if (displayMinute === null) return []
-
     return cappedSegments.filter(
       (seg) => displayMinute >= seg.salidaMin && displayMinute <= seg.llegadaMin
     )
@@ -219,16 +197,11 @@ export default function SimulationPage() {
     const totalActive = activeSegments.length
     const totalCargo = activeSegments.reduce((acc, seg) => acc + seg.carga, 0)
     const totalCapacity = activeSegments.reduce((acc, seg) => acc + (seg.capacidad ?? 0), 0)
-
     const capacityPct = totalCapacity > 0 ? (totalCargo * 100) / totalCapacity : 0
-
     const avgDurationMin = activeSegments.length
-      ? activeSegments.reduce(
-          (acc, seg) => acc + Math.max(0, seg.llegadaMin - seg.salidaMin),
-          0
-        ) / activeSegments.length
+      ? activeSegments.reduce((acc, seg) => acc + Math.max(0, seg.llegadaMin - seg.salidaMin), 0) /
+        activeSegments.length
       : 0
-
     const progressPct =
       requestedStartMinute !== null && requestedEndMinute !== null && displayMinute !== null
         ? Math.min(
@@ -240,9 +213,7 @@ export default function SimulationPage() {
             )
           )
         : 0
-
     const activePct = totalSegments > 0 ? (totalActive * 100) / totalSegments : 0
-
     return {
       cards: [
         { label: 'Vuelos activos', value: `${totalActive}` },
@@ -262,15 +233,9 @@ export default function SimulationPage() {
     const entries = Object.entries(warehouseSnapshot).map(([codigo, data]) => {
       const airport = airportsByCode[codigo]
       const percent = data.porcentaje
-
       let color = '#54b86c'
-
-      if (percent > ranges.amberMax) {
-        color = '#e36b60'
-      } else if (percent > ranges.greenMax) {
-        color = '#f0be62'
-      }
-
+      if (percent > ranges.amberMax) color = '#e36b60'
+      else if (percent > ranges.greenMax) color = '#f0be62'
       return {
         codigoOaci: codigo,
         nombre: airport?.nombre ?? codigo,
@@ -279,16 +244,19 @@ export default function SimulationPage() {
         color,
       }
     })
-
     return entries.sort((a, b) => b.porcentaje - a.porcentaje)
   }, [warehouseSnapshot, airportsByCode, ranges])
 
   const handleSelectFlight = (flightId: number) => {
-    setSelectedFlightId((prev) => (prev === flightId ? null : flightId))
+    setSelectedFlightId((prev: number | null) => (prev === flightId ? null : flightId)) // ✅ tipo explícito
   }
 
   const handleSelectAirport = (codigoOaci: string) => {
-    setSelectedAirportCode((prev) => (prev === codigoOaci ? null : codigoOaci))
+    setSelectedAirportCode((prev: string | null) => (prev === codigoOaci ? null : codigoOaci)) // ✅ tipo explícito
+  }
+
+  const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
+    setSimulation((prev) => ({ ...prev, ranges: newRanges }))
   }
 
   return (
@@ -302,7 +270,6 @@ export default function SimulationPage() {
               <button className="tab active">Simulacion del periodo</button>
               <button className="tab">Simulacion hasta el colapso</button>
             </div>
-
             <div className="status">
               <div className="status-item">
                 Fecha: <strong>{displayStartDate}</strong>
@@ -327,7 +294,6 @@ export default function SimulationPage() {
                 status={status}
                 preparingMessage={preparingMessage}
               />
-
               <MapView
                 airports={airports}
                 segments={localCompleted ? [] : cappedSegments}
@@ -337,10 +303,9 @@ export default function SimulationPage() {
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
               />
-
-              {isPreparing ? <div className="prep-overlay">{preparingMessage}</div> : null}
-              {bannerMessage ? <div className="status-banner">{bannerMessage}</div> : null}
-              {error ? <div className="error">{error}</div> : null}
+              {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
+              {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
+              {error && <div className="error">{error}</div>}
             </div>
 
             <SimulationControls
@@ -350,13 +315,13 @@ export default function SimulationPage() {
               isRunning={running}
               isPaused={status === 'PAUSED'}
               ranges={ranges}
-              onRangesChange={setRanges}
+              onRangesChange={handleRangesChange}
               stats={stats}
               warehouseItems={warehouseItems}
               flightItems={activeSegments}
               selectedFlightId={selectedFlightId}
               onSelectFlight={handleSelectFlight}
-              airportItems={airports.map((airport) => ({
+              airportItems={airports.map((airport: AirportDto) => ({ // ✅ tipo explícito
                 codigoOaci: airport.codigoOaci,
                 nombre: airport.nombre,
                 pais: airport.pais,
