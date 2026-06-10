@@ -11,8 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Objects;
@@ -41,15 +44,18 @@ public class ShipmentCrudController {
     private final ShipmentRepository repository;
     private final AirportRepository airportRepository;
     private final DailyPlanningService dailyPlanningService;
+    private final JdbcTemplate jdbcTemplate;
 
     public ShipmentCrudController(
         ShipmentRepository repository,
         AirportRepository airportRepository,
-        DailyPlanningService dailyPlanningService
+        DailyPlanningService dailyPlanningService,
+        JdbcTemplate jdbcTemplate
     ) {
         this.repository = repository;
         this.airportRepository = airportRepository;
         this.dailyPlanningService = dailyPlanningService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @GetMapping
@@ -100,7 +106,11 @@ public class ShipmentCrudController {
     }
 
     @PostMapping("/import-txt")
+    @Transactional
     public ResponseEntity<BulkImportResult> importTxt(@RequestParam("file") MultipartFile file) throws IOException {
+        
+        long startAll = System.currentTimeMillis();
+
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
@@ -123,17 +133,25 @@ public class ShipmentCrudController {
         int skipped = 0;
         List<String> invalidFormat = new ArrayList<>();
         List<String> invalidAirport = new ArrayList<>();
+        
+        final int BATCH_SIZE = 2000;
+        List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
+
+        // Cargar aeropuertos en memoria
+        List<AirportEntity> todosLosAeropuertos = airportRepository.findAll();
+        java.util.Map<String, AirportEntity> mapaAeropuertos = new java.util.HashMap<>();
+        for (AirportEntity ap : todosLosAeropuertos) {
+            mapaAeropuertos.put(ap.codigoOaci.toUpperCase(Locale.ROOT), ap);
+        }
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String trimmed = line.trim();
-                if (trimmed.isEmpty()) {
-                    continue;
-                }
+                if (trimmed.isEmpty()) continue;
                 total++;
 
-                String[] parts = trimmed.split("-");
+                String[] parts = trimmed.split("-", 7);
                 if (parts.length < 7) {
                     skipped++;
                     invalidFormat.add(line);
@@ -154,16 +172,14 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                AirportEntity destinoAirport = airportRepository.findByCodigoOaci(destinoOaci);
+                AirportEntity destinoAirport = mapaAeropuertos.get(destinoOaci);
                 if (destinoAirport == null) {
                     skipped++;
                     invalidAirport.add(line);
                     continue;
                 }
 
-                int hh;
-                int mm;
-                int cantidad;
+                int hh, mm, cantidad;
                 try {
                     hh = Integer.parseInt(hhTxt);
                     mm = Integer.parseInt(mmTxt);
@@ -195,47 +211,80 @@ public class ShipmentCrudController {
                 LocalDateTime ingresoUtc = ingresoLocal.minusHours(originAirport.gmt);
                 int slaHoras = computeSla(originAirport, destinoAirport);
 
-                ShipmentEntity entity = repository.findByCodigoPedido(codigoPedido);
-                boolean existed = entity != null;
-                if (!existed) {
-                    entity = new ShipmentEntity();
-                }
+                batch.add(new Object[]{
+                    codigoPedido,
+                    originAirport.id,
+                    destinoAirport.id,
+                    fecha,
+                    ingresoUtc,
+                    ingresoLocal,
+                    originAirport.gmt,
+                    cantidad,
+                    idCliente,
+                    slaHoras,
+                    false
+                });
 
-                entity.codigoPedido = codigoPedido;
-                entity.origen = originAirport;
-                entity.destino = destinoAirport;
-                entity.fecha = fecha;
-                entity.ingresoLocal = ingresoLocal;
-                entity.ingresoUtc = ingresoUtc;
-                entity.gmtOffset = originAirport.gmt;
-                entity.cantidad = cantidad;
-                entity.idCliente = idCliente;
-                entity.slaHoras = slaHoras;
-                entity.asignado = false;
-
-                repository.save(entity);
-                if (existed) {
-                    updated++;
-                } else {
-                    inserted++;
+                if (batch.size() >= BATCH_SIZE) {
+                    int[] results = executeShipmentBatch(batch);
+                    for (int r : results) {
+                        if (r == 1) inserted++;
+                        else if (r == 2) updated++;
+                    }
+                    batch.clear();
                 }
             }
         }
 
-        if (inserted + updated > 0) {
-            dailyPlanningService.replanNow("SHIPMENT_IMPORT", "txt masivo");
+        // Procesar último lote
+        if (!batch.isEmpty()) {
+            int[] results = executeShipmentBatch(batch);
+            for (int r : results) {
+                if (r == 1) inserted++;
+                else if (r == 2) updated++;
+            }
         }
 
-        log.info(
-            "[SHIPMENT_CRUD] import finished file={} origin={} total={} inserted={} updated={} skipped={}",
-            file.getOriginalFilename(),
-            originOaci,
-            total,
-            inserted,
-            updated,
-            skipped
-        );
+        if (inserted + updated > 0) {
+            triggerReplanAsync("SHIPMENT_IMPORT", "txt masivo");
+        }
+
+        long elapsed = System.currentTimeMillis() - startAll;
+        log.info("[SHIPMENT_CRUD] import finished file={} origin={} total={} inserted={} updated={} skipped={} time={}ms",
+            file.getOriginalFilename(), originOaci, total, inserted, updated, skipped, elapsed);
+
         return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport));
+    }
+
+    // Cambiar void por int[]
+    private int[] executeShipmentBatch(List<Object[]> batch) {
+        String sql = 
+            "INSERT INTO shipment " +
+            "(codigo_pedido, origen_id, destino_id, fecha, hora_ingreso_utc, hora_ingreso_local, gmt_offset, cantidad, id_cliente, sla_horas, asignado) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+            "AS new ON DUPLICATE KEY UPDATE " +
+            "origen_id = new.origen_id, " +
+            "destino_id = new.destino_id, " +
+            "fecha = new.fecha, " +
+            "hora_ingreso_utc = new.hora_ingreso_utc, " +
+            "hora_ingreso_local = new.hora_ingreso_local, " +
+            "gmt_offset = new.gmt_offset, " +
+            "cantidad = new.cantidad, " +
+            "id_cliente = new.id_cliente, " +
+            "sla_horas = new.sla_horas, " +
+            "asignado = new.asignado";
+
+        return jdbcTemplate.batchUpdate(sql, batch);
+    }
+
+    private void triggerReplanAsync(String triggerType, String detail) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                dailyPlanningService.replanNow(triggerType, detail);
+            } catch (Exception ex) {
+                log.error("[SHIPMENT_CRUD] async replanning failed triggerType={} detail={}", triggerType, detail, ex);
+            }
+        });
     }
 
     @PutMapping("/{id}")

@@ -8,7 +8,43 @@ import type {
   SimulationResponse,
 } from '../types/sim'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+
+// Obtener un aeropuerto por su código OACI
+export async function getAirportByCode(code: string): Promise<AirportCrudDto> {
+  const res = await fetch(`${API_BASE}/api/db/airports/${encodeURIComponent(code)}`);
+  if (!res.ok) {
+    throw new Error('Aeropuerto no encontrado');
+  }
+  return res.json();
+}
+
+// Envíos físicos en bodega de un aeropuerto
+export async function getWarehouseShipments(airportCode: string): Promise<ShipmentCrudDto[]> {
+  const res = await fetch(`${API_BASE}/api/db/airports/${encodeURIComponent(airportCode)}/warehouse-shipments`);
+  if (!res.ok) {
+    throw new Error('Error al obtener envíos de bodega');
+  }
+  return res.json();
+}
+
+// Vuelo por ID
+export async function getFlightById(id: number): Promise<FlightCrudDto> {
+  const res = await fetch(`${API_BASE}/api/db/flights/${id}`);
+  if (!res.ok) {
+    throw new Error('Vuelo no encontrado');
+  }
+  return res.json();
+}
+
+// Manifiesto de envíos asignados a un vuelo
+export async function getShipmentsByFlight(flightId: number): Promise<ShipmentCrudDto[]> {
+  const res = await fetch(`${API_BASE}/api/db/flights/${flightId}/shipments`);
+  if (!res.ok) {
+    throw new Error('Error al obtener envíos del vuelo');
+  }
+  return res.json();
+}
 
 export async function fetchAirports(): Promise<AirportDto[]> {
   const res = await fetch(`${API_BASE}/api/airports`)

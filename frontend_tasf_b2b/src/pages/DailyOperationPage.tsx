@@ -1,6 +1,6 @@
 // src/pages/DailyOperationPage.tsx
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { ComponentProps } from 'react'
 import type { AirportDto } from '../types/sim'
 import { fetchAirports } from '../services/api'
@@ -70,7 +70,7 @@ type DailyOperationEvent =
       payload: OperationAlert
     }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
 
 function toWsUrl(httpUrl: string) {
   return httpUrl.replace(/^http/, 'ws')
@@ -194,67 +194,56 @@ export default function DailyOperationPage() {
     }
   }, [])
 
+  const socketRef = useRef<WebSocket | null>(null)
+
   useEffect(() => {
-    const socketUrl = `${toWsUrl(API_BASE_URL)}/api/operation/daily/stream`
-    const socket = new WebSocket(socketUrl)
-
-    socket.onopen = () => {
-      setSocketConnected(true)
-    }
-
-    socket.onclose = () => {
-      setSocketConnected(false)
-    }
-
-    socket.onerror = () => {
-      setSocketConnected(false)
-    }
-
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data) as DailyOperationEvent
-
-        if (message.type === 'SNAPSHOT') {
-          console.debug('[DailyOperationPage] ws SNAPSHOT', message.payload)
-          applySnapshot(message.payload)
-          return
-        }
-
-        if (message.type === 'FLIGHTS_UPDATED') {
-          console.debug('[DailyOperationPage] ws FLIGHTS_UPDATED', message.payload)
-          setSegments(message.payload.segments)
-          setLastSyncAt(new Date().toISOString())
-          return
-        }
-
-        if (message.type === 'WAREHOUSE_UPDATED') {
-          console.debug('[DailyOperationPage] ws WAREHOUSE_UPDATED', message.payload)
-          setWarehouseSnapshot(message.payload.warehouseSnapshot)
-          setLastSyncAt(new Date().toISOString())
-          return
-        }
-
-        if (message.type === 'SHIPMENTS_UPDATED') {
-          console.debug('[DailyOperationPage] ws SHIPMENTS_UPDATED', message.payload)
-          setShipmentSummary(message.payload.shipmentSummary)
-          setLastSyncAt(new Date().toISOString())
-          return
-        }
-
-        if (message.type === 'ALERT_CREATED') {
-          console.debug('[DailyOperationPage] ws ALERT_CREATED', message.payload)
-          setAlerts((prev) => [message.payload, ...prev])
-          setLastSyncAt(new Date().toISOString())
-        }
-      } catch {
-        setError('Se recibió un evento inválido desde operación diaria.')
+      // ✅ Si ya hay conexión abierta, no crear otra
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        return
       }
-    }
 
-    return () => {
-      socket.close()
-    }
-  }, [applySnapshot])
+      const socketUrl = `${toWsUrl(API_BASE_URL)}/api/operation/daily/stream`
+      console.log('[WS] Connecting to:', socketUrl)
+      const socket = new WebSocket(socketUrl)
+      socketRef.current = socket
+
+      socket.onopen = () => {
+        console.log('[WS] ✅ Connected')
+        setSocketConnected(true)
+      }
+
+      socket.onclose = (event) => {
+        console.log('[WS] ❌ Closed:', event.code, event.reason)
+        setSocketConnected(false)
+      }
+
+      socket.onerror = (error) => {
+        console.error('[WS] ⚠️ Error:', error)
+        setSocketConnected(false)
+      }
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data) as DailyOperationEvent
+          console.log('[WS] Message received:', message.type)
+
+          if (message.type === 'SNAPSHOT') {
+            applySnapshot(message.payload)
+            return
+          }
+          // ... resto igual
+        } catch (err) {
+          console.error('[WS] Parse error:', err)
+          setError('Se recibió un evento inválido desde operación diaria.')
+        }
+      }
+
+      return () => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.close()
+        }
+      }
+    }, [applySnapshot])
 
   const airportsByCode = useMemo(() => {
     const map: Record<string, AirportDto> = {}
