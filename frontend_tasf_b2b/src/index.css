@@ -1047,3 +1047,129 @@ body {
     text-align: center;
   }
 }
+
+/* === Mejoras y Alineación de Tabla de Vuelos === */
+.crud-row.flights {
+  display: grid;
+  /* Se cambia 'auto' al final por '140px' para que los botones con texto queden perfectamente en línea */
+  grid-template-columns: 130px minmax(140px, 1fr) minmax(140px, 1fr) minmax(150px, 1.2fr) minmax(150px, 1.2fr) 70px 100px 140px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f6f8fc;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #1e2c44;
+  transition: background 0.15s;
+}
+
+/* Aseguramos que el header tenga las mismas columnas */
+.crud-row.flights.header {
+  background: #eaf0fb;
+  font-weight: 600;
+}
+
+/* Alineación del texto en cabeceras */
+.crud-row.flights.header span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Centra el texto del título "Cap." y los números reales uniformemente */
+.crud-row.flights .capacity {
+  text-align: center;
+  display: block;
+  width: 100%;
+}
+
+/* Centrado del encabezado de Estado y su etiqueta */
+.crud-row.flights .status-header {
+  text-align: center;
+  display: block;
+  width: 100%;
+}
+
+.crud-row.flights .status-badge {
+  text-align: center;
+  justify-self: center;
+}
+
+/* Encabezado y contenedor de botones de acciones alineados uniformemente */
+.crud-row.flights .flight-actions-header {
+  text-align: center;
+  display: block;
+  width: 100%;
+}
+
+.crud-row.flights .flight-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+/* Para pantallas pequeñas, permite scroll horizontal */
+@media (max-width: 1100px) {
+  .crud-table {
+    overflow-x: auto;
+  }
+  .crud-row.flights {
+    min-width: 950px;
+  }
+}
+
+/* === Botones de acción Estilizados (Estilo Píldora) === */
+.airport-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Botón Ver detalle - Azul */
+.btn-view {
+  background-color: #e6f0ff;
+  color: #1e6fdf;
+  border: 1px solid #bdd9ff;
+}
+.btn-view:hover {
+  background-color: #d0e4ff;
+  transform: translateY(-1px);
+}
+
+/* Botón Editar - Verde */
+.btn-edit {
+  background-color: #e6f9ed;
+  color: #1f8b4c;
+  border: 1px solid #b8e0c7;
+}
+.btn-edit:hover {
+  background-color: #c8f0d6;
+  transform: translateY(-1px);
+}
+
+/* Botón Eliminar - Rojo */
+.btn-delete {
+  background-color: #ffe6e6;
+  color: #d14545;
+  border: 1px solid #fbc4c4;
+}
+.btn-delete:hover {
+  background-color: #ffd4d4;
+  transform: translateY(-1px);
+}

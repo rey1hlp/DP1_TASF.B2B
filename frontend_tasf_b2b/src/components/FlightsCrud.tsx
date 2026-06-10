@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { FlightCrudDto } from '../types/sim'
-import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt, cancelFlightDay, removeCancelFlightDay, getCancelledDays } from '../services/api'
+import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
 
-export default function FlightsCrud() {
+interface FlightsCrudProps {
+  onViewDetail: (id: number) => void;
+}
+
+export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
   const [items, setItems] = useState<FlightCrudDto[]>([])
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
@@ -25,14 +29,6 @@ export default function FlightsCrud() {
   } | null>(null)
   const [airports, setAirports] = useState<AirportCrudDto[]>([])
   const [airportsLoaded, setAirportsLoaded] = useState(false)
-  
-  // Cancellations state
-  const [cancelModalOpen, setCancelModalOpen] = useState(false)
-  const [flightToCancel, setFlightToCancel] = useState<FlightCrudDto | null>(null)
-  const [cancelDate, setCancelDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [cancelMessage, setCancelMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null)
-  const [cancelledDaysMap, setCancelledDaysMap] = useState<Record<number, string[]>>({})
-  const [isCancelledDate, setIsCancelledDate] = useState(false)
 
   const [activeOaciList, setActiveOaciList] = useState<'origen' | 'destino' | null>(null)
   const [form, setForm] = useState<FlightCrudDto>({
@@ -109,9 +105,7 @@ export default function FlightsCrud() {
   }
 
   const handleDelete = async (id?: number) => {
-    if (!id) {
-      return
-    }
+    if (!id) return
     await deleteFlight(id)
     await load()
   }
@@ -123,9 +117,7 @@ export default function FlightsCrud() {
   }
 
   const ensureAirports = async () => {
-    if (airportsLoaded) {
-      return
-    }
+    if (airportsLoaded) return
     try {
       const result = await listAirports(0, 1000, '')
       setAirports(result.content)
@@ -169,30 +161,24 @@ export default function FlightsCrud() {
   }
 
   const parseIntOrZero = (value: string) => {
-    if (value.trim() === '') {
-      return 0
-    }
+    if (value.trim() === '') return 0
     const parsed = Number.parseInt(value, 10)
     return Number.isNaN(parsed) ? null : parsed
   }
 
   const formatLocation = (codigo?: string, ciudad?: string) => {
-    if (!codigo) {
-      return '--'
-    }
+    if (!codigo) return '--'
     return `${codigo}-${ciudad ?? '--'}`
   }
 
   const getFilteredAirports = (value: string) => {
-    const query = value.trim().toLowerCase()
-    if (!query) {
-      return airports
-    }
+    const queryLower = value.trim().toLowerCase()
+    if (!queryLower) return airports
     return airports.filter((airport) => {
       const nombre = airport.nombre.toLowerCase()
       const ciudad = (airport.ciudad ?? '').toLowerCase()
       const codigo = airport.codigoOaci.toLowerCase()
-      return codigo.includes(query) || nombre.includes(query) || ciudad.includes(query)
+      return codigo.includes(queryLower) || nombre.includes(queryLower) || ciudad.includes(queryLower)
     })
   }
 
@@ -214,7 +200,7 @@ export default function FlightsCrud() {
         <div className="crud-search">
           <input
             type="text"
-            placeholder="Buscar por codigo u OACI"
+            placeholder="Buscar por código u OACI"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
@@ -227,35 +213,42 @@ export default function FlightsCrud() {
           <button className="btn ghost" onClick={() => setIsUploadOpen(true)}>Cargar TXT</button>
         </div>
       </div>
+
       {error ? <div className="crud-error">{error}</div> : null}
 
       <div className="crud-table">
+        {/* CABECERA CORREGIDA CON LAS CLASES DE ALINEACIÓN */}
         <div className="crud-row flights header">
-          <span>Codigo</span>
+          <span>Código</span>
           <span>Origen</span>
           <span>Destino</span>
           <span>Salida</span>
           <span>Llegada</span>
-          <span>Cap.</span>
-          <span>Estado</span>
-          <span></span>
+          <span className="capacity">Cap.</span>
+          <span className="status-header">Estado</span>
+          <span className="flight-actions-header">Acciones</span>
         </div>
-        {loading ? <div className="crud-empty">Cargando...</div> : null}
-        {!loading && items.length === 0 ? <div className="crud-empty">Sin registros</div> : null}
+        
+        {loading && <div className="crud-empty">Cargando...</div>}
+        {!loading && items.length === 0 && <div className="crud-empty">Sin registros</div>}
+        
         {items.map((item) => (
           <div className="crud-row flights" key={item.id}>
-            <span>{item.codigo}</span>
+            <span className="flight-code">{item.codigo}</span>
             <span>{formatLocation(item.origenOaci, item.origenCiudad)}</span>
             <span>{formatLocation(item.destinoOaci, item.destinoCiudad)}</span>
-            <span>{item.salida}</span>
-            <span>{item.llegada}</span>
-            <span>{item.capacidad}</span>
+            <span className="datetime">{item.salida?.replace('T', ' ')}</span>
+            <span className="datetime">{item.llegada?.replace('T', ' ')}</span>
+            <span className="capacity">{item.capacidad}</span>
             <span className={`status-badge ${item.cancelado ? 'cancelled' : 'active'}`}>
               {item.cancelado ? 'Cancelado' : 'Activo'}
             </span>
-            <div className="crud-row-actions">
-              <button className="btn" onClick={() => handleEdit(item)}>Editar</button>
-              <button className="btn" onClick={() => handleDelete(item.id)}>Eliminar</button>
+            
+            {/* BOTONES CON SUS RESPECTIVAS CLASES A LAS QUE DISTE ESTILO */}
+            <div className="flight-actions">
+              <button className="btn-icon btn-view" onClick={() => onViewDetail(item.id!)} title="Ver detalle">📋</button>
+              <button className="btn-icon btn-edit" onClick={() => handleEdit(item)} title="Editar">✏️</button>
+              <button className="btn-icon btn-delete" onClick={() => handleDelete(item.id)} title="Eliminar">🗑️</button>
             </div>
           </div>
         ))}
@@ -271,21 +264,18 @@ export default function FlightsCrud() {
         </button>
       </div>
 
-      {isModalOpen ? (
+      {/* Modal de creación/edición (sin cambios visuales relevantes) */}
+      {isModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{form.id ? 'Editar vuelo' : 'Nuevo vuelo'}</h3>
               <button className="btn" onClick={() => setIsModalOpen(false)}>Cerrar</button>
             </div>
             <div className="modal-body">
               <label className="field">
-                Codigo
-                <input
-                  type="text"
-                  value={form.codigo}
-                  onChange={(event) => setForm({ ...form, codigo: event.target.value })}
-                />
+                Código
+                <input type="text" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
               </label>
               <label className="field">
                 Origen (OACI)
@@ -295,20 +285,20 @@ export default function FlightsCrud() {
                     placeholder="Buscar OACI"
                     value={form.origenOaci}
                     onFocus={() => setActiveOaciList('origen')}
-                    onChange={(event) => {
-                      setForm({ ...form, origenOaci: event.target.value.toUpperCase() })
+                    onChange={(e) => {
+                      setForm({ ...form, origenOaci: e.target.value.toUpperCase() })
                       setActiveOaciList('origen')
                     }}
                     onBlur={() => setTimeout(() => setActiveOaciList((current) => (current === 'origen' ? null : current)), 150)}
                   />
-                  {activeOaciList === 'origen' ? (
+                  {activeOaciList === 'origen' && (
                     <div className="oaci-list">
                       {getFilteredAirports(form.origenOaci).map((airport) => (
                         <button
                           key={airport.codigoOaci}
                           type="button"
                           className="oaci-option"
-                          onMouseDown={(event) => event.preventDefault()}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => handleSelectAirport('origen', airport.codigoOaci)}
                         >
                           <span className="oaci-code">{airport.codigoOaci}</span>
@@ -316,7 +306,7 @@ export default function FlightsCrud() {
                         </button>
                       ))}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </label>
               <label className="field">
@@ -327,20 +317,20 @@ export default function FlightsCrud() {
                     placeholder="Buscar OACI"
                     value={form.destinoOaci}
                     onFocus={() => setActiveOaciList('destino')}
-                    onChange={(event) => {
-                      setForm({ ...form, destinoOaci: event.target.value.toUpperCase() })
+                    onChange={(e) => {
+                      setForm({ ...form, destinoOaci: e.target.value.toUpperCase() })
                       setActiveOaciList('destino')
                     }}
                     onBlur={() => setTimeout(() => setActiveOaciList((current) => (current === 'destino' ? null : current)), 150)}
                   />
-                  {activeOaciList === 'destino' ? (
+                  {activeOaciList === 'destino' && (
                     <div className="oaci-list">
                       {getFilteredAirports(form.destinoOaci).map((airport) => (
                         <button
                           key={airport.codigoOaci}
                           type="button"
                           className="oaci-option"
-                          onMouseDown={(event) => event.preventDefault()}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => handleSelectAirport('destino', airport.codigoOaci)}
                         >
                           <span className="oaci-code">{airport.codigoOaci}</span>
@@ -348,56 +338,38 @@ export default function FlightsCrud() {
                         </button>
                       ))}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </label>
               <label className="field">
                 Salida
-                <input
-                  type="datetime-local"
-                  value={form.salida}
-                  onChange={(event) => setForm({ ...form, salida: event.target.value })}
-                />
+                <input type="datetime-local" value={form.salida} onChange={(e) => setForm({ ...form, salida: e.target.value })} />
               </label>
               <label className="field">
                 Llegada
-                <input
-                  type="datetime-local"
-                  value={form.llegada}
-                  onChange={(event) => setForm({ ...form, llegada: event.target.value })}
-                />
+                <input type="datetime-local" value={form.llegada} onChange={(e) => setForm({ ...form, llegada: e.target.value })} />
               </label>
               <label className="field">
                 Capacidad
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={capacidadText}
-                  onChange={(event) => handleIntChange(event.target.value, setCapacidadText)}
-                />
+                <input type="text" inputMode="numeric" value={capacidadText} onChange={(e) => handleIntChange(e.target.value, setCapacidadText)} />
               </label>
               <label className="crud-checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.cancelado}
-                  onChange={(event) => setForm({ ...form, cancelado: event.target.checked })}
-                />
+                <input type="checkbox" checked={form.cancelado} onChange={(e) => setForm({ ...form, cancelado: e.target.checked })} />
                 Cancelado
               </label>
             </div>
             <div className="modal-actions">
-              <button className="btn primary" onClick={handleSubmit}>
-                {form.id ? 'Actualizar' : 'Crear'}
-              </button>
+              <button className="btn primary" onClick={handleSubmit}>{form.id ? 'Actualizar' : 'Crear'}</button>
               <button className="btn" onClick={resetForm}>Limpiar</button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {isUploadOpen ? (
+      {/* Modal de carga de TXT (sin cambios) */}
+      {isUploadOpen && (
         <div className="modal-backdrop" onClick={closeUploadModal}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Cargar vuelos por TXT</h3>
               <button className="btn" onClick={closeUploadModal}>Cerrar</button>
@@ -409,36 +381,31 @@ export default function FlightsCrud() {
                 <div className="upload-actions">
                   <label className="btn ghost">
                     Seleccionar archivo
-                    <input
-                      type="file"
-                      accept=".txt"
-                      onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-                      hidden
-                    />
+                    <input type="file" accept=".txt" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} hidden />
                   </label>
                 </div>
                 <div className="upload-summary">
                   <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
-                  <span>{`Tamano: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
+                  <span>{`Tamaño: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
                 </div>
-                {uploadError ? <div className="upload-error">{uploadError}</div> : null}
-                {uploadResult ? (
+                {uploadError && <div className="upload-error">{uploadError}</div>}
+                {uploadResult && (
                   <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
                     <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
-                    {uploadResult.invalidAirportLines.length > 0 ? (
+                    {uploadResult.invalidAirportLines.length > 0 && (
                       <div>
                         <div>Los siguientes registros referencian Aeropuertos que no existen:</div>
                         <pre className="upload-list">{uploadResult.invalidAirportLines.join('\n')}</pre>
                       </div>
-                    ) : null}
-                    {uploadResult.invalidFormatLines.length > 0 ? (
+                    )}
+                    {uploadResult.invalidFormatLines.length > 0 && (
                       <div>
                         <div>Los siguientes registros no siguen el formato correcto:</div>
                         <pre className="upload-list">{uploadResult.invalidFormatLines.join('\n')}</pre>
                       </div>
-                    ) : null}
+                    )}
                   </div>
-                ) : null}
+                )}
                 <div className="upload-footer">
                   <button className="btn primary" onClick={handleUpload} disabled={uploadLoading}>
                     {uploadLoading ? 'Cargando...' : 'Cargar vuelos'}
@@ -448,7 +415,7 @@ export default function FlightsCrud() {
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   )
 }
