@@ -44,6 +44,18 @@ async function fetchShipmentRoute(
   return res.json()
 }
 
+async function fetchSimulationShipments(simId: string, minute: number | null): Promise<string[]> {
+  const url = new URL(`${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments`)
+  if (minute !== null) {
+    url.searchParams.append('minute', minute.toString())
+  }
+  const res = await fetch(url.toString())
+  if (!res.ok) {
+    return []
+  }
+  return res.json()
+}
+
 export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([]) // ✅ useState con tipo
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +67,7 @@ export default function SimulationPage() {
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
+  const [sampleShipments, setSampleShipments] = useState<string[]>([])
 
   const { enviosKey, setEnviosKey, simulation, setSimulation, resetSimulation } =
     useSimulationContext()
@@ -93,6 +106,7 @@ export default function SimulationPage() {
     }))
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
+    setSampleShipments([])
 
     try {
       if (!enviosKey) {
@@ -172,6 +186,16 @@ export default function SimulationPage() {
       : displayOffset !== null
         ? currentMinute + displayOffset
         : currentMinute
+
+  // Extraemos el minuto truncado cada 15 minutos de la simulación (ej. 1440, 1455, 1470) para no saturar con consultas por segundo
+  const simulatedQuarterMinute = displayMinuteRaw !== null ? Math.floor(displayMinuteRaw / 15) * 15 : null;
+
+  // Obtener las muestras de envíos en tránsito
+  useEffect(() => {
+    if (simId && meta && (status === 'READY' || status === 'RUNNING' || status === 'COMPLETED' || status === 'PAUSED')) {
+      fetchSimulationShipments(simId, simulatedQuarterMinute).then(setSampleShipments).catch(() => setSampleShipments([]))
+    }
+  }, [simId, meta, status, simulatedQuarterMinute])
 
   const cappedSegments = requestedEndMinute
     ? segments.filter((seg) => seg.salidaMin < requestedEndMinute)
@@ -414,6 +438,8 @@ export default function SimulationPage() {
                 selectedShipmentRoute={selectedShipmentRoute}
                 onSearchShipment={handleSearchShipment}
                 shipmentSearchError={shipmentSearchError}
+                sampleShipments={sampleShipments}
+                currentMinute={displayMinute}
             />
           </section>
         </>

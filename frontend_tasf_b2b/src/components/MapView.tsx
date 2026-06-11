@@ -14,7 +14,7 @@ export type MapViewProps = {
   ranges: { greenMax: number; amberMax: number }
   selectedFlightId: number | null
   selectedAirportCode: string | null
-  selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string }> } | null
+  selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number }> } | null
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -186,9 +186,15 @@ export default function MapView({
       const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
       const capacity = seg.capacidad
       const free = capacity !== undefined ? Math.max(0, capacity - seg.carga) : undefined
-      const isSelected = selectedFlightId !== null && seg.flightId === selectedFlightId
-      const isDimmed = selectedFlightId !== null && !isSelected
-      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges,  isDimmed)
+
+      const isSelectedFlight = selectedFlightId !== null && seg.flightId === selectedFlightId
+      const isSelectedShipment = selectedShipmentRoute != null && selectedShipmentRoute.ruta.some(p => p.vueloId === seg.flightId)
+      
+      const isSelected = isSelectedFlight || isSelectedShipment
+      const anySelectionActive = selectedFlightId !== null || selectedShipmentRoute != null
+      const isDimmed = anySelectionActive && !isSelected
+
+      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, isDimmed)
 
       const tooltipParts = [
         `${seg.origen} → ${seg.destino}`,
