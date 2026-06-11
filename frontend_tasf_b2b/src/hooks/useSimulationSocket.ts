@@ -29,6 +29,9 @@ export function useSimulationSocket(simId: string | null) {
     socketRef.current = ws
 
     ws.onmessage = (event) => {
+      if (event.data != null && event.data !== '') {
+        console.log('[WS] Raw event.data:', event.data)
+      }
       const payload = JSON.parse(event.data) as WsMessage
       if (payload.type === 'init') {
         const init = payload as WsInitMessage

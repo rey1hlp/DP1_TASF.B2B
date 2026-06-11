@@ -3,6 +3,8 @@ package com.tasf_b2b.planificador.sim.ws;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tasf_b2b.planificador.sim.SimulationRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
@@ -15,6 +17,8 @@ import java.util.Map;
 
 @Component
 public class SimulationWebSocketHandler extends TextWebSocketHandler {
+    private static final Logger log = LoggerFactory.getLogger(SimulationWebSocketHandler.class);
+
     private final SimulationRegistry registry;
     private final ObjectMapper mapper;
 
@@ -27,9 +31,11 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String simId = obtenerSimId(session.getUri());
         if (simId == null || simId.isBlank()) {
+            log.warn("[WS][SIM] Connection rejected: missing simId uri={}", session.getUri());
             session.close(CloseStatus.BAD_DATA);
             return;
         }
+        log.info("[WS][SIM:{}] Connection established sessionId={}", simId, session.getId());
         session.getAttributes().put("simId", simId);
         registry.registerSession(simId, session);
     }
@@ -38,6 +44,7 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         Object simId = session.getAttributes().get("simId");
         if (simId != null) {
+            log.info("[WS][SIM:{}] Connection closed sessionId={} status={}", simId, session.getId(), status);
             registry.unregisterSession(simId.toString(), session);
         }
     }
@@ -54,6 +61,7 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         String action = root.path("action").asText();
+        log.info("[WS][SIM:{}] Control message received sessionId={} action={}", simId, session.getId(), action);
         if ("pause".equalsIgnoreCase(action)) {
             registry.pauseSimulation(simId.toString());
         } else if ("resume".equalsIgnoreCase(action)) {
