@@ -153,6 +153,33 @@ body {
   display: grid;
   gap: 12px;
   flex-shrink: 0;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.toolbar.collapsed {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  height: 48px;
+}
+
+.toggle-toolbar-btn {
+  background: transparent;
+  border: none;
+  color: #1b3d6b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.toggle-toolbar-btn:hover {
+  background: #e6edf7;
 }
 
 .tabs {
@@ -197,6 +224,11 @@ body {
   flex: 1;            /* fill remaining vertical space inside .main */
   min-height: 0;      /* required: without this, flex children ignore the constraint */
   align-items: stretch;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.map-area.panel-collapsed {
+  grid-template-columns: 1fr 40px;
 }
 
 .map-placeholder {
@@ -329,6 +361,39 @@ body {
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.12);
   height: 100%;       /* fill the grid cell */
   overflow-y: auto;   /* scroll internally if content is taller */
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.control-panel.collapsed {
+  padding: 18px 8px;
+  overflow: hidden;
+}
+
+.toggle-panel-btn {
+  background: transparent;
+  border: none;
+  color: #1b3d6b;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  position: absolute;
+  top: 14px;
+  left: 10px;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+}
+
+.toggle-panel-btn:hover {
+  background: #e6edf7;
+}
+
+.control-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px; /* Espacio para que el botón no solape el contenido al expandir */
 }
 
 .panel-tabs {

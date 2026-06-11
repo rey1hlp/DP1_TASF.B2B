@@ -20,6 +20,9 @@ export default function SimulationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+
   const { enviosKey, setEnviosKey, simulation, setSimulation, resetSimulation } =
     useSimulationContext()
 
@@ -265,28 +268,44 @@ export default function SimulationPage() {
         <UploadEnvios onUploaded={handleEnviosUploaded} />
       ) : (
         <>
-          <section className="toolbar">
-            <div className="tabs">
-              <button className="tab active">Simulacion del periodo</button>
-              <button className="tab">Simulacion hasta el colapso</button>
-            </div>
-            <div className="status">
-              <div className="status-item">
-                Fecha: <strong>{displayStartDate}</strong>
-              </div>
-              <div className="status-item">
-                Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong>
-              </div>
-              <div className="status-item">
-                Vuelos activos: <strong>{cappedSegments.length}</strong>
-              </div>
-              <div className="status-item">
-                Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong>
-              </div>
-            </div>
-          </section>
+            <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
+              <button 
+                className="toggle-toolbar-btn" 
+                onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
+                title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
+              >
+                {isToolbarCollapsed ? '▼' : '▲'}
+              </button>
+              
+              {isToolbarCollapsed ? (
+                <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
+                  Resumen de la Simulación
+                </div>
+              ) : (
+                <>
+                  <div className="tabs">
+                    <button className="tab active">Simulacion del periodo</button>
+                    <button className="tab">Simulacion hasta el colapso</button>
+                  </div>
+                  <div className="status">
+                    <div className="status-item">
+                      Fecha: <strong>{displayStartDate}</strong>
+                    </div>
+                    <div className="status-item">
+                      Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong>
+                    </div>
+                    <div className="status-item">
+                      Vuelos activos: <strong>{cappedSegments.length}</strong>
+                    </div>
+                    <div className="status-item">
+                      Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong>
+                    </div>
+                  </div>
+                </>
+              )}
+            </section>
 
-          <section className="map-area">
+            <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
             <div className="map-placeholder">
               <SimulationStatus
                 meta={meta}
@@ -328,6 +347,8 @@ export default function SimulationPage() {
               }))}
               selectedAirportCode={selectedAirportCode}
               onSelectAirport={handleSelectAirport}
+                isCollapsed={isPanelCollapsed}
+                onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
             />
           </section>
         </>

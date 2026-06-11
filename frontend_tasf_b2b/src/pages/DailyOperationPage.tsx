@@ -125,6 +125,9 @@ export default function DailyOperationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+
   const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
 
   const applySnapshot = useCallback((snapshot: DailyOperationSnapshot) => {
@@ -370,34 +373,50 @@ export default function DailyOperationPage() {
 
   return (
     <>
-      <section className="toolbar">
-        <div className="tabs">
-          <button className="tab active">Operación diaria</button>
-        </div>
+      <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
+        <button 
+          className="toggle-toolbar-btn" 
+          onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
+          title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
+        >
+          {isToolbarCollapsed ? '▼' : '▲'}
+        </button>
 
-        <div className="status">
-          <div className="status-item">
-            Hora actual: <strong>{formatDateTime(now)}</strong>
+        {isToolbarCollapsed ? (
+          <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
+            Resumen de la Operación
           </div>
+        ) : (
+          <>
+            <div className="tabs">
+              <button className="tab active">Operación diaria</button>
+            </div>
 
-          <div className="status-item">
-            Vuelos activos: <strong>{totalActiveFlights}</strong>
-          </div>
+            <div className="status">
+              <div className="status-item">
+                Hora actual: <strong>{formatDateTime(now)}</strong>
+              </div>
 
-          <div className="status-item">
-            Vuelos planificados: <strong>{totalFlights}</strong>
-          </div>
+              <div className="status-item">
+                Vuelos activos: <strong>{totalActiveFlights}</strong>
+              </div>
 
-          <div className="status-item">
-            Conexión:{" "}
-            <strong>
-              {socketConnected ? "En vivo" : "Sin conexión"}
-            </strong>
-          </div>
-        </div>
+              <div className="status-item">
+                Vuelos planificados: <strong>{totalFlights}</strong>
+              </div>
+
+              <div className="status-item">
+                Conexión:{" "}
+                <strong>
+                  {socketConnected ? "En vivo" : "Sin conexión"}
+                </strong>
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
-      <section className="map-area">
+      <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
         <div className="map-placeholder">
           <MapView
             airports={airports}
@@ -434,6 +453,8 @@ export default function DailyOperationPage() {
           selectedAirportCode={selectedAirportCode}
           onSelectAirport={handleSelectAirport}
           alerts={alerts}
+          isCollapsed={isPanelCollapsed}
+          onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         />
       </section>
     </>

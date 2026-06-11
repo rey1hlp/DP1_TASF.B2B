@@ -25,6 +25,8 @@ export type SimulationControlsProps = {
   airportItems: Array<{ codigoOaci: string; nombre: string; pais: string }>
   selectedAirportCode: string | null
   onSelectAirport: (codigoOaci: string) => void
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
 export default function SimulationControls({
@@ -43,6 +45,8 @@ export default function SimulationControls({
   airportItems,
   selectedAirportCode,
   onSelectAirport,
+  isCollapsed,
+  onToggleCollapse,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15')
@@ -110,8 +114,18 @@ export default function SimulationControls({
   }
 
   return (
-    <div className="control-panel">
-      <div className="panel-tabs">
+    <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
+      <button 
+        className="toggle-panel-btn" 
+        onClick={onToggleCollapse}
+        title={isCollapsed ? "Expandir panel" : "Colapsar panel"}
+      >
+        {isCollapsed ? '◀' : '▶'} 
+      </button>
+
+      {!isCollapsed && (
+        <div className="control-panel-content">
+          <div className="panel-tabs">
         <button
           className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
           onClick={() => setActiveTab('config')}
@@ -329,6 +343,8 @@ export default function SimulationControls({
           <div className="flight-hint">{`${filteredAirports.length} aeropuertos`}</div>
         </>
       ) : null}
+        </div>
+      )}
     </div>
   )
 }
