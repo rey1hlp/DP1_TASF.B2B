@@ -14,6 +14,7 @@ export type MapViewProps = {
   ranges: { greenMax: number; amberMax: number }
   selectedFlightId: number | null
   selectedAirportCode: string | null
+  selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string }> } | null
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -89,10 +90,12 @@ export default function MapView({
   ranges,
   selectedFlightId,
   selectedAirportCode,
+  selectedShipmentRoute,
 }: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
+  const routeLayerRef = useRef<L.LayerGroup | null>(null)
 
   useEffect(() => {
     if (mapRef.current) {
@@ -112,6 +115,7 @@ export default function MapView({
 
     airportLayerRef.current = L.layerGroup().addTo(map)
     planeLayerRef.current = L.layerGroup().addTo(map)
+    routeLayerRef.current = L.layerGroup().addTo(map)
 
     mapRef.current = map
   }, [])
@@ -208,6 +212,43 @@ export default function MapView({
       marker.addTo(planeLayerRef.current as L.LayerGroup)
     })
   }, [segments, currentMinute, selectedFlightId])
+
+  useEffect(() => {
+    if (!routeLayerRef.current) {
+      return
+    }
+
+    routeLayerRef.current.clearLayers()
+    if (selectedShipmentRoute && selectedShipmentRoute.ruta && selectedShipmentRoute.ruta.length > 0) {
+      const latlngs: L.LatLngExpression[] = []
+      
+      selectedShipmentRoute.ruta.forEach((paso) => {
+        const orig = airports.find((a) => a.codigoOaci === paso.origen)
+        if (orig) {
+          latlngs.push([orig.latitud, orig.longitud])
+        }
+      })
+      
+      const ultPaso = selectedShipmentRoute.ruta[selectedShipmentRoute.ruta.length - 1]
+      const dest = airports.find((a) => a.codigoOaci === ultPaso.destino)
+      if (dest) {
+        latlngs.push([dest.latitud, dest.longitud])
+      }
+
+      if (latlngs.length > 1) {
+        const polyline = L.polyline(latlngs, {
+          color: '#0dcaf0',
+          weight: 4,
+          dashArray: '8, 8',
+          opacity: 0.8
+        }).addTo(routeLayerRef.current)
+
+        if (mapRef.current) {
+          mapRef.current.fitBounds(polyline.getBounds(), { padding: [50, 50] })
+        }
+      }
+    }
+  }, [selectedShipmentRoute, airports])
 
   return <div id="map" className="map"></div>
 }

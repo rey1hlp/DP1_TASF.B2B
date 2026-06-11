@@ -14,6 +14,36 @@ import {
   getInclusiveDaySpan,
 } from '../utils/time'
 
+export type PasoRutaDto = {
+  vueloId: number
+  origen: string
+  destino: string
+  salidaMin: number
+  llegadaMin: number
+}
+
+export type RespuestaRutaEnvioDto = {
+  codigoPedido: string
+  estado: string
+  tiempoTotalHoras: number
+  ruta: PasoRutaDto[]
+}
+
+const SIMULATION_API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+
+async function fetchShipmentRoute(
+  simId: string,
+  codigo: string
+): Promise<RespuestaRutaEnvioDto> {
+  const res = await fetch(
+    `${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/${encodeURIComponent(codigo)}/route`
+  )
+  if (!res.ok) {
+    throw new Error('No se pudo obtener la ruta del envío')
+  }
+  return res.json()
+}
+
 export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([]) // ✅ useState con tipo
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +52,9 @@ export default function SimulationPage() {
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+
+  const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
+  const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
 
   const { enviosKey, setEnviosKey, simulation, setSimulation, resetSimulation } =
     useSimulationContext()
@@ -58,6 +91,8 @@ export default function SimulationPage() {
       displayOffset: null,
       localCompleted: false,
     }))
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
 
     try {
       if (!enviosKey) {
@@ -83,6 +118,18 @@ export default function SimulationPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
       setError(msg)
+    }
+  }
+
+  const handleSearchShipment = async (codigo: string) => {
+    if (!codigo || !simId) return
+    try {
+      setShipmentSearchError(null)
+      const route = await fetchShipmentRoute(simId, codigo)
+      setSelectedShipmentRoute(route)
+    } catch (err) {
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('No se encontró la ruta para el maleta/envío.')
     }
   }
 
@@ -335,6 +382,7 @@ export default function SimulationPage() {
                 ranges={ranges}
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
+                selectedShipmentRoute={selectedShipmentRoute}
               />
               {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
@@ -363,6 +411,9 @@ export default function SimulationPage() {
               onSelectAirport={handleSelectAirport}
                 isCollapsed={isPanelCollapsed}
                 onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+                selectedShipmentRoute={selectedShipmentRoute}
+                onSearchShipment={handleSearchShipment}
+                shipmentSearchError={shipmentSearchError}
             />
           </section>
         </>

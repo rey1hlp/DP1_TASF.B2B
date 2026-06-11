@@ -1,5 +1,20 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 
+export type PasoRutaDto = {
+  vueloId: number
+  origen: string
+  destino: string
+  salidaMin: number
+  llegadaMin: number
+}
+
+export type RespuestaRutaEnvioDto = {
+  codigoPedido: string
+  estado: string
+  tiempoTotalHoras: number
+  ruta: PasoRutaDto[]
+}
+
 export type SimulationControlsProps = {
   onStart: (payload: { inicio: string; dias: number }) => void
   onPause: () => void
@@ -27,6 +42,9 @@ export type SimulationControlsProps = {
   onSelectAirport: (codigoOaci: string) => void
   isCollapsed: boolean
   onToggleCollapse: () => void
+  selectedShipmentRoute: RespuestaRutaEnvioDto | null
+  onSearchShipment: (codigo: string) => void
+  shipmentSearchError: string | null
 }
 
 export default function SimulationControls({
@@ -47,6 +65,9 @@ export default function SimulationControls({
   onSelectAirport,
   isCollapsed,
   onToggleCollapse,
+  selectedShipmentRoute,
+  onSearchShipment,
+  shipmentSearchError,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15T00:00')
@@ -55,6 +76,7 @@ export default function SimulationControls({
   const [flightScrollTop, setFlightScrollTop] = useState(0)
   const [airportQuery, setAirportQuery] = useState('')
   const [airportScrollTop, setAirportScrollTop] = useState(0)
+  const [shipmentQuery, setShipmentQuery] = useState('')
 
   const greenMax = ranges.greenMax
   const amberMax = ranges.amberMax
@@ -309,6 +331,40 @@ export default function SimulationControls({
             </div>
           </div>
           <div className="flight-hint">{`${filteredFlights.length} vuelos activos`}</div>
+
+          <h3>Buscar envío / maleta</h3>
+          <label className="field">
+            <input
+              type="text"
+              placeholder="Ingresar ID del envío (ej. 000000001)"
+              value={shipmentQuery}
+              onChange={(event) => setShipmentQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') onSearchShipment(shipmentQuery)
+              }}
+            />
+          </label>
+          <div className="buttons" style={{ marginTop: '4px', marginBottom: '4px' }}>
+            <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>Buscar ruta</button>
+          </div>
+          {shipmentSearchError && <div className="upload-error" style={{ marginBottom: '8px' }}>{shipmentSearchError}</div>}
+          {selectedShipmentRoute && (
+            <div className="flight-list" style={{ maxHeight: '200px', height: 'auto', marginBottom: '10px' }}>
+              <div style={{ padding: '10px', fontSize: '12px', background: '#eaf0fb', borderBottom: '1px solid #d9e4f4' }}>
+                <strong>Estado:</strong> {selectedShipmentRoute.estado} <br />
+                <strong>Tiempo total:</strong> {selectedShipmentRoute.tiempoTotalHoras.toFixed(1)} h
+              </div>
+              {selectedShipmentRoute.ruta.length === 0 && (
+                <div style={{ padding: '10px', fontSize: '12px' }}>No hay saltos registrados.</div>
+              )}
+              {selectedShipmentRoute.ruta.map((paso, idx) => (
+                <div key={idx} className="flight-item" style={{ borderBottom: '1px solid rgba(217, 228, 244, 0.8)', cursor: 'default' }}>
+                  <div className="flight-label">{paso.vueloId} | {paso.origen} → {paso.destino}</div>
+                  <div className="flight-meta">Salida {paso.salidaMin} - Llegada {paso.llegadaMin}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <h3>Buscar aeropuerto en la simulación</h3>
           <label className="field">
