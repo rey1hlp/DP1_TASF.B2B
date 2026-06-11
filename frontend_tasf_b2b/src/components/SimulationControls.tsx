@@ -49,7 +49,7 @@ export default function SimulationControls({
   onToggleCollapse,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
-  const [inicio, setInicio] = useState('2026-02-15')
+  const [inicio, setInicio] = useState('2026-02-15T00:00')
   const [dias, setDias] = useState(3)
   const [flightQuery, setFlightQuery] = useState('')
   const [flightScrollTop, setFlightScrollTop] = useState(0)
@@ -171,9 +171,9 @@ export default function SimulationControls({
           </div>
 
           <label className="field">
-            Fecha de inicio
+            Fecha y hora de inicio
             <input
-              type="date"
+              type="datetime-local"
               value={inicio}
               onChange={(event) => setInicio(event.target.value)}
             />

@@ -64,9 +64,10 @@ export default function SimulationPage() {
         throw new Error('Debes cargar los archivos de envios antes de simular.')
       }
 
+      const dateOnly = inicio.substring(0, 10).replaceAll('-', '')
       const response = await startSimulation({
         envios: enviosKey,
-        inicio: inicio.replaceAll('-', ''),
+        inicio: dateOnly,
         dias,
         maxEnvios: 5000000,
         poblacion: 50,
@@ -85,8 +86,21 @@ export default function SimulationPage() {
     }
   }
 
-  const requestedStartIndex = getDayIndexFromDateString(requestedStart)
-  const requestedStartMinute = requestedStartIndex !== null ? requestedStartIndex * 1440 : null
+  const requestedStartOnlyDate = requestedStart ? requestedStart.substring(0, 10) : null
+  const requestedStartIndex = requestedStartOnlyDate ? getDayIndexFromDateString(requestedStartOnlyDate) : null
+
+  let requestedStartMinute: number | null = null
+  if (requestedStartIndex !== null && requestedStart) {
+    requestedStartMinute = requestedStartIndex * 1440
+    if (requestedStart.includes('T')) {
+      const timePart = requestedStart.split('T')[1]
+      if (timePart) {
+        const [hh, mm] = timePart.split(':').map(Number)
+        requestedStartMinute += (hh * 60) + mm
+      }
+    }
+  }
+
   const requestedEndMinute =
     requestedStartMinute !== null && requestedDays !== null
       ? requestedStartMinute + requestedDays * 1440
@@ -147,10 +161,10 @@ export default function SimulationPage() {
     (status === 'READY' || status === 'RUNNING' || status === 'PAUSED') && !localCompleted
 
   const preparingMessage = isPreparing
-    ? `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStart ?? meta?.inicio)}`
+    ? `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
     : null
 
-  const displayStartDate = formatCompactDate(requestedStart ?? meta?.inicio)
+  const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
 
   const bannerMessage = (() => {
     if (status === 'COMPLETED') return 'Simulacion finalizada con exito.'
