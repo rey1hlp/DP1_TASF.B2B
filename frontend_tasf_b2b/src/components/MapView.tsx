@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
-import planeUrl from '../assets/plane.png'
+const PLANE_PATH =
+  "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
+
+const NEUTRAL_COLORS = { stroke: '#b8923f', fill: '#e8c97a' }
 
 export type MapViewProps = {
   airports: AirportDto[]
@@ -30,11 +33,39 @@ function computeBearing(lat1: number, lon1: number, lat2: number, lon2: number) 
   return (bearing * 180) / Math.PI
 }
 
-function buildPlaneIcon(heading: number) {
+function buildPlaneIcon(
+  heading: number,
+  carga: number,
+  capacidad: number | undefined,
+  ranges: { greenMax: number; amberMax: number },
+  dimmed = false,
+) {
   const rotation = heading - 45
+
+  const percent =
+    capacidad !== undefined && capacidad > 0
+      ? (carga / capacidad) * 100
+      : null
+
+  const colors =
+    percent === null
+      ? NEUTRAL_COLORS
+      : resolveSemaphoreColor(percent, ranges)
+
+  const isEmpty = carga === 0
+  const fill = isEmpty ? 'none' : colors.fill
+  const stroke = colors.stroke
+  const strokeWidth = isEmpty ? 1.8 : 1.5
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+    fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"
+    stroke-linecap="round" stroke-linejoin="round">
+    <path d="${PLANE_PATH}"/>
+  </svg>`
+
   return L.divIcon({
     className: 'plane-marker',
-    html: `<img class="plane-icon" src="${planeUrl}" style="transform: rotate(${rotation}deg)" />`,
+    html: `<div style="transform:rotate(${rotation}deg);width:28px;height:28px;opacity:${dimmed ? 0.4 : 1}">${svg}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   })
@@ -149,11 +180,11 @@ export default function MapView({
       const lat = seg.origenLat + (seg.destinoLat - seg.origenLat) * progress
       const lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
       const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
-      const icon = buildPlaneIcon(heading)
       const capacity = seg.capacidad
       const free = capacity !== undefined ? Math.max(0, capacity - seg.carga) : undefined
       const isSelected = selectedFlightId !== null && seg.flightId === selectedFlightId
       const isDimmed = selectedFlightId !== null && !isSelected
+      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges,  isDimmed)
 
       const tooltipParts = [
         `${seg.origen} → ${seg.destino}`,
@@ -170,11 +201,6 @@ export default function MapView({
         permanent: isSelected,
         opacity: 0.95,
       })
-      if (isDimmed) {
-        marker.setOpacity(0.4)
-      } else {
-        marker.setOpacity(1)
-      }
       if (isSelected) {
         marker.setZIndexOffset(500)
         marker.openTooltip()

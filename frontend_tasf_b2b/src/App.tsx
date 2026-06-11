@@ -7,10 +7,11 @@ import DailyOperationPage from './pages/DailyOperationPage'
 import FlightDetailPage from './pages/FlightDetailPage'
 import WarehouseDetailPage from './pages/WarehouseDetailPage'
 import { SimulationProvider } from './contexts/SimulationContext'
+import { PlaneIconDebug } from './debug/PlaneIconDebug'
 
 export default function App() {
   const [activeSection, setActiveSection] = useState<
-    'daily' | 'sim' | 'flights' | 'airports' | 'shipments' | 'flight-detail' | 'airport-detail'
+    'daily' | 'sim' | 'flights' | 'airports' | 'shipments' | 'flight-detail' | 'airport-detail' | 'debug'
   >('sim')
 
   const [selectedId, setSelectedId] = useState<number | string | null>(null)
@@ -68,6 +69,12 @@ export default function App() {
             </button>
             <button className="nav-item">Reportes</button>
             <button className="nav-item">Configuración</button>
+            <button
+              className={`nav-item ${activeSection === "debug" ? "active" : ""}`}
+              onClick={() => setActiveSection("debug")}
+            >
+              Debug
+            </button>
           </nav>
         </header>
 
@@ -77,34 +84,35 @@ export default function App() {
           {activeSection === "flights" && (
             <FlightsCrud
               onViewDetail={(id) => {
-                setSelectedId(id)
-                setActiveSection('flight-detail')
+                setSelectedId(id);
+                setActiveSection("flight-detail");
               }}
             />
           )}
           {activeSection === "flight-detail" && (
             <FlightDetailPage
               flightId={selectedId as number}
-              onVolver={() => setActiveSection('flights')}
+              onVolver={() => setActiveSection("flights")}
             />
           )}
           {activeSection === "airports" && (
             <AirportsCrud
               onViewDetail={(codigoOaci) => {
-                setSelectedId(codigoOaci)
-                setActiveSection('airport-detail')
+                setSelectedId(codigoOaci);
+                setActiveSection("airport-detail");
               }}
             />
           )}
           {activeSection === "airport-detail" && (
             <WarehouseDetailPage
               airportCode={selectedId as string}
-              onVolver={() => setActiveSection('airports')}
+              onVolver={() => setActiveSection("airports")}
             />
           )}
           {activeSection === "shipments" && <ShipmentsCrud />}
+          {activeSection === "debug" && <PlaneIconDebug />}
         </main>
       </div>
     </SimulationProvider>
-  )
+  );
 }
