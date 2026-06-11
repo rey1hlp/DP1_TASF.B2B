@@ -1,40 +1,41 @@
 # Contexto del Proyecto Tasf.B2B - Planificador
 
-## Reglas de Tokens e Interacción
-1. **Lectura Quirúrgica**: NO leas archivos completos. Usa `grep` para encontrar clases o métodos.
-2. **Límite de Líneas**: Lee máximo 50-60 líneas por archivo a menos que pida "lee todo el archivo".
-3. **Resumen Obligatorio**: Tras leer un archivo, resume su propósito en 1 línea (ej: "Maneja el streaming de snapshots vía WebSockets").
-4. **Ignorar**: Nunca leas `target/`, `.mvn/`, ni archivos `.class`.
+## 🚨 REGLAS DE COSTO - VIOLAR ESTO = $0.50 DE MULTA
+
+1. **PROHIBIDO Read, Grep, Glob, Search** sin que yo escriba exactamente: "LEE archivo.java"
+2. **Si pido ver código**: Usa `Bash` con `sed -n '50,55p' archivo.java`. NO uses `Read`.
+3. **Si pido buscar**: Di "Dime la ruta exacta del archivo" y espera. NO busques tú.
+4. **Límite duro**: 0 archivos leídos por defecto. Solo lees si te doy ruta + líneas exactas.
+5. **Salida**: Máximo 10 palabras por respuesta a menos que pida "explica".
+6. **Modelo**: Si detectas Fable/Opus activo, responde SOLO: "Estás en Opus, cuesta 5x. Ejecuta /model sonnet" y para.
+
+## ANTES DE RESPONDER CUALQUIER COSA
+Si es la primera interacción del chat, di ÚNICAMENTE "Listo." y espera. No saludes, no resumas.
 
 ## Stack Tecnológico
 - **Lenguaje**: Java 17
-- **Framework**: Spring Boot 4.0.5 (Starter Web, Data JPA, WebSocket)
-- **Algoritmos**: Algoritmo Genético (GA) y Ant Colony Optimization (ACO)
-- **DB**: MySQL 8 (vía JDBC Template y JPA)
-- **Build Tool**: Maven
+- **Framework**: Spring Boot 4.0.5
+- **Algoritmos**: GA y ACO
+- **DB**: MySQL 8
+- **Build**: Maven
 
-## Estructura Clave
-| Carpeta / Archivo | Contenido | Cuándo leer |
-| --- | --- | --- |
-| `src/main/java/com/tasf_b2b/planificador/dominio` | Entidades base (Aeropuerto, Envio, Vuelo) | Para lógica de negocio |
-| `src/main/java/com/tasf_b2b/planificador/nucleo` | Motores GA y ACO | Para optimizar algoritmos |
-| `src/main/java/com/tasf_b2b/planificador/api/ws` | Configuración de WebSockets | Para bugs de tiempo real |
-| `db/tasf_b2b_schema.sql` | Esquema de base de datos | Para entender relaciones |
-| `data/` | Archivos .txt/.csv de entrada | Para problemas de parsing |
+## Archivos Críticos - Solo leer si doy ruta exacta
+| Archivo | Para qué |
+| --- | --- |
+| `SimulationService.java` | Velocidad de simulación, DEFAULT_SPEED_MIN_PER_SEC línea 55 |
+| `SimulationRegistry.java` | TICK_MS línea 23, bucle de tiempo |
+| `Individuo.java` | Cálculo de fitness GA |
+| `Ruta.java` | Lógica ACO |
 
-## Flujo de Trabajo (Ahorro de $)
-1. **Verificación de Errores**: Antes de proponer un cambio en los algoritmos, revisa `Individuo.java` o `Ruta.java` para no romper el cálculo del fitness.
-2. **Consistencia de Unidades**: El sistema usa GMT y cálculos de tiempo en horas/minutos. No mezclar sin revisar el offset.
+## PROHIBIDO LEER SIEMPRE
+`target/`, `.mvn/`, `*.class`, `application.properties`, `pom.xml` a menos que escriba "LEE pom.xml completo"
 
-## Comandos del Proyecto
-- `./mvnw clean compile`: Compilar proyecto
-- `./mvnw spring-boot:run`: Ejecutar API
-- `java -cp target/genetico-0.0.1-SNAPSHOT.jar com.tasf_b2b.planificador.Main ga`: Correr algoritmo genético
+## Comandos Baratos
+- Ver línea: `sed -n '55p' src/.../SimulationService.java`
+- Cambiar línea: `sed -i '55s/20.0/30.0/' src/.../SimulationService.java`
+- Compilar: `./mvnw clean compile`
 
-## Sesión Actual: 24/05/2024
-**Objetivo**: [ESCRIBE AQUÍ TU TAREA DE HOY] (Ej: Optimizar la función de fitness en el Algoritmo Genético)
-**Estado**: [PUNTO DE PARTIDA] (Ej: El algoritmo converge muy rápido a soluciones mediocres)
-**No leer**: Archivos de base de datos o WebSockets, ya funcionan correctamente.
-
----
-*Nota: Antes de cada sesión, actualiza el Objetivo. Al terminar, marca como DONE.*
+## Sesión Actual: 10/06/2026
+**Objetivo**: Cambiar velocidad simulación
+**Estado**: DEFAULT_SPEED_MIN_PER_SEC = 20.0 en línea 55 de SimulationService.java
+**No leer**: Ningún archivo sin orden directa.

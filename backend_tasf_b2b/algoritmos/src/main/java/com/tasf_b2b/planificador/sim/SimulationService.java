@@ -52,7 +52,7 @@ public class SimulationService {
     private static final double DEFAULT_CRUCE = 0.85;
     private static final double DEFAULT_MUTACION = 0.05;
     private static final int DEFAULT_TORNEO = 5;
-    private static final double DEFAULT_SPEED_MIN_PER_SEC = 5.0;
+    private static final double DEFAULT_SPEED_MIN_PER_SEC = 20.0;
     private static final Logger log = LoggerFactory.getLogger(SimulationService.class);
 
     private final SimulationRegistry registry;
