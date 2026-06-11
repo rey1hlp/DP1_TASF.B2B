@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tasf_b2b.planificador.sim.ws.SimulationInitMessage;
 import com.tasf_b2b.planificador.sim.ws.SimulationStatusMessage;
 import com.tasf_b2b.planificador.sim.ws.SimulationTickMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -21,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class SimulationRegistry {
     private static final long TICK_MS = 500L;
+    private static final Logger log = LoggerFactory.getLogger(SimulationRegistry.class);
 
     private final ObjectMapper mapper;
     private final Map<String, SimulationState> states = new ConcurrentHashMap<>();
@@ -49,6 +52,13 @@ public class SimulationRegistry {
         }
         state.data = data;
         state.status = SimulationState.Status.READY;
+        log.info(
+            "[SIM:{}] READY -> init broadcast pending. vuelos={}, almacenes={}, speedMinPerSec={}",
+            simulationId,
+            data.vuelos != null ? data.vuelos.size() : 0,
+            data.almacenes != null ? data.almacenes.size() : 0,
+            data.speedMinPerSec
+        );
         broadcastInit(simulationId, data);
     }
 
@@ -59,10 +69,12 @@ public class SimulationRegistry {
         }
         state.status = SimulationState.Status.FAILED;
         state.error = error;
+        log.warn("[SIM:{}] FAILED -> {}", simulationId, error);
         broadcastStatus(simulationId, state.status.name(), error);
     }
 
     public void registerSession(String simulationId, WebSocketSession session) {
+        log.info("[WS][SIM:{}] Registering sessionId={}", simulationId, session.getId());
         sessions.computeIfAbsent(simulationId, k -> ConcurrentHashMap.newKeySet())
             .add(new SessionContext(simulationId, session));
         sendStatusToSession(simulationId, session);
@@ -127,6 +139,7 @@ public class SimulationRegistry {
         msg.simulationId = simulationId;
         msg.status = state.status.name();
         msg.message = state.error;
+        log.info("[WS][SIM:{}] Sending status to sessionId={} status={} message={}", simulationId, session.getId(), msg.status, msg.message);
         send(session, msg);
     }
 
@@ -138,6 +151,7 @@ public class SimulationRegistry {
         if (state.status != SimulationState.Status.READY && state.status != SimulationState.Status.PAUSED) {
             return;
         }
+        log.info("[WS][SIM:{}] Sending init to sessionId={}", simulationId, session.getId());
         send(session, buildInitMessage(simulationId, state.data));
         if (state.status == SimulationState.Status.READY) {
             iniciarRelojSesion(simulationId, session, state.data.speedMinPerSec);
@@ -150,6 +164,7 @@ public class SimulationRegistry {
             return;
         }
         SimulationInitMessage init = buildInitMessage(simulationId, data);
+        log.info("[WS][SIM:{}] Broadcasting init to {} session(s)", simulationId, set.size());
         for (SessionContext ctx : new ArrayList<>(set)) {
             send(ctx.session, init);
             iniciarRelojSesion(simulationId, ctx.session, data.speedMinPerSec);
@@ -165,6 +180,7 @@ public class SimulationRegistry {
         msg.simulationId = simulationId;
         msg.status = status;
         msg.message = message;
+        log.info("[WS][SIM:{}] Broadcasting status={} to {} session(s)", simulationId, status, set.size());
         for (SessionContext ctx : new ArrayList<>(set)) {
             send(ctx.session, msg);
         }
@@ -226,6 +242,7 @@ public class SimulationRegistry {
                     done.simulationId = simId;
                     done.status = "COMPLETED";
                     done.message = null;
+                    log.info("[WS][SIM:{}] Simulation completed for sessionId={}", simId, ctx.session.getId());
                     send(ctx.session, done);
                     continue;
                 }
@@ -233,6 +250,7 @@ public class SimulationRegistry {
                 SimulationTickMessage tick = new SimulationTickMessage();
                 tick.simulationId = simId;
                 tick.minuto = simMin;
+                log.debug("[WS][SIM:{}] Tick minute={} sessionId={}", simId, simMin, ctx.session.getId());
                 send(ctx.session, tick);
             }
         }
@@ -244,14 +262,14 @@ public class SimulationRegistry {
         }
         try {
             String json = mapper.writeValueAsString(payload);
+            log.info("[WS][SEND] sessionId={} payload={}", session.getId(), json);
             session.sendMessage(new TextMessage(json));
         } catch (IOException ex) {
-            // Ignorar errores de envio para no frenar la simulacion.
+            log.warn("[WS][SEND] Failed sessionId={} error={}", session != null ? session.getId() : "null", ex.getMessage(), ex);
         }
     }
 
     private static class SessionContext {
-        final String simulationId;
         final WebSocketSession session;
         long inicioMs;
         double speedMinPerSec;
@@ -261,7 +279,6 @@ public class SimulationRegistry {
         long pausedElapsedMs;
 
         SessionContext(String simulationId, WebSocketSession session) {
-            this.simulationId = simulationId;
             this.session = session;
         }
     }

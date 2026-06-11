@@ -1,7 +1,7 @@
 import L from 'leaflet'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PlaneSvg } from "./PlaneSvg"
-import { resolvePlaneColors, type SemaphoreRanges } from './resolvePlaneColor'
+import { resolvePlaneColors, type SemaphoreRanges } from './resolvePlaneColors'
 
 export function buildPlaneIcon(
   heading: number,
