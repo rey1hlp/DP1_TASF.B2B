@@ -67,6 +67,9 @@ export type DailyOperationControlsProps = {
     message: string
     createdAt: string
   }>
+
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
 export default function DailyOperationControls({
@@ -87,6 +90,8 @@ export default function DailyOperationControls({
   selectedAirportCode,
   onSelectAirport,
   alerts,
+  isCollapsed,
+  onToggleCollapse,
 }: DailyOperationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('stats')
   const [flightQuery, setFlightQuery] = useState('')
@@ -186,8 +191,18 @@ export default function DailyOperationControls({
   }
 
   return (
-    <div className="control-panel">
-      <div className="panel-tabs">
+    <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
+      <button 
+        className="toggle-panel-btn" 
+        onClick={onToggleCollapse}
+        title={isCollapsed ? "Expandir panel" : "Colapsar panel"}
+      >
+        {isCollapsed ? '◀' : '▶'} 
+      </button>
+      
+      {!isCollapsed && (
+        <div className="control-panel-content">
+          <div className="panel-tabs">
         <button
           className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
           onClick={() => setActiveTab('config')}
@@ -470,6 +485,8 @@ export default function DailyOperationControls({
           <div className="flight-hint">{`${filteredAirports.length} aeropuertos`}</div>
         </>
       ) : null}
+        </div>
+      )}
     </div>
   )
 }

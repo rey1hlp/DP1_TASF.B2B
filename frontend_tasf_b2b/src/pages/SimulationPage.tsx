@@ -14,11 +14,60 @@ import {
   getInclusiveDaySpan,
 } from '../utils/time'
 
+export type PasoRutaDto = {
+  vueloId: number
+  origen: string
+  destino: string
+  salidaMin: number
+  llegadaMin: number
+}
+
+export type RespuestaRutaEnvioDto = {
+  codigoPedido: string
+  estado: string
+  tiempoTotalHoras: number
+  ruta: PasoRutaDto[]
+}
+
+const SIMULATION_API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+
+async function fetchShipmentRoute(
+  simId: string,
+  codigo: string
+): Promise<RespuestaRutaEnvioDto> {
+  const res = await fetch(
+    `${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/${encodeURIComponent(codigo)}/route`
+  )
+  if (!res.ok) {
+    throw new Error('No se pudo obtener la ruta del envío')
+  }
+  return res.json()
+}
+
+async function fetchSimulationShipments(simId: string, minute: number | null): Promise<string[]> {
+  const url = new URL(`${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments`)
+  if (minute !== null) {
+    url.searchParams.append('minute', minute.toString())
+  }
+  const res = await fetch(url.toString())
+  if (!res.ok) {
+    return []
+  }
+  return res.json()
+}
+
 export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([]) // ✅ useState con tipo
   const [error, setError] = useState<string | null>(null)
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
+
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+
+  const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
+  const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
+  const [sampleShipments, setSampleShipments] = useState<string[]>([])
 
   const { enviosKey, setEnviosKey, simulation, setSimulation, resetSimulation } =
     useSimulationContext()
@@ -55,15 +104,19 @@ export default function SimulationPage() {
       displayOffset: null,
       localCompleted: false,
     }))
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+    setSampleShipments([])
 
     try {
       if (!enviosKey) {
         throw new Error('Debes cargar los archivos de envios antes de simular.')
       }
 
+      const dateOnly = inicio.substring(0, 10).replaceAll('-', '')
       const response = await startSimulation({
         envios: enviosKey,
-        inicio: inicio.replaceAll('-', ''),
+        inicio: dateOnly,
         dias,
         maxEnvios: 5000000,
         poblacion: 50,
@@ -82,8 +135,33 @@ export default function SimulationPage() {
     }
   }
 
-  const requestedStartIndex = getDayIndexFromDateString(requestedStart)
-  const requestedStartMinute = requestedStartIndex !== null ? requestedStartIndex * 1440 : null
+  const handleSearchShipment = async (codigo: string) => {
+    if (!codigo || !simId) return
+    try {
+      setShipmentSearchError(null)
+      const route = await fetchShipmentRoute(simId, codigo)
+      setSelectedShipmentRoute(route)
+    } catch (err) {
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('No se encontró la ruta para el maleta/envío.')
+    }
+  }
+
+  const requestedStartOnlyDate = requestedStart ? requestedStart.substring(0, 10) : null
+  const requestedStartIndex = requestedStartOnlyDate ? getDayIndexFromDateString(requestedStartOnlyDate) : null
+
+  let requestedStartMinute: number | null = null
+  if (requestedStartIndex !== null && requestedStart) {
+    requestedStartMinute = requestedStartIndex * 1440
+    if (requestedStart.includes('T')) {
+      const timePart = requestedStart.split('T')[1]
+      if (timePart) {
+        const [hh, mm] = timePart.split(':').map(Number)
+        requestedStartMinute += (hh * 60) + mm
+      }
+    }
+  }
+
   const requestedEndMinute =
     requestedStartMinute !== null && requestedDays !== null
       ? requestedStartMinute + requestedDays * 1440
@@ -108,6 +186,16 @@ export default function SimulationPage() {
       : displayOffset !== null
         ? currentMinute + displayOffset
         : currentMinute
+
+  // Extraemos el minuto truncado cada 15 minutos de la simulación (ej. 1440, 1455, 1470) para no saturar con consultas por segundo
+  const simulatedQuarterMinute = displayMinuteRaw !== null ? Math.floor(displayMinuteRaw / 15) * 15 : null;
+
+  // Obtener las muestras de envíos en tránsito
+  useEffect(() => {
+    if (simId && meta && (status === 'READY' || status === 'RUNNING' || status === 'COMPLETED' || status === 'PAUSED')) {
+      fetchSimulationShipments(simId, simulatedQuarterMinute).then(setSampleShipments).catch(() => setSampleShipments([]))
+    }
+  }, [simId, meta, status, simulatedQuarterMinute])
 
   const cappedSegments = requestedEndMinute
     ? segments.filter((seg) => seg.salidaMin < requestedEndMinute)
@@ -144,10 +232,10 @@ export default function SimulationPage() {
     (status === 'READY' || status === 'RUNNING' || status === 'PAUSED') && !localCompleted
 
   const preparingMessage = isPreparing
-    ? `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStart ?? meta?.inicio)}`
+    ? `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
     : null
 
-  const displayStartDate = formatCompactDate(requestedStart ?? meta?.inicio)
+  const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
 
   const bannerMessage = (() => {
     if (status === 'COMPLETED') return 'Simulacion finalizada con exito.'
@@ -265,28 +353,44 @@ export default function SimulationPage() {
         <UploadEnvios onUploaded={handleEnviosUploaded} />
       ) : (
         <>
-          <section className="toolbar">
-            <div className="tabs">
-              <button className="tab active">Simulacion del periodo</button>
-              <button className="tab">Simulacion hasta el colapso</button>
-            </div>
-            <div className="status">
-              <div className="status-item">
-                Fecha: <strong>{displayStartDate}</strong>
-              </div>
-              <div className="status-item">
-                Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong>
-              </div>
-              <div className="status-item">
-                Vuelos activos: <strong>{cappedSegments.length}</strong>
-              </div>
-              <div className="status-item">
-                Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong>
-              </div>
-            </div>
-          </section>
+            <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
+              <button 
+                className="toggle-toolbar-btn" 
+                onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
+                title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
+              >
+                {isToolbarCollapsed ? '▼' : '▲'}
+              </button>
+              
+              {isToolbarCollapsed ? (
+                <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
+                  Resumen de la Simulación
+                </div>
+              ) : (
+                <>
+                  <div className="tabs">
+                    <button className="tab active">Simulacion del periodo</button>
+                    <button className="tab">Simulacion hasta el colapso</button>
+                  </div>
+                  <div className="status">
+                    <div className="status-item">
+                      Fecha: <strong>{displayStartDate}</strong>
+                    </div>
+                    <div className="status-item">
+                      Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong>
+                    </div>
+                    <div className="status-item">
+                      Vuelos activos: <strong>{cappedSegments.length}</strong>
+                    </div>
+                    <div className="status-item">
+                      Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong>
+                    </div>
+                  </div>
+                </>
+              )}
+            </section>
 
-          <section className="map-area">
+            <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
             <div className="map-placeholder">
               <SimulationStatus
                 meta={meta}
@@ -302,6 +406,7 @@ export default function SimulationPage() {
                 ranges={ranges}
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
+                selectedShipmentRoute={selectedShipmentRoute}
               />
               {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
@@ -328,6 +433,13 @@ export default function SimulationPage() {
               }))}
               selectedAirportCode={selectedAirportCode}
               onSelectAirport={handleSelectAirport}
+                isCollapsed={isPanelCollapsed}
+                onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+                selectedShipmentRoute={selectedShipmentRoute}
+                onSearchShipment={handleSearchShipment}
+                shipmentSearchError={shipmentSearchError}
+                sampleShipments={sampleShipments}
+                currentMinute={displayMinute}
             />
           </section>
         </>

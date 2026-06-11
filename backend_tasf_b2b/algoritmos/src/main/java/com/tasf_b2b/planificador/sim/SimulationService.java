@@ -3,6 +3,8 @@ package com.tasf_b2b.planificador.sim;
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
 import com.tasf_b2b.planificador.api.dto.WarehouseEventDto;
 import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
+import com.tasf_b2b.planificador.api.dto.PasoRutaDto;
+import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
 import com.tasf_b2b.planificador.persistence.SimulationRunEntity;
 import com.tasf_b2b.planificador.persistence.SimulationRunRepository;
 import com.tasf_b2b.planificador.api.dto.SimulationRequest;
@@ -403,12 +405,16 @@ public class SimulationService {
                     aeropuertos
                 );
     
+            Map<String, RespuestaRutaEnvioDto> rutasPorPaquete =
+                construirRutasPorPaquete(mejor, envios);
+
             SimulationData data =
                 construirSimulationData(
                     request,
                     envios,
                     segmentos,
                     almacenes,
+                    rutasPorPaquete,
                     totalMaletas,
                     diaMin,
                     diaMax,
@@ -509,6 +515,36 @@ public class SimulationService {
         }
 
         return new ArrayList<>(mapa.values());
+    }
+
+    private Map<String, RespuestaRutaEnvioDto> construirRutasPorPaquete(Individuo mejor, List<Envio> envios) {
+        Map<String, RespuestaRutaEnvioDto> mapa = new HashMap<>();
+        if (mejor == null || mejor.asignaciones == null) {
+            return mapa;
+        }
+
+        for (int i = 0; i < envios.size(); i++) {
+            Envio envio = envios.get(i);
+            Ruta ruta = mejor.asignaciones[i];
+            RespuestaRutaEnvioDto dto = new RespuestaRutaEnvioDto();
+            dto.codigoPedido = envio.idPedido;
+
+            if (ruta != null && ruta.vuelos != null && !ruta.vuelos.isEmpty()) {
+                dto.estado = (ruta.tiempoTotalHoras > envio.slaHoras) ? "CON_RETRASO" : "ENTREGADO";
+                dto.tiempoTotalHoras = ruta.tiempoTotalHoras;
+                dto.ruta = new ArrayList<>();
+                for (Vuelo v : ruta.vuelos) {
+                    PasoRutaDto paso = new PasoRutaDto();
+                    paso.vueloId = v.id; paso.origen = v.origen; paso.destino = v.destino;
+                    paso.salidaMin = v.salidaMin; paso.llegadaMin = v.llegadaMin;
+                    dto.ruta.add(paso);
+                }
+            } else {
+                dto.estado = "SIN_RUTA_ENCONTRADA"; dto.tiempoTotalHoras = 0.0; dto.ruta = new ArrayList<>();
+            }
+            mapa.put(envio.idPedido, dto);
+        }
+        return mapa;
     }
 
     private Map<String, Aeropuerto> cargarAeropuertosDb() {
@@ -697,6 +733,7 @@ public class SimulationService {
         List<Envio> envios,
         List<FlightSegmentDto> segmentos,
         List<WarehouseStatusDto> almacenes,
+        Map<String, RespuestaRutaEnvioDto> rutasPorPaquete,
         long totalMaletas,
         int diaMin,
         int diaMax,
@@ -725,8 +762,8 @@ public class SimulationService {
             totalMaletas,
             speed,
             segmentos,
-            almacenes
+            almacenes,
+            rutasPorPaquete
         );
     }
 }
-
