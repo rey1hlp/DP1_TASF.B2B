@@ -45,11 +45,11 @@ async function fetchShipmentRoute(
 }
 
 async function fetchSimulationShipments(simId: string, minute: number | null): Promise<string[]> {
-  const url = new URL(`${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments`)
+  let url = `${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments`
   if (minute !== null) {
-    url.searchParams.append('minute', minute.toString())
+    url += `?minute=${minute}`
   }
-  const res = await fetch(url.toString())
+  const res = await fetch(url)
   if (!res.ok) {
     return []
   }
