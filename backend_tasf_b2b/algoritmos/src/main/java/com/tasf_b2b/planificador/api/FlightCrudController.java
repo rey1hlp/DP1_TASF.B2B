@@ -8,6 +8,9 @@ import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 
+import com.tasf_b2b.planificador.sim.DailyPlanningService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,19 +36,23 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/db/flights")
 public class FlightCrudController {
+    private static final Logger log = LoggerFactory.getLogger(FlightCrudController.class);
     private final FlightRepository repository;
     private final AirportRepository airportRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final DailyPlanningService dailyPlanningService;
     private static final int BATCH_SIZE = 2000; // Aumentado de 500 a 2000
 
     public FlightCrudController(
         FlightRepository repository,
         AirportRepository airportRepository,
-        JdbcTemplate jdbcTemplate
+        JdbcTemplate jdbcTemplate,
+        DailyPlanningService dailyPlanningService
     ) {
         this.repository = repository;
         this.airportRepository = airportRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.dailyPlanningService = dailyPlanningService;
     }
 
     // ==================== ENDPOINTS EXISTENTES (sin cambios) ====================
@@ -113,11 +120,25 @@ public class FlightCrudController {
 
     @PostMapping
     public ResponseEntity<FlightCrudDto> create(@RequestBody FlightCrudDto dto) {
+        log.info(
+            "[FLIGHT_CRUD] create request codigo={} origen={} destino={} salida={} llegada={} capacidad={} cancelado={}",
+            dto != null ? dto.codigo : null,
+            dto != null ? dto.origenOaci : null,
+            dto != null ? dto.destinoOaci : null,
+            dto != null ? dto.salida : null,
+            dto != null ? dto.llegada : null,
+            dto != null ? dto.capacidad : null,
+            dto != null && dto.cancelado
+        );
         FlightEntity entity = new FlightEntity();
         if (!apply(entity, dto)) {
+            log.warn("[FLIGHT_CRUD] create rejected by validation");
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(toDto(repository.save(entity)));
+        FlightEntity saved = repository.save(entity);
+        log.info("[FLIGHT_CRUD] create saved id={} codigo={} cancelado={}", saved.id, saved.codigo, saved.cancelado);
+        dailyPlanningService.replanNow("FLIGHT_CREATE", "nuevo vuelo");
+        return ResponseEntity.ok(toDto(saved));
     }
 
     // ==================== ENDPOINT OPTIMIZADO ====================
@@ -233,6 +254,24 @@ public class FlightCrudController {
         long elapsed = System.currentTimeMillis() - startAll;
         System.out.println("Importación completada en " + elapsed + " ms");
         System.out.println("Totales - Insertados: " + inserted + ", Actualizados: " + updated + ", Saltados: " + skipped);
+        if (inserted + updated > 0) {
+            log.info(
+                "[FLIGHT_CRUD] import finished file={} inserted={} updated={} skipped={} -> replan",
+                file.getOriginalFilename(),
+                inserted,
+                updated,
+                skipped
+            );
+            dailyPlanningService.replanNow("FLIGHT_IMPORT", "txt masivo");
+        } else {
+            log.info(
+                "[FLIGHT_CRUD] import finished file={} inserted={} updated={} skipped={} -> no replan",
+                file.getOriginalFilename(),
+                inserted,
+                updated,
+                skipped
+            );
+        }
 
         return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport));
     }
@@ -282,22 +321,47 @@ public class FlightCrudController {
 
     @PutMapping("/{id}")
     public ResponseEntity<FlightCrudDto> update(@PathVariable Long id, @RequestBody FlightCrudDto dto) {
+        log.info(
+            "[FLIGHT_CRUD] update request id={} codigo={} cancelado={}",
+            id,
+            dto != null ? dto.codigo : null,
+            dto != null && dto.cancelado
+        );
         FlightEntity entity = repository.findById(id).orElse(null);
         if (entity == null) {
+            log.warn("[FLIGHT_CRUD] update rejected because flight does not exist id={}", id);
             return ResponseEntity.notFound().build();
         }
+        FlightCrudDto previous = toDto(entity);
         if (!apply(entity, dto)) {
+            log.warn("[FLIGHT_CRUD] update rejected by validation id={}", id);
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(toDto(repository.save(entity)));
+        FlightEntity saved = repository.save(entity);
+        FlightCrudDto current = toDto(saved);
+        boolean requiresReplan = requiresReplan(previous, current);
+        log.info(
+            "[FLIGHT_CRUD] update saved id={} codigo={} cancelado={} requiresReplan={}",
+            saved.id,
+            saved.codigo,
+            saved.cancelado,
+            requiresReplan
+        );
+        if (requiresReplan) {
+            dailyPlanningService.replanNow("FLIGHT_UPDATE", saved.cancelado ? "flight cancelled" : "flight updated");
+        }
+        return ResponseEntity.ok(toDto(saved));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         if (!repository.existsById(id)) {
+            log.warn("[FLIGHT_CRUD] delete rejected because flight does not exist id={}", id);
             return ResponseEntity.notFound().build();
         }
+        log.info("[FLIGHT_CRUD] delete id={}", id);
         repository.deleteById(id);
+        dailyPlanningService.replanNow("FLIGHT_DELETE", "vuelo eliminado");
         return ResponseEntity.noContent().build();
     }
 
@@ -334,6 +398,18 @@ public class FlightCrudController {
         dto.capacidad = entity.capacidad;
         dto.cancelado = entity.cancelado;
         return dto;
+    }
+
+    private boolean requiresReplan(FlightCrudDto previous, FlightCrudDto current) {
+        return previous == null
+            || current == null
+            || !java.util.Objects.equals(previous.codigo, current.codigo)
+            || !java.util.Objects.equals(previous.origenOaci, current.origenOaci)
+            || !java.util.Objects.equals(previous.destinoOaci, current.destinoOaci)
+            || !java.util.Objects.equals(previous.salida, current.salida)
+            || !java.util.Objects.equals(previous.llegada, current.llegada)
+            || previous.capacidad != current.capacidad
+            || previous.cancelado != current.cancelado;
     }
 
     public record BulkImportResult(
