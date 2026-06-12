@@ -9,6 +9,8 @@ import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,7 +124,7 @@ public class DailyOperationService {
             if (origen == null) {
                 continue;
             }
-            if (shipment.asignado) {
+            if (shipment.status != ShipmentStatus.PENDING && shipment.status != ShipmentStatus.CANCELLED) {
                 continue;
             }
             ocupacionPorAeropuerto.merge(origen, (long) Math.max(0, shipment.cantidad), Long::sum);
@@ -151,22 +153,22 @@ public class DailyOperationService {
 
         return result;
     }
-
+    
     private DailyShipmentSummaryDto buildShipmentSummary(List<ShipmentEntity> shipments) {
-        long total = shipments.stream().mapToLong(this::cantidadSegura).sum();
-        long pending = shipments.stream()
-            .filter(shipment -> !shipment.asignado)
-            .mapToLong(this::cantidadSegura)
-            .sum();
+        long total     = shipments.stream().mapToLong(this::cantidadSegura).sum();
+        long pending   = shipments.stream()
+            .filter(s -> s.status == ShipmentStatus.PENDING)
+            .mapToLong(this::cantidadSegura).sum();
         long inTransit = shipments.stream()
-            .filter(shipment -> shipment.asignado)
-            .mapToLong(this::cantidadSegura)
-            .sum();
-        long delivered = Math.max(0L, total - pending - inTransit);
-
+            .filter(s -> s.status == ShipmentStatus.IN_TRANSIT)
+            .mapToLong(this::cantidadSegura).sum();
+        long delivered = shipments.stream()
+            .filter(s -> s.status == ShipmentStatus.DELIVERED)
+            .mapToLong(this::cantidadSegura).sum();
+    
         DailyShipmentSummaryDto dto = new DailyShipmentSummaryDto();
-        dto.total = total;
-        dto.pending = pending;
+        dto.total     = total;
+        dto.pending   = pending;
         dto.inTransit = inTransit;
         dto.delivered = delivered;
         return dto;

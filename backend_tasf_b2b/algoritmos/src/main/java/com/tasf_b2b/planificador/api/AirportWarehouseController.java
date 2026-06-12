@@ -6,6 +6,8 @@ import org.springframework.http.ResponseEntity;
 
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -74,7 +76,7 @@ public class AirportWarehouseController {
             dto.cantidad = rs.getInt("cantidad");
             dto.idCliente = rs.getString("id_cliente");
             dto.slaHoras = rs.getInt("sla_horas");
-            dto.asignado = rs.getBoolean("asignado");
+            dto.status = ShipmentStatus.valueOf(rs.getString("status"));
             dto.auditDateIns = rs.getTimestamp("audit_date_ins").toLocalDateTime();
             return dto;
         }, oaci.toUpperCase());

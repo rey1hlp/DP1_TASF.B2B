@@ -2,6 +2,8 @@ package com.tasf_b2b.planificador.api.dto;
 
 import java.time.LocalDateTime;
 
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+
 public class ShipmentCrudDto {
     public Long id;
     public String codigoPedido;
@@ -16,6 +18,6 @@ public class ShipmentCrudDto {
     public int cantidad;
     public String idCliente;
     public int slaHoras;
-    public boolean asignado;
+    public ShipmentStatus status;
     public LocalDateTime auditDateIns;
 }
