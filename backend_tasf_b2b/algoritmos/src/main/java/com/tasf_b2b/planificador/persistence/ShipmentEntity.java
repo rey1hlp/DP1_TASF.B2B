@@ -42,8 +42,9 @@ public class ShipmentEntity {
     @Column(name = "sla_horas", nullable = false)
     public int slaHoras;
 
-    @Column(name = "asignado", nullable = false)
-    public boolean asignado;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 20, nullable = false)
+    public ShipmentStatus status = ShipmentStatus.PENDING;
 
     @Column(name = "audit_date_ins", nullable = false)
     public LocalDateTime auditDateIns;

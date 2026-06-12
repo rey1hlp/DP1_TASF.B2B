@@ -5,6 +5,7 @@ import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
 import org.slf4j.Logger;
@@ -74,7 +75,7 @@ public class ShipmentCrudController {
     @PostMapping
     public ResponseEntity<ShipmentCrudDto> create(@RequestBody ShipmentCrudDto dto) {
         log.info(
-            "[SHIPMENT_CRUD] create request pedido={} origen={} destino={} fecha={} ingresoLocal={} ingresoUtc={} gmtOffset={} cantidad={} cliente={} slaHoras={} asignado={}",
+            "[SHIPMENT_CRUD] create request pedido={} origen={} destino={} fecha={} ingresoLocal={} ingresoUtc={} gmtOffset={} cantidad={} cliente={} slaHoras={} status={}",
             dto != null ? dto.codigoPedido : null,
             dto != null ? dto.origen : null,
             dto != null ? dto.destino : null,
@@ -85,7 +86,7 @@ public class ShipmentCrudController {
             dto != null ? dto.cantidad : null,
             dto != null ? dto.idCliente : null,
             dto != null ? dto.slaHoras : null,
-            dto != null && dto.asignado
+            dto != null ? dto.status : ShipmentStatus.PENDING
         );
         ShipmentEntity entity = new ShipmentEntity();
         if (!apply(entity, dto)) {
@@ -94,12 +95,12 @@ public class ShipmentCrudController {
         }
         ShipmentEntity saved = repository.save(entity);
         log.info(
-            "[SHIPMENT_CRUD] create saved id={} pedido={} fecha={} ingresoLocal={} asignado={}",
+            "[SHIPMENT_CRUD] create saved id={} pedido={} fecha={} ingresoLocal={} status={}",
             saved.id,
             saved.codigoPedido,
             saved.fecha,
             saved.ingresoLocal,
-            saved.asignado
+            saved.status
         );
         dailyPlanningService.replanNow("SHIPMENT_CREATE", "nuevo envio");
         return ResponseEntity.ok(toDto(saved));
@@ -222,7 +223,7 @@ public class ShipmentCrudController {
                     cantidad,
                     idCliente,
                     slaHoras,
-                    false
+                    ShipmentStatus.PENDING.name()
                 });
 
                 if (batch.size() >= BATCH_SIZE) {
@@ -260,7 +261,7 @@ public class ShipmentCrudController {
     private int[] executeShipmentBatch(List<Object[]> batch) {
         String sql = 
             "INSERT INTO shipment " +
-            "(codigo_pedido, origen_id, destino_id, fecha, hora_ingreso_utc, hora_ingreso_local, gmt_offset, cantidad, id_cliente, sla_horas, asignado) " +
+            "(codigo_pedido, origen_id, destino_id, fecha, hora_ingreso_utc, hora_ingreso_local, gmt_offset, cantidad, id_cliente, sla_horas, status) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
             "AS new ON DUPLICATE KEY UPDATE " +
             "origen_id = new.origen_id, " +
@@ -272,7 +273,7 @@ public class ShipmentCrudController {
             "cantidad = new.cantidad, " +
             "id_cliente = new.id_cliente, " +
             "sla_horas = new.sla_horas, " +
-            "asignado = new.asignado";
+            "status = new.status";
 
         return jdbcTemplate.batchUpdate(sql, batch);
     }
@@ -302,12 +303,12 @@ public class ShipmentCrudController {
         }
         ShipmentEntity saved = repository.save(entity);
         log.info(
-            "[SHIPMENT_CRUD] update saved id={} pedido={} fecha={} ingresoLocal={} asignado={} requiresReplan={}",
+            "[SHIPMENT_CRUD] update saved id={} pedido={} fecha={} ingresoLocal={} status={} requiresReplan={}",
             saved.id,
             saved.codigoPedido,
             saved.fecha,
             saved.ingresoLocal,
-            saved.asignado,
+            saved.status,
             requiresReplan(previous, toDto(saved))
         );
         if (requiresReplan(previous, toDto(saved))) {
@@ -347,7 +348,7 @@ public class ShipmentCrudController {
         target.cantidad = Math.max(0, source.cantidad);
         target.idCliente = source.idCliente.trim();
         target.slaHoras = source.slaHoras;
-        target.asignado = source.asignado;
+        target.status = source.status;
         return true;
     }
 
@@ -366,7 +367,7 @@ public class ShipmentCrudController {
         dto.cantidad = entity.cantidad;
         dto.idCliente = entity.idCliente;
         dto.slaHoras = entity.slaHoras;
-        dto.asignado = entity.asignado;
+        dto.status = entity.status;
         dto.auditDateIns = entity.auditDateIns;
         return dto;
     }
@@ -388,7 +389,7 @@ public class ShipmentCrudController {
             || !Objects.equals(previous.ingresoLocal, current.ingresoLocal)
             || previous.cantidad != current.cantidad
             || previous.slaHoras != current.slaHoras
-            || previous.asignado != current.asignado;
+            || previous.status != current.status;
     }
 
     private String normalizeAirport(String airportCode) {

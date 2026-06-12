@@ -6,6 +6,8 @@ import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -67,7 +69,7 @@ public class FlightCrudController {
         String sql = "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
                     "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
                     "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
-                    "s.id_cliente, s.sla_horas, s.asignado, s.audit_date_ins " +
+                    "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
                     "FROM shipment s " +
                     "JOIN airport ao ON s.origen_id = ao.id " +
                     "JOIN airport ad ON s.destino_id = ad.id " +
@@ -88,7 +90,7 @@ public class FlightCrudController {
             dto.cantidad = rs.getInt("cantidad");
             dto.idCliente = rs.getString("id_cliente");
             dto.slaHoras = rs.getInt("sla_horas");
-            dto.asignado = rs.getBoolean("asignado");
+            dto.status = ShipmentStatus.valueOf(rs.getString("status"));
             dto.auditDateIns = rs.getTimestamp("audit_date_ins").toLocalDateTime();
             return dto;
         }, flight.origen.id, flight.destino.id, fechaVuelo);

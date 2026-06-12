@@ -55,13 +55,15 @@ CREATE TABLE shipment (
   hora_ingreso_local   DATETIME NOT NULL,
   -- Offset en el momento del registro (puede cambiar por DST)
   gmt_offset      INT NOT NULL,
-  asignado        TINYINT(1) NOT NULL DEFAULT 0,
+  -- Estado del envío: PENDING, IN_TRANSIT, DELIVERED, CANCELLED
+  status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   audit_date_ins  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   PRIMARY KEY (id),
   UNIQUE KEY uk_shipment_codigo_pedido (codigo_pedido),
   INDEX idx_shipment_ingreso_utc (hora_ingreso_utc),
   INDEX idx_shipment_origen_fecha (origen_id, hora_ingreso_utc),
+  INDEX idx_shipment_status (status),
   CONSTRAINT fk_shipment_origen FOREIGN KEY (origen_id)
     REFERENCES airport(id) ON DELETE RESTRICT,
   CONSTRAINT fk_shipment_destino FOREIGN KEY (destino_id)

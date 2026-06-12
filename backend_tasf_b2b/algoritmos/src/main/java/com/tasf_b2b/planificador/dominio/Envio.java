@@ -1,5 +1,6 @@
 package com.tasf_b2b.planificador.dominio;
 
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 
 public class Envio {
  
@@ -13,7 +14,7 @@ public class Envio {
     public final int    cantidad;
     public final String idCliente;
     public final int    slaHoras;
-    public boolean      asignado;
+    public ShipmentStatus status;
     public final int gmtOffset;
  
     /**
@@ -30,7 +31,7 @@ public class Envio {
         this.cantidad      = cantidad;
         this.idCliente     = idCliente;
         this.slaHoras      = slaHoras;
-        this.asignado      = false;
+        this.status      = ShipmentStatus.PENDING;
         this.gmtOffset = (aeropuertoOrigen != null) ? aeropuertoOrigen.gmt : 0; 
 
         this.horaIngresoLocal = (hh * 60) + mm;

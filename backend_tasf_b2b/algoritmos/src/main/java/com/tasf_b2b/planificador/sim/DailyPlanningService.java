@@ -412,7 +412,7 @@ public class DailyPlanningService {
                 sla,
                 null
             );
-            envio.asignado = entity.asignado;
+            envio.status = entity.status;
             envios.add(envio);
             loaded++;
             log.info(
@@ -423,7 +423,7 @@ public class DailyPlanningService {
                 entity.fecha,
                 entity.ingresoLocal,
                 ingresoMin,
-                entity.asignado,
+                entity.status,
                 entity.cantidad,
                 sla
             );
