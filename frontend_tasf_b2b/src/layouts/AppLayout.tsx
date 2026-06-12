@@ -9,8 +9,7 @@ import {
   BarChart3,
   Settings,
   Bug,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Menu,
 } from 'lucide-react'
 
 import SidebarNavItem from '../components/ui/SidebarNavItem'
@@ -29,7 +28,7 @@ export default function AppLayout() {
               onClick={() => setSidebarOpen(false)}
               aria-label="Ocultar navegación"
             >
-              <PanelLeftClose size={18} />
+              <Menu size={18} />
             </button>
             <div className="logo">TB</div>
 
@@ -84,7 +83,7 @@ export default function AppLayout() {
           onClick={() => setSidebarOpen(true)}
           aria-label="Mostrar navegación"
         >
-          <PanelLeftOpen size={20} />
+          <Menu size={20} />
         </button>
       )}
 
