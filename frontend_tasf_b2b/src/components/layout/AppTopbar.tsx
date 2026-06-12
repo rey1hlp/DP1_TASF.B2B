@@ -1,12 +1,14 @@
-import { Menu, Search, UserCircle } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Menu, UserCircle } from 'lucide-react'
 
 type AppTopbarProps = {
-  sidebarOpen: boolean
-  onToggleSidebar: () => void
-}
+    topbarMain: ReactNode
+    onToggleSidebar: () => void
+  }
 
 export default function AppTopbar({
-  onToggleSidebar,
+    topbarMain,
+    onToggleSidebar,
 }: AppTopbarProps) {
   return (
     <header className="app-topbar">
@@ -31,6 +33,7 @@ export default function AppTopbar({
       </div>
 
       <div className="topbar-main">
+        {topbarMain}
       </div>
 
       <div className="topbar-actions">

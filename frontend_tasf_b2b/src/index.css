@@ -67,7 +67,7 @@ body {
 .app-topbar {
   height: 72px;
   display: grid;
-  grid-template-columns: 280px minmax(280px, 1fr) 180px;
+  grid-template-columns: 280px minmax(0, 1fr) 160px;
   align-items: center;
   gap: 1rem;
 
@@ -78,6 +78,30 @@ body {
   position: sticky;
   top: 0;
   z-index: 1000;
+}
+
+.topbar-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-page-summary {
+  width: min(760px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.topbar-page-pill {
+  background: #2f66c1;
+  color: #ffffff;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  font-weight: 700;
 }
 
 .topbar-left {
@@ -133,13 +157,6 @@ body {
   color: #c8cacc;
 }
 
-.topbar-main {
-  display: flex;
-  justify-self: center;
-  width: min(680px, 100%);
-  height: 44px;
-}
-
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -172,7 +189,7 @@ body {
 .app-sidebar {
   background: #214a7e;
   color: #f8fafc;
-  padding: 1.25rem;
+  padding: 1rem;
   overflow-y: auto;
 }
 
