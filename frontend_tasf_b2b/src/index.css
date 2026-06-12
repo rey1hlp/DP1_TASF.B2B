@@ -125,6 +125,7 @@ body {
   cursor: pointer;
   font-size: 14px;
   transition: background 0.15s, border-color 0.15s;
+  text-decoration: none;
 }
 
 .nav-item.active,
