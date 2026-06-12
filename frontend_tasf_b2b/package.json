@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "leaflet": "^1.9.4",
+    "lucide-react": "1.17.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router": "7.17.0"
