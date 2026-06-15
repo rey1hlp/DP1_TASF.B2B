@@ -55,7 +55,7 @@ public class AirportWarehouseController {
         String sql = "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
                      "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
                      "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
-                     "s.id_cliente, s.sla_horas, s.asignado, s.audit_date_ins " +
+                     "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
                      "FROM shipment s " +
                      "JOIN airport ao ON s.origen_id = ao.id " +
                      "JOIN airport ad ON s.destino_id = ad.id " +
