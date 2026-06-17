@@ -127,6 +127,48 @@ export default function DailyOperationPage() {
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+
+  const [sampleShipments, setSampleShipments] = useState<string[]>([])
+  const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
+  const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchSamples = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/db/shipments?size=100`)
+        const data = await res.json()
+        if (data.content) {
+          setSampleShipments(data.content.map((s: any) => s.codigoPedido))
+        }
+      } catch (e) {}
+    }
+    fetchSamples()
+  }, [])
+
+  const handleSearchShipment = async (codigo: string) => {
+    setShipmentSearchError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/db/shipments?query=${encodeURIComponent(codigo)}`)
+      const data = await res.json()
+      if (data.content && data.content.length > 0) {
+        const shipment = data.content.find((s: any) => s.codigoPedido === codigo)
+        if (shipment) {
+          setSelectedShipmentRoute({
+            codigoPedido: shipment.codigoPedido,
+            estado: shipment.status,
+            tiempoTotalHoras: shipment.slaHoras,
+            ruta: [{ vueloId: '--', origen: shipment.origen, destino: shipment.destino, salidaMin: 0, llegadaMin: 0 }]
+          })
+          return
+        }
+      }
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('No se encontró el envío en operación diaria.')
+    } catch (e) {
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('Error al buscar el envío.')
+    }
+  }
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
 
   const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
@@ -466,6 +508,11 @@ export default function DailyOperationPage() {
           airportItems={airportItems}
           selectedAirportCode={selectedAirportCode}
           onSelectAirport={handleSelectAirport}
+          selectedShipmentRoute={selectedShipmentRoute}
+          onSearchShipment={handleSearchShipment}
+          shipmentSearchError={shipmentSearchError}
+          sampleShipments={sampleShipments}
+          currentMinute={currentMinute}
           alerts={alerts}
           isCollapsed={isPanelCollapsed}
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
