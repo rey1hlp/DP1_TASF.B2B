@@ -80,19 +80,30 @@ function buildAirportIcon(
   colors: { stroke: string; fill: string },
   isSelected: boolean
 ) {
-  const size = isSelected ? 34 : 26;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"
+  const markerSize = isSelected ? 42 : 34
+  const iconSize = isSelected ? 30 : 24
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
     fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
     <path d="${AIRPORT_PATH}"/>
-  </svg>`;
+  </svg>`
 
   return L.divIcon({
     className: 'airport-marker',
-    html: `<div style="width:${size}px;height:${size}px;">${svg}</div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+    html: `<div style="
+      width:${markerSize}px;
+      height:${markerSize}px;
+      border-radius:999px;
+      background:#ffffff;
+      border:1px solid rgba(15, 23, 42, 0.18);
+      display:grid;
+      place-items:center;
+      box-shadow:0 2px 7px rgba(15, 23, 42, 0.25);
+    ">${svg}</div>`,
+    iconSize: [markerSize, markerSize],
+    iconAnchor: [markerSize / 2, markerSize / 2],
+  })
 }
 
 function resolveSemaphoreColor(percent: number, ranges: { greenMax: number; amberMax: number }) {
