@@ -123,6 +123,31 @@ export default function MapView({
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
+  const resizeFrameRef = useRef<number | null>(null)
+  const resizeTimerRef = useRef<number | null>(null)
+
+  const invalidateMapSize = () => {
+    if (!mapRef.current) {
+      return
+    }
+
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current)
+    }
+    if (resizeTimerRef.current !== null) {
+      window.clearTimeout(resizeTimerRef.current)
+    }
+
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      mapRef.current?.invalidateSize({ animate: false })
+      resizeFrameRef.current = null
+    })
+
+    resizeTimerRef.current = window.setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: false })
+      resizeTimerRef.current = null
+    }, 350)
+  }
 
   useEffect(() => {
     if (mapRef.current || !containerRef.current) {
@@ -147,13 +172,31 @@ export default function MapView({
     mapRef.current = map
   }, [])
 
-  // Notifica a Leaflet que el contenedor cambió de tamaño para evitar que el mapa se vea gris
+  // Leaflet no detecta cambios de tamaño provocados por CSS grid/flex, como el colapso del sidebar.
   useEffect(() => {
-    if (mapRef.current) {
-      const timer = setTimeout(() => mapRef.current?.invalidateSize(), 350);
-      return () => clearTimeout(timer);
+    const container = containerRef.current
+    if (!container) {
+      return
     }
-  }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed]);
+
+    const observer = new ResizeObserver(() => invalidateMapSize())
+    observer.observe(container)
+    invalidateMapSize()
+
+    return () => {
+      observer.disconnect()
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current)
+      }
+      if (resizeTimerRef.current !== null) {
+        window.clearTimeout(resizeTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    invalidateMapSize()
+  }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed])
 
   useEffect(() => {
     if (!airportLayerRef.current) {
