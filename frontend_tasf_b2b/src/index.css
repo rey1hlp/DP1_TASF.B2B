@@ -196,6 +196,9 @@ body {
 .app-main {
   min-width: 0;
   padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 72px);
 }
 
 .logo {

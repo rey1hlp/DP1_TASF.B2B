@@ -17,6 +17,8 @@ export type MapViewProps = {
   selectedFlightId: number | null
   selectedAirportCode: string | null
   selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number }> } | null
+  isPanelCollapsed?: boolean
+  isToolbarCollapsed?: boolean
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -112,19 +114,22 @@ export default function MapView({
   selectedFlightId,
   selectedAirportCode,
   selectedShipmentRoute,
+  isPanelCollapsed,
+  isToolbarCollapsed,
 }: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
 
   useEffect(() => {
-    if (mapRef.current) {
+    if (mapRef.current || !containerRef.current) {
       return
     }
 
-    const map = L.map('map', {
+    const map = L.map(containerRef.current, {
       zoomControl: false,
       worldCopyJump: true,
     }).setView(DEFAULT_CENTER, DEFAULT_ZOOM)
@@ -145,9 +150,10 @@ export default function MapView({
   // Notifica a Leaflet que el contenedor cambió de tamaño para evitar que el mapa se vea gris
   useEffect(() => {
     if (mapRef.current) {
-      setTimeout(() => mapRef.current?.invalidateSize(), 300);
+      const timer = setTimeout(() => mapRef.current?.invalidateSize(), 350);
+      return () => clearTimeout(timer);
     }
-  }, [isFullscreen]);
+  }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed]);
 
   useEffect(() => {
     if (!airportLayerRef.current) {
@@ -291,7 +297,7 @@ export default function MapView({
       >
         {isFullscreen ? '✕' : '⛶'}
       </button>
-      <div id="map" className="map"></div>
+      <div ref={containerRef} className="map"></div>
     </div>
   )
 }

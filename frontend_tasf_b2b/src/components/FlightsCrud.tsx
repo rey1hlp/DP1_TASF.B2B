@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FlightCrudDto } from '../types/sim'
 import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
@@ -10,9 +10,12 @@ interface FlightsCrudProps {
 export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
   const [items, setItems] = useState<FlightCrudDto[]>([])
   const [query, setQuery] = useState('')
+  const [filterOrigen, setFilterOrigen] = useState('')
+  const [filterDestino, setFilterDestino] = useState('')
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [allItems, setAllItems] = useState<FlightCrudDto[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isUploadOpen, setIsUploadOpen] = useState(false)
@@ -42,13 +45,23 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
   })
   const [capacidadText, setCapacidadText] = useState('150')
 
+  const hasActiveFilters = filterOrigen || filterDestino
+
   const load = async () => {
     setLoading(true)
     setError(null)
     try {
-      const result = await listFlights(page, 10, query)
-      setItems(result.content)
-      setTotalPages(result.totalPages)
+      if (hasActiveFilters) {
+        const result = await listFlights(0, 1000, query)
+        setAllItems(result.content)
+        setItems(result.content)
+        setPage(0)
+      } else {
+        const result = await listFlights(page, 10, query)
+        setItems(result.content)
+        setAllItems([])
+        setTotalPages(result.totalPages)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
       setError(msg)
@@ -59,7 +72,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
 
   useEffect(() => {
     void load()
-  }, [page, query])
+  }, [page, query, hasActiveFilters])
 
   const resetForm = () => {
     setForm({
@@ -166,6 +179,26 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     return Number.isNaN(parsed) ? null : parsed
   }
 
+  const filteredAndPaginatedItems = useMemo(() => {
+    const dataToFilter = hasActiveFilters ? allItems : items
+    const filtered = dataToFilter.filter(item => {
+      const origenMatch = !filterOrigen || item.origenOaci.toUpperCase().includes(filterOrigen.toUpperCase())
+      const destinoMatch = !filterDestino || item.destinoOaci.toUpperCase().includes(filterDestino.toUpperCase())
+      return origenMatch && destinoMatch
+    })
+
+    if (hasActiveFilters) {
+      const pageSize = 10
+      const startIdx = page * pageSize
+      const endIdx = startIdx + pageSize
+      const localTotalPages = Math.ceil(filtered.length / pageSize)
+      setTotalPages(localTotalPages)
+      return filtered.slice(startIdx, endIdx)
+    }
+
+    return filtered
+  }, [allItems, items, page, filterOrigen, filterDestino, hasActiveFilters])
+
   const formatLocation = (codigo?: string, ciudad?: string) => {
     if (!codigo) return '--'
     return `${codigo}-${ciudad ?? '--'}`
@@ -197,16 +230,29 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
         <div className="crud-header-main">
           <h2>Vuelos</h2>
         </div>
-        <div className="crud-search">
-          <input
-            type="text"
-            placeholder="Buscar por código u OACI"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setPage(0)
-            }}
-          />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', flex: 1 }}>
+          <div className="crud-search">
+            <input
+              type="text"
+              placeholder="Filtrar por ORIGEN (OACI)"
+              value={filterOrigen}
+              onChange={(event) => {
+                setFilterOrigen(event.target.value)
+                setPage(0)
+              }}
+            />
+          </div>
+          <div className="crud-search">
+            <input
+              type="text"
+              placeholder="Filtrar por DESTINO (OACI)"
+              value={filterDestino}
+              onChange={(event) => {
+                setFilterDestino(event.target.value)
+                setPage(0)
+              }}
+            />
+          </div>
         </div>
         <div className="crud-header-actions">
           <button className="btn primary" onClick={handleNew}>Nuevo vuelo</button>
@@ -230,9 +276,9 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
         </div>
         
         {loading && <div className="crud-empty">Cargando...</div>}
-        {!loading && items.length === 0 && <div className="crud-empty">Sin registros</div>}
-        
-        {items.map((item) => (
+        {!loading && filteredAndPaginatedItems.length === 0 && <div className="crud-empty">Sin registros</div>}
+
+        {filteredAndPaginatedItems.map((item) => (
           <div className="crud-row flights" key={item.id}>
             <span className="flight-code">{item.codigo}</span>
             <span>{formatLocation(item.origenOaci, item.origenCiudad)}</span>
