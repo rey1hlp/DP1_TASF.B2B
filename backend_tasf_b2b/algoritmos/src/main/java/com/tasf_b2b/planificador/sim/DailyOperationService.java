@@ -5,6 +5,7 @@ import com.tasf_b2b.planificador.api.dto.DailyShipmentSummaryDto;
 import com.tasf_b2b.planificador.api.dto.DailyWarehouseSnapshotDto;
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
 import com.tasf_b2b.planificador.api.dto.OperationAlertDto;
+    import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
@@ -109,6 +110,7 @@ public class DailyOperationService {
         snapshot.warehouseSnapshot = warehouseSnapshot;
         snapshot.shipmentSummary = shipmentSummary;
         snapshot.alerts = alerts;
+        snapshot.envios = shipments.stream().map(this::toShipmentDto).collect(Collectors.toList());
         return snapshot;
     }
 
@@ -226,5 +228,25 @@ public class DailyOperationService {
             return null;
         }
         return airportCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private ShipmentCrudDto toShipmentDto(ShipmentEntity entity) {
+        ShipmentCrudDto dto = new ShipmentCrudDto();
+        dto.id = entity.id;
+        dto.codigoPedido = entity.codigoPedido;
+        dto.origen = entity.origen != null ? entity.origen.codigoOaci : null;
+        dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
+        dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
+        dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
+        dto.fecha = entity.fecha;
+        dto.ingresoUtc = entity.ingresoUtc;
+        dto.ingresoLocal = entity.ingresoLocal;
+        dto.gmtOffset = entity.gmtOffset;
+        dto.cantidad = entity.cantidad;
+        dto.idCliente = entity.idCliente;
+        dto.slaHoras = entity.slaHoras;
+        dto.status = entity.status;
+        dto.auditDateIns = entity.auditDateIns;
+        return dto;
     }
 }

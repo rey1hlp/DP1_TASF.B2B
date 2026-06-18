@@ -72,6 +72,58 @@ public class ShipmentCrudController {
         return ResponseEntity.ok(result.map(this::toDto));
     }
 
+    @GetMapping("/daily")
+    public ResponseEntity<List<ShipmentCrudDto>> getDailyShipments(
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String airport) {
+
+        String targetDate = (date != null && !date.isBlank()) ? date : 
+                            LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+        StringBuilder sql = new StringBuilder(
+            "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
+            "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
+            "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
+            "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
+            "FROM shipment s " +
+            "JOIN airport ao ON s.origen_id = ao.id " +
+            "JOIN airport ad ON s.destino_id = ad.id " +
+            "WHERE s.fecha = ?"
+        );
+
+        List<Object> params = new ArrayList<>();
+        params.add(targetDate);
+
+        if (airport != null && !airport.isBlank()) {
+            sql.append(" AND ao.codigo_oaci = ?");
+            params.add(airport.toUpperCase(Locale.ROOT));
+        }
+
+        sql.append(" ORDER BY s.hora_ingreso_utc DESC");
+
+        List<ShipmentCrudDto> shipments = jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
+            ShipmentCrudDto dto = new ShipmentCrudDto();
+            dto.id = rs.getLong("id");
+            dto.codigoPedido = rs.getString("codigo_pedido");
+            dto.origen = rs.getString("origen_oaci");
+            dto.origenCiudad = rs.getString("origen_ciudad");
+            dto.destino = rs.getString("destino_oaci");
+            dto.destinoCiudad = rs.getString("destino_ciudad");
+            dto.fecha = rs.getString("fecha");
+            dto.ingresoUtc = rs.getTimestamp("hora_ingreso_utc").toLocalDateTime();
+            dto.ingresoLocal = rs.getTimestamp("hora_ingreso_local").toLocalDateTime();
+            dto.gmtOffset = rs.getInt("gmt_offset");
+            dto.cantidad = rs.getInt("cantidad");
+            dto.idCliente = rs.getString("id_cliente");
+            dto.slaHoras = rs.getInt("sla_horas");
+            dto.status = com.tasf_b2b.planificador.persistence.ShipmentStatus.valueOf(rs.getString("status"));
+            dto.auditDateIns = rs.getTimestamp("audit_date_ins").toLocalDateTime();
+            return dto;
+        }, params.toArray());
+
+        return ResponseEntity.ok(shipments);
+    }
+
     @PostMapping
     public ResponseEntity<ShipmentCrudDto> create(@RequestBody ShipmentCrudDto dto) {
         log.info(
