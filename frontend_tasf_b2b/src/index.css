@@ -459,6 +459,14 @@ body {
   filter: drop-shadow(0 4px 10px rgba(19, 49, 90, 0.4));
 }
 
+.airport-marker {
+  background: transparent;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.25));
+  transition: transform 0.2s ease;
+}
+
 .plane-icon {
   width: 24px;
   height: 24px;
@@ -1385,4 +1393,38 @@ body {
 .btn-delete:hover {
   background-color: #ffd4d4;
   transform: translateY(-1px);
+}
+
+/* ─── Pantalla Completa para el Mapa ───────────────────────────── */
+.map-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.map-wrapper.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important; /* Por encima de todo */
+  background: #fff;
+  padding: 10px;
+}
+
+.map-fullscreen-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 1001; /* Sobre el mapa de Leaflet */
+  width: 34px;
+  height: 34px;
+  background: #ffffff;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
 }

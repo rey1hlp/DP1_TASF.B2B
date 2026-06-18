@@ -63,7 +63,7 @@ export default function SimulationPage() {
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)

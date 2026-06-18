@@ -66,6 +66,7 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
           <span>Tipo en Almacén</span>
           <span>Ruta Original</span>
           <span>Volumen/Peso</span>
+          <span>Cliente</span>
           <span>Estado</span>
         </div>
 
@@ -79,6 +80,7 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
               </span>
               <span>{ship.origen} → {ship.destino}</span>
               <span>{ship.cantidad} kg</span>
+              <span>{ship.idCliente}</span>
               <span>En Almacén</span>
             </div>
           );

@@ -90,6 +90,7 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
           <span>Destino</span>
           <span>Fecha Asignación</span>
           <span>Carga (kg)</span>
+          <span>Cliente</span>
           <span>SLA</span>
         </div>
         
@@ -103,6 +104,7 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
               <span>{ship.destino}-{ship.destinoCiudad}</span>
               <span>{ship.fecha}</span>
               <span>{ship.cantidad} kg</span>
+              <span>{ship.idCliente}</span>
               <span>{ship.slaHoras}h</span>
             </div>
           ))
