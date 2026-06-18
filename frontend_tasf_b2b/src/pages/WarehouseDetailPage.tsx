@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AirportCrudDto, ShipmentCrudDto } from '../types/sim'
 import { getAirportByCode, getWarehouseShipments } from '../services/api'
 
@@ -12,6 +12,8 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
   const [warehouseShipments, setWarehouseShipments] = useState<ShipmentCrudDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterOrigen, setFilterOrigen] = useState('');
+  const [filterDestino, setFilterDestino] = useState('');
 
   useEffect(() => {
     const loadWarehouseDetail = async () => {
@@ -34,7 +36,15 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
     void loadWarehouseDetail();
   }, [airportCode]);
 
-  const totalCargaAlmacenada = warehouseShipments.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+  const filteredShipments = useMemo(() => {
+    return warehouseShipments.filter(ship => {
+      const origenMatch = !filterOrigen || ship.origen.toUpperCase().includes(filterOrigen.toUpperCase());
+      const destinoMatch = !filterDestino || ship.destino.toUpperCase().includes(filterDestino.toUpperCase());
+      return origenMatch && destinoMatch;
+    });
+  }, [warehouseShipments, filterOrigen, filterDestino]);
+
+  const totalCargaAlmacenada = filteredShipments.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
 
   if (loading) return <div className="crud-panel"><div className="crud-empty">Cargando estado del almacén...</div></div>;
   if (error) return <div className="crud-panel"><div className="crud-empty">Error: {error}</div></div>;
@@ -60,16 +70,36 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
         <h3>Envíos físicos actualmente en Almacén</h3>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div className="crud-search">
+          <input
+            type="text"
+            placeholder="Filtrar por ORIGEN (OACI)"
+            value={filterOrigen}
+            onChange={(e) => setFilterOrigen(e.target.value)}
+          />
+        </div>
+        <div className="crud-search">
+          <input
+            type="text"
+            placeholder="Filtrar por DESTINO (OACI)"
+            value={filterDestino}
+            onChange={(e) => setFilterDestino(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="crud-table" style={{ marginTop: '1rem' }}>
         <div className="crud-row shipments header">
           <span>Código Pedido</span>
           <span>Tipo en Almacén</span>
           <span>Ruta Original</span>
           <span>Volumen/Peso</span>
+          <span>Cliente</span>
           <span>Estado</span>
         </div>
 
-        {warehouseShipments.map((ship) => {
+        {filteredShipments.map((ship) => {
           const esSaliente = ship.origen === airportCode;
           return (
             <div className="crud-row shipments" key={ship.id}>
@@ -79,6 +109,7 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
               </span>
               <span>{ship.origen} → {ship.destino}</span>
               <span>{ship.cantidad} kg</span>
+              <span>{ship.idCliente}</span>
               <span>En Almacén</span>
             </div>
           );

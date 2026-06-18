@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FlightCrudDto, ShipmentCrudDto } from '../types/sim'
 import { getFlightById, getShipmentsByFlight } from '../services/api'
 
@@ -12,6 +12,8 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
   const [shipments, setShipments] = useState<ShipmentCrudDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterOrigen, setFilterOrigen] = useState('');
+  const [filterDestino, setFilterDestino] = useState('');
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -34,7 +36,15 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
     void loadDetail();
   }, [flightId]);
 
-  const totalCargaAsignada = shipments.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+  const filteredShipments = useMemo(() => {
+    return shipments.filter(ship => {
+      const origenMatch = !filterOrigen || ship.origen.toUpperCase().includes(filterOrigen.toUpperCase());
+      const destinoMatch = !filterDestino || ship.destino.toUpperCase().includes(filterDestino.toUpperCase());
+      return origenMatch && destinoMatch;
+    });
+  }, [shipments, filterOrigen, filterDestino]);
+
+  const totalCargaAsignada = filteredShipments.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
   const porcentajeOcupacion = flight?.capacidad
     ? Math.min(100, Math.round((totalCargaAsignada / flight.capacidad) * 100))
     : 0;
@@ -83,6 +93,25 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
         <h3>Listado de Envíos Asignados a este Vuelo</h3>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div className="crud-search">
+          <input
+            type="text"
+            placeholder="Filtrar por ORIGEN (OACI)"
+            value={filterOrigen}
+            onChange={(e) => setFilterOrigen(e.target.value)}
+          />
+        </div>
+        <div className="crud-search">
+          <input
+            type="text"
+            placeholder="Filtrar por DESTINO (OACI)"
+            value={filterDestino}
+            onChange={(e) => setFilterDestino(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="crud-table" style={{ marginTop: '1rem' }}>
         <div className="crud-row shipments header">
           <span>Código Pedido</span>
@@ -90,19 +119,21 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
           <span>Destino</span>
           <span>Fecha Asignación</span>
           <span>Carga (kg)</span>
+          <span>Cliente</span>
           <span>SLA</span>
         </div>
         
-        {shipments.length === 0 ? (
+        {filteredShipments.length === 0 ? (
           <div className="crud-empty">No hay paquetes asociados a este vuelo en el plan actual.</div>
         ) : (
-          shipments.map((ship) => (
+          filteredShipments.map((ship) => (
             <div className="crud-row shipments" key={ship.id}>
               <span style={{ fontWeight: 'bold' }}>{ship.codigoPedido}</span>
               <span>{ship.origen}-{ship.origenCiudad}</span>
               <span>{ship.destino}-{ship.destinoCiudad}</span>
               <span>{ship.fecha}</span>
               <span>{ship.cantidad} kg</span>
+              <span>{ship.idCliente}</span>
               <span>{ship.slaHoras}h</span>
             </div>
           ))

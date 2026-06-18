@@ -6,7 +6,6 @@ import type { AirportDto } from '../types/sim'
 import { fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
-import { useTopbarMain } from '../hooks/useTopbarMain'
 
 type MapViewProps = ComponentProps<typeof MapView>
 type MapSegment = MapViewProps['segments'][number]
@@ -128,6 +127,7 @@ export default function DailyOperationPage() {
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
@@ -172,22 +172,8 @@ export default function DailyOperationPage() {
       setShipmentSearchError('Error al buscar el envío.')
     }
   }
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
 
   const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
-
-  const topbarContent = useMemo(() => {
-    return (
-      <div className="topbar-page-summary">
-        <span className="topbar-page-pill">Operación diaria</span>
-        <span>Vuelos activos: <strong>0</strong></span>
-        <span>Vuelos planificados: <strong>0</strong></span>
-        <span>Conexión: <strong>Sin conexión</strong></span>
-      </div>
-    )
-  }, [])
-
-  useTopbarMain(topbarContent)
 
   const applySnapshot = useCallback((snapshot: DailyOperationSnapshot) => {
     console.debug('[DailyOperationPage] applySnapshot', snapshot)
@@ -489,6 +475,8 @@ export default function DailyOperationPage() {
             ranges={ranges}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
+            isPanelCollapsed={isPanelCollapsed}
+            isToolbarCollapsed={isToolbarCollapsed}
           />
 
           {loading ? (

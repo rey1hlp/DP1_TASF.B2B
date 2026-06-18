@@ -12,6 +12,7 @@ interface AirportsCrudProps {
 export default function AirportsCrud({ onViewDetail }: AirportsCrudProps) {
   const [items, setItems] = useState<AirportCrudDto[]>([])
   const [query, setQuery] = useState('')
+  const [filterPais, setFilterPais] = useState('')
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -210,22 +211,38 @@ export default function AirportsCrud({ onViewDetail }: AirportsCrudProps) {
     return Number.isNaN(parsed) ? null : parsed
   }
 
+  const filteredItems = useMemo(() => {
+    return items.filter(item =>
+      !filterPais || item.pais.toUpperCase().includes(filterPais.toUpperCase())
+    )
+  }, [items, filterPais])
+
   return (
     <div className="crud-panel">
       <div className="crud-header">
         <div className="crud-header-main">
           <h2>Aeropuertos</h2>
         </div>
-        <div className="crud-search">
-          <input
-            type="text"
-            placeholder="Buscar por OACI o nombre"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setPage(0)
-            }}
-          />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', flex: 1 }}>
+          <div className="crud-search">
+            <input
+              type="text"
+              placeholder="Buscar por OACI o nombre"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setPage(0)
+              }}
+            />
+          </div>
+          <div className="crud-search">
+            <input
+              type="text"
+              placeholder="Filtrar por PAÍS"
+              value={filterPais}
+              onChange={(event) => setFilterPais(event.target.value)}
+            />
+          </div>
         </div>
         <div className="crud-header-actions">
           <Button variant="primary" onClick={handleNew}>Nuevo aeropuerto</Button>
@@ -244,8 +261,8 @@ export default function AirportsCrud({ onViewDetail }: AirportsCrudProps) {
           <span>Acciones</span>
         </div>
         {loading && <div className="crud-empty">Cargando...</div>}
-        {!loading && items.length === 0 && <div className="crud-empty">Sin registros</div>}
-        {items.map((item) => (
+        {!loading && filteredItems.length === 0 && <div className="crud-empty">Sin registros</div>}
+        {filteredItems.map((item) => (
           <div className="crud-row airports" key={item.id}>
             <span className="airport-code">{item.codigoOaci}</span>
             <span className="airport-name">{item.nombre}</span>
