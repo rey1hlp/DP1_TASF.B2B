@@ -1,6 +1,8 @@
 package com.tasf_b2b.planificador.sim;
 
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
+import com.tasf_b2b.planificador.api.dto.PasoRutaDto;
+import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
 import com.tasf_b2b.planificador.dominio.Aeropuerto;
 import com.tasf_b2b.planificador.dominio.Envio;
 import com.tasf_b2b.planificador.dominio.Vuelo;
@@ -37,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -61,6 +64,7 @@ public class DailyPlanningService {
     private final DailyPlanSegmentRepository planSegmentRepository;
     private final UtilArchivos util = new UtilArchivos();
     private final AtomicBoolean planning = new AtomicBoolean(false);
+    private volatile Map<String, RespuestaRutaEnvioDto> lastRutasPorPaquete = new ConcurrentHashMap<>();
 
     public DailyPlanningService(
         AirportRepository airportRepository,
@@ -189,6 +193,8 @@ public class DailyPlanningService {
             );
             List<FlightSegmentDto> segmentos = construirSegmentos(mejor, envios, aeropuertos);
             log.info("[DAILY_PLAN] segments built={}", segmentos.size());
+
+            this.lastRutasPorPaquete = construirRutasPorPaquete(mejor, envios);
 
             DailyPlanRunEntity run = new DailyPlanRunEntity();
             run.planDate = window.planDate;
@@ -521,6 +527,48 @@ public class DailyPlanningService {
         }
 
         return new ArrayList<>(mapa.values());
+    }
+
+    public RespuestaRutaEnvioDto getShipmentRoute(String codigoPedido) {
+        return lastRutasPorPaquete.get(codigoPedido);
+    }
+
+    private Map<String, RespuestaRutaEnvioDto> construirRutasPorPaquete(Individuo mejor, List<Envio> envios) {
+        Map<String, RespuestaRutaEnvioDto> mapa = new HashMap<>();
+        if (mejor == null || mejor.asignaciones == null) {
+            return mapa;
+        }
+        for (int i = 0; i < envios.size(); i++) {
+            Envio envio = envios.get(i);
+            Ruta ruta = mejor.asignaciones[i];
+            RespuestaRutaEnvioDto dto = new RespuestaRutaEnvioDto();
+            dto.codigoPedido = envio.idPedido;
+            
+            String estadoReal = envio.status != null ? envio.status.toString() : "PENDING";
+
+            if (ruta != null && ruta.vuelos != null && !ruta.vuelos.isEmpty()) {
+                dto.estado = estadoReal;
+                dto.tiempoTotalHoras = ruta.tiempoTotalHoras;
+                dto.ruta = new ArrayList<>();
+                if (!"DELIVERED".equals(estadoReal) && !"CANCELLED".equals(estadoReal)) {
+                    for (Vuelo v : ruta.vuelos) {
+                        PasoRutaDto paso = new PasoRutaDto();
+                        paso.vueloId = v.id;
+                        paso.origen = v.origen;
+                        paso.destino = v.destino;
+                        paso.salidaMin = minuteOfDay(v.salidaMin);
+                        paso.llegadaMin = paso.salidaMin + Math.max(0, v.llegadaMin - v.salidaMin);
+                        dto.ruta.add(paso);
+                    }
+                }
+            } else {
+                dto.estado = ("DELIVERED".equals(estadoReal) || "CANCELLED".equals(estadoReal)) ? estadoReal : "SIN_RUTA_ENCONTRADA";
+                dto.tiempoTotalHoras = 0.0;
+                dto.ruta = new ArrayList<>();
+            }
+            mapa.put(envio.idPedido, dto);
+        }
+        return mapa;
     }
 
     private boolean isValidShipment(ShipmentEntity shipment) {

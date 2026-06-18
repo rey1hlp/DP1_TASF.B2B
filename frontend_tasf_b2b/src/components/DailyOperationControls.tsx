@@ -2,6 +2,21 @@
 
 import { useMemo, useState, type KeyboardEvent } from 'react'
 
+export type PasoRutaDto = {
+  vueloId: number
+  origen: string
+  destino: string
+  salidaMin: number
+  llegadaMin: number
+}
+
+export type RespuestaRutaEnvioDto = {
+  codigoPedido: string
+  estado: string
+  tiempoTotalHoras: number
+  ruta: PasoRutaDto[]
+}
+
 export type DailyOperationControlsProps = {
   onRefresh: () => void
   loading: boolean
@@ -70,6 +85,12 @@ export type DailyOperationControlsProps = {
 
   isCollapsed: boolean
   onToggleCollapse: () => void
+
+  selectedShipmentRoute: RespuestaRutaEnvioDto | null
+  onSearchShipment: (codigo: string) => void
+  shipmentSearchError: string | null
+  sampleShipments: string[]
+  currentMinute: number | null
 }
 
 export default function DailyOperationControls({
@@ -92,12 +113,19 @@ export default function DailyOperationControls({
   alerts,
   isCollapsed,
   onToggleCollapse,
+  selectedShipmentRoute,
+  onSearchShipment,
+  shipmentSearchError,
+  sampleShipments,
+  currentMinute,
 }: DailyOperationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('stats')
   const [flightQuery, setFlightQuery] = useState('')
   const [flightScrollTop, setFlightScrollTop] = useState(0)
   const [airportQuery, setAirportQuery] = useState('')
   const [airportScrollTop, setAirportScrollTop] = useState(0)
+  const [shipmentQuery, setShipmentQuery] = useState('')
+  const [shipmentScrollTop, setShipmentScrollTop] = useState(0)
 
   const greenMax = ranges.greenMax
   const amberMax = ranges.amberMax
@@ -152,6 +180,12 @@ export default function DailyOperationControls({
     })
   }, [airportItems, airportQuery])
 
+  const filteredShipments = useMemo(() => {
+    const query = shipmentQuery.trim().toLowerCase()
+    if (!query) return sampleShipments
+    return sampleShipments.filter((s) => s.toLowerCase().includes(query))
+  }, [sampleShipments, shipmentQuery])
+
   const listHeight = 280
   const itemHeight = 44
   const visibleCount = Math.ceil(listHeight / itemHeight) + 6
@@ -165,6 +199,32 @@ export default function DailyOperationControls({
   const airportEndIndex = Math.min(filteredAirports.length, airportStartIndex + visibleCount)
   const visibleAirports = filteredAirports.slice(airportStartIndex, airportEndIndex)
   const airportOffsetY = airportStartIndex * itemHeight
+  
+  const shipmentStartIndex = Math.max(0, Math.floor(shipmentScrollTop / itemHeight))
+  const shipmentEndIndex = Math.min(filteredShipments.length, shipmentStartIndex + visibleCount)
+  const visibleShipments = filteredShipments.slice(shipmentStartIndex, shipmentEndIndex)
+  const shipmentOffsetY = shipmentStartIndex * itemHeight
+
+  const getDynamicShipmentStatus = (route: RespuestaRutaEnvioDto) => {
+    if (!route || route.ruta.length === 0) return route?.estado || 'DESCONOCIDO'
+    if (currentMinute === null) return route.estado === 'CON_RETRASO' ? 'ENTREGADO (CON RETRASO)' : route.estado
+
+    const first = route.ruta[0]
+    const last = route.ruta[route.ruta.length - 1]
+
+    if (currentMinute < first.salidaMin) {
+      return 'EN ALMACÉN (Origen)'
+    } else if (currentMinute > last.llegadaMin) {
+      return route.estado === 'CON_RETRASO' ? 'ENTREGADO (CON RETRASO)' : 'ENTREGADO'
+    } else {
+      for (const paso of route.ruta) {
+        if (currentMinute >= paso.salidaMin && currentMinute <= paso.llegadaMin) {
+          return `EN VUELO (${paso.origen} → ${paso.destino})`
+        }
+      }
+      return 'EN ESCALA (Almacén)'
+    }
+  }
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
@@ -438,6 +498,64 @@ export default function DailyOperationControls({
 
           <div className="flight-hint">{`${filteredFlights.length} vuelos encontrados`}</div>
 
+          <h3>Buscar envío / maleta</h3>
+          <label className="field">
+            <input
+              type="text"
+              placeholder="Ingresar ID del envío (ej. 000000001)"
+              value={shipmentQuery}
+              onChange={(event) => setShipmentQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') onSearchShipment(shipmentQuery)
+              }}
+            />
+          </label>
+      
+          <div
+            className="flight-list"
+            onScroll={(event) => setShipmentScrollTop(event.currentTarget.scrollTop)}
+            style={{ height: `150px`, marginTop: '8px' }}
+          >
+            <div className="flight-list-spacer" style={{ height: `${filteredShipments.length * itemHeight}px` }}>
+              <div className="flight-list-items" style={{ transform: `translateY(${shipmentOffsetY}px)` }}>
+                {visibleShipments.length === 0 && <div style={{padding: '10px', fontSize: '12px'}}>No hay muestras (inicia operación)</div>}
+                {visibleShipments.map((codigo) => (
+                  <button
+                    key={codigo}
+                    className={`flight-item ${selectedShipmentRoute?.codigoPedido === codigo ? 'active' : ''}`}
+                    onClick={() => onSearchShipment(codigo)}
+                    style={{ height: `${itemHeight}px` }}
+                  >
+                    <div className="flight-label">{`📢 Pedido: ${codigo}`}</div>
+                    <div className="flight-meta">Click para ver ruta</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flight-hint">{`${filteredShipments.length} envíos de muestra`}</div>
+
+          <div className="buttons" style={{ marginTop: '4px', marginBottom: '4px' }}>
+            <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>Buscar ruta</button>
+          </div>
+          {shipmentSearchError && <div className="upload-error" style={{ marginBottom: '8px' }}>{shipmentSearchError}</div>}
+          {selectedShipmentRoute && (
+            <div className="flight-list" style={{ maxHeight: '200px', height: 'auto', marginBottom: '10px' }}>
+              <div style={{ padding: '10px', fontSize: '12px', background: '#eaf0fb', borderBottom: '1px solid #d9e4f4' }}>
+                <strong>Estado:</strong> {getDynamicShipmentStatus(selectedShipmentRoute)} <br />
+                <strong>Tiempo total:</strong> {selectedShipmentRoute.tiempoTotalHoras.toFixed(1)} h
+              </div>
+              {selectedShipmentRoute.ruta.length === 0 && (
+                <div style={{ padding: '10px', fontSize: '12px' }}>No hay saltos registrados.</div>
+              )}
+              {selectedShipmentRoute.ruta.map((paso, idx) => (
+                <div key={idx} className="flight-item" style={{ borderBottom: '1px solid rgba(217, 228, 244, 0.8)', cursor: 'default' }}>
+                  <div className="flight-label">{paso.vueloId} | {paso.origen} → {paso.destino}</div>
+                  <div className="flight-meta">Salida {paso.salidaMin} - Llegada {paso.llegadaMin}</div>
+                </div>
+              ))}
+            </div>
+          )}
           <h3>Buscar aeropuerto operativo</h3>
 
           <label className="field">
