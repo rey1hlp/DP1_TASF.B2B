@@ -41,6 +41,7 @@ type DailyOperationSnapshot = {
   warehouseSnapshot?: WarehouseSnapshot
   shipmentSummary?: ShipmentSummary
   alerts?: OperationAlert[]
+  envios?: any[]
 }
 
 type DailyOperationEvent =
@@ -127,6 +128,50 @@ export default function DailyOperationPage() {
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+
+  const [sampleShipments, setSampleShipments] = useState<string[]>([])
+  const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
+  const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
+
+  const handleSearchShipment = async (codigo: string) => {
+    setShipmentSearchError(null)
+    try {
+      // Intentar primero obtener la ruta real del endpoint de operación diaria
+      const routeRes = await fetch(`${API_BASE_URL}/api/operation/daily/shipments/${encodeURIComponent(codigo)}/route`)
+      if (routeRes.ok) {
+        const routeData = await routeRes.json()
+        // Asegurar que no se dibuje la línea si ya se entregó o canceló
+        if (routeData.estado === 'DELIVERED' || routeData.estado === 'CANCELLED') {
+          routeData.ruta = []
+        }
+        setSelectedShipmentRoute(routeData)
+        return
+      }
+
+      // Fallback si la maleta aún no tiene ruta planificada o el endpoint falla
+      const fallbackRes = await fetch(`${API_BASE_URL}/api/db/shipments?query=${encodeURIComponent(codigo)}`)
+      const fallbackData = await fallbackRes.json()
+      if (fallbackData.content && fallbackData.content.length > 0) {
+        const shipment = fallbackData.content.find((s: any) => s.codigoPedido === codigo)
+        if (shipment) {
+          setSelectedShipmentRoute({
+            codigoPedido: shipment.codigoPedido,
+            estado: shipment.status,
+            tiempoTotalHoras: shipment.slaHoras,
+            ruta: (shipment.status === 'DELIVERED' || shipment.status === 'CANCELLED')
+              ? []
+              : [{ vueloId: '--', origen: shipment.origen, destino: shipment.destino, salidaMin: 0, llegadaMin: 0 }]
+          })
+          return
+        }
+      }
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('No se encontró el envío en operación diaria.')
+    } catch (e) {
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('Error al buscar el envío.')
+    }
+  }
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
 
   const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
@@ -160,6 +205,10 @@ export default function DailyOperationPage() {
 
     if (snapshot.alerts) {
       setAlerts(snapshot.alerts)
+    }
+
+    if (snapshot.envios) {
+      setSampleShipments(snapshot.envios.map((s: any) => s.codigoPedido))
     }
 
     if (snapshot.timestamp) {
@@ -466,6 +515,11 @@ export default function DailyOperationPage() {
           airportItems={airportItems}
           selectedAirportCode={selectedAirportCode}
           onSelectAirport={handleSelectAirport}
+          selectedShipmentRoute={selectedShipmentRoute}
+          onSearchShipment={handleSearchShipment}
+          shipmentSearchError={shipmentSearchError}
+          sampleShipments={sampleShipments}
+          currentMinute={currentMinute}
           alerts={alerts}
           isCollapsed={isPanelCollapsed}
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}

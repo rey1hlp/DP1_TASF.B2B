@@ -10,4 +10,5 @@ public class DailyOperationSnapshotDto {
     public Map<String, DailyWarehouseSnapshotDto> warehouseSnapshot;
     public DailyShipmentSummaryDto shipmentSummary;
     public List<OperationAlertDto> alerts;
+    public List<ShipmentCrudDto> envios;
 }
