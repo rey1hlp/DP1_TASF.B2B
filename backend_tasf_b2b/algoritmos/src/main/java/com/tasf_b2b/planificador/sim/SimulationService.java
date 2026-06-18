@@ -80,6 +80,7 @@ public class SimulationService {
 
     public SimulationResponse startSimulation(SimulationRequest request) {
         String simulationId = UUID.randomUUID().toString();
+        boolean collapseStreaming = Boolean.TRUE.equals(request.colapsoIncremental);
         SimulationResponse response = new SimulationResponse();
         response.simulationId = simulationId;
         response.status = SimulationState.Status.RUNNING.name();
@@ -90,13 +91,16 @@ public class SimulationService {
         response.speedMinPerSec = (request.speedMinPerSec != null && request.speedMinPerSec > 0)
             ? request.speedMinPerSec
             : DEFAULT_SPEED_MIN_PER_SEC;
+        response.modo = collapseStreaming ? "COLAPSO_INCREMENTAL" : "PERIODO";
         response.message = "RUNNING";
         // de momento, para que siempre genere reporte en el back
         request.reporte = true;
 
         SimulationRunEntity run = new SimulationRunEntity();
         run.simulationId = simulationId;
-        run.tipo = (request.buscarColapso != null && request.buscarColapso) ? "COLAPSO" : "PERIODO";
+        run.tipo = collapseStreaming
+            ? "COLAPSO_INCREMENTAL"
+            : ((request.buscarColapso != null && request.buscarColapso) ? "COLAPSO" : "PERIODO");
         run.inicio = request.inicio;
         run.fin = response.fin;
         run.dias = request.dias;
@@ -104,10 +108,28 @@ public class SimulationService {
         run.speedMinPerSec = response.speedMinPerSec;
         run.creadoEn = LocalDateTime.now();
         simulationRunRepository.save(run);
+        log.info("[SIM:{}] run created tipo={} inicio={} fin={} dias={} buscarColapso={} colapsoIncremental={}",
+            simulationId,
+            run.tipo,
+            run.inicio,
+            run.fin,
+            run.dias,
+            request.buscarColapso,
+            request.colapsoIncremental);
 
         registry.create(simulationId);
+        SimulationState created = registry.get(simulationId);
+        if (created != null) {
+            created.incremental = collapseStreaming;
+        }
 
-        executor.submit(() -> ejecutar(simulationId, request));
+        executor.submit(() -> {
+            if (collapseStreaming) {
+                ejecutarColapsoIncremental(simulationId, request);
+            } else {
+                ejecutar(simulationId, request);
+            }
+        });
         return response;
     }
 
@@ -452,6 +474,262 @@ public class SimulationService {
                 simulationId,
                 ex.getMessage()
             );
+        }
+    }
+
+    private void ejecutarColapsoIncremental(String simulationId, SimulationRequest request) {
+        long simulationStart = System.currentTimeMillis();
+        try {
+            log.info("[SIM:{}] Incremental collapse simulation started", simulationId);
+
+            String raiz = System.getProperty("user.dir");
+            UtilArchivos util = new UtilArchivos();
+
+            String archivoEnvios = resolverArchivoEnvios(request);
+            Path rutaEnvios = RutaResolver.resolverRutaData(raiz, archivoEnvios);
+            Map<String, Aeropuerto> aeropuertos = cargarAeropuertosDb();
+
+            log.info(
+                "[SIM:{}] collapse inputs -> archivoEnvios={} airports={}",
+                simulationId,
+                archivoEnvios,
+                aeropuertos.size()
+            );
+
+            if (aeropuertos.isEmpty()) {
+                registry.markFailed(simulationId, "No hay aeropuertos registrados en la base de datos.");
+                return;
+            }
+
+            List<Vuelo> planes = cargarVuelosDb(aeropuertos.keySet());
+            log.info("[SIM:{}] collapse flight plans loaded={}", simulationId, planes.size());
+            if (planes.isEmpty()) {
+                registry.markFailed(simulationId, "No hay vuelos base disponibles para la simulación.");
+                return;
+            }
+
+            int blockDays = (request.bloqueDias != null && request.bloqueDias > 0) ? request.bloqueDias : 5;
+            int intervalMs = (request.intervaloPlanMs != null && request.intervaloPlanMs > 0) ? request.intervaloPlanMs : 180_000;
+            LocalDate startDate = LocalDate.parse(request.inicio, FECHA_FORMAT);
+            int blockIndex = 0;
+            boolean firstBlock = true;
+            SimulationData accumulated = null;
+
+            while (true) {
+                LocalDate blockStart = startDate.plusDays((long) blockIndex * blockDays);
+                LocalDate blockEnd = blockStart.plusDays(blockDays - 1L);
+                String blockStartText = blockStart.format(FECHA_FORMAT);
+                String blockEndText = blockEnd.format(FECHA_FORMAT);
+
+                log.info(
+                    "[SIM:{}] collapse block start index={} range={}..{}",
+                    simulationId,
+                    blockIndex,
+                    blockStartText,
+                    blockEndText
+                );
+
+                List<Envio> envios = util.cargarEnvios(
+                    rutaEnvios,
+                    aeropuertos.keySet(),
+                    aeropuertos,
+                    blockStartText,
+                    blockEndText
+                );
+                envios = limitarEnvios(request, envios);
+
+                log.info(
+                    "[SIM:{}] collapse block shipments={}",
+                    simulationId,
+                    envios.size()
+                );
+
+                if (envios.isEmpty()) {
+                    if (firstBlock) {
+                        registry.markFailed(simulationId, "No hay envíos para el rango inicial de colapso.");
+                    } else {
+                        registry.markCompleted(simulationId, "Simulación hasta el colapso finalizada: no hay más envíos para planificar.");
+                    }
+                    actualizarRunFinal(simulationId, firstBlock ? SimulationState.Status.FAILED.name() : SimulationState.Status.COMPLETED.name(), accumulated);
+                    return;
+                }
+
+                ChunkResult chunk = planificarChunk(request, util, envios, aeropuertos, planes, blockStartText, blockEndText);
+                if (chunk == null) {
+                    registry.markFailed(simulationId, "No fue posible calcular el bloque incremental de colapso.");
+                    actualizarRunFinal(simulationId, SimulationState.Status.FAILED.name(), accumulated);
+                    return;
+                }
+
+                if (firstBlock) {
+                    accumulated = chunk.data;
+                    registry.markReady(simulationId, accumulated);
+                    firstBlock = false;
+                } else {
+                    registry.appendData(simulationId, chunk.data);
+                    SimulationState state = registry.get(simulationId);
+                    if (state != null && state.data != null) {
+                        accumulated = state.data;
+                    }
+                }
+
+                actualizarRunIntermedio(simulationId, accumulated, chunk);
+
+                if (!chunk.factible) {
+                    long totalEnviosAcumulados = accumulated != null ? accumulated.totalEnvios : chunk.data.totalEnvios;
+                    long totalMaletasAcumuladas = accumulated != null ? accumulated.totalMaletas : chunk.data.totalMaletas;
+                    String message = String.format(
+                        "Colapso detectado en el bloque %s..%s (envíos=%d, maletas=%d).",
+                        blockStartText,
+                        blockEndText,
+                        totalEnviosAcumulados,
+                        totalMaletasAcumuladas
+                    );
+                    registry.markCompleted(simulationId, message);
+                    actualizarRunFinal(simulationId, SimulationState.Status.COMPLETED.name(), accumulated);
+                    log.info("[SIM:{}] collapse finished because chunk became infeasible", simulationId);
+                    return;
+                }
+
+                blockIndex++;
+                if (intervalMs > 0) {
+                    log.info("[SIM:{}] collapse waiting {} ms before next block", simulationId, intervalMs);
+                    Thread.sleep(intervalMs);
+                }
+            }
+        } catch (Exception ex) {
+            log.error("[SIM:{}] Incremental collapse simulation failed", simulationId, ex);
+            registry.markFailed(simulationId, ex.getMessage());
+            actualizarRunFinal(simulationId, SimulationState.Status.FAILED.name(), null);
+        } finally {
+            log.info("[SIM:{}] Incremental collapse simulation finished in {} ms", simulationId, System.currentTimeMillis() - simulationStart);
+        }
+    }
+
+    private ChunkResult planificarChunk(
+        SimulationRequest request,
+        UtilArchivos util,
+        List<Envio> envios,
+        Map<String, Aeropuerto> aeropuertos,
+        List<Vuelo> planes,
+        String blockStartText,
+        String blockEndText
+    ) {
+        try {
+            int diaMin = envios.stream().mapToInt(e -> e.diaIndex).min().orElse(0);
+            int diaMax = envios.stream().mapToInt(e -> e.diaIndex).max().orElse(diaMin);
+            int maxSlaHoras = envios.stream().mapToInt(e -> e.slaHoras).max().orElse(0);
+            int diasExtra = resolverDiasExtra(request, maxSlaHoras);
+
+            List<Vuelo> vuelos = util.instanciarVuelosPorRango(planes, diaMin, diaMax + Math.max(0, diasExtra));
+            List<FlightDayCancellationEntity> cancellations = cancellationRepository.findAll();
+            java.util.Set<String> cancelledKeys = new java.util.HashSet<>();
+            for (FlightDayCancellationEntity c : cancellations) {
+                String dateStr = c.fechaCancelacion.format(DateTimeFormatter.BASIC_ISO_DATE);
+                cancelledKeys.add(c.flightId + "_" + dateStr);
+            }
+            vuelos.removeIf(v -> cancelledKeys.contains(v.idPlan + "_" + v.fecha));
+
+            log.info(
+                "[SIM:chunk] range={}..{} diaMin={} diaMax={} diasExtra={} vuelos={}",
+                blockStartText,
+                blockEndText,
+                diaMin,
+                diaMax,
+                diasExtra,
+                vuelos.size()
+            );
+
+            if (vuelos.isEmpty()) {
+                return null;
+            }
+
+            ParametrosGa params = construirParametros(request);
+            GrafoVuelos grafo = new GrafoVuelos(vuelos, aeropuertos);
+            Individuo mejor = new PlanificadorGa(grafo, envios, params, 1L).ejecutar();
+            log.info(
+                "[SIM:chunk] result range={}..{} fitness={} factible={}",
+                blockStartText,
+                blockEndText,
+                mejor != null ? mejor.fitness : null,
+                mejor != null && mejor.esFactible()
+            );
+
+            List<FlightSegmentDto> segmentos = construirSegmentos(mejor, envios, aeropuertos);
+            List<WarehouseStatusDto> almacenes = construirEventosAlmacen(mejor, envios, aeropuertos);
+            Map<String, RespuestaRutaEnvioDto> rutasPorPaquete = construirRutasPorPaquete(mejor, envios);
+            long totalMaletas = envios.stream().mapToLong(e -> e.cantidad).sum();
+
+            if (!segmentos.isEmpty()) {
+                String resumen = segmentos.stream()
+                    .limit(5)
+                    .map(seg -> seg.flightId + ":" + seg.origen + "->" + seg.destino)
+                    .reduce((a, b) -> a + " | " + b)
+                    .orElse("-");
+                log.info("[SIM:chunk] sample segments {}", resumen);
+            }
+
+            SimulationData data = construirSimulationData(
+                request,
+                envios,
+                segmentos,
+                almacenes,
+                rutasPorPaquete,
+                totalMaletas,
+                diaMin,
+                diaMax,
+                diasExtra
+            );
+
+            return new ChunkResult(data, mejor != null && mejor.esFactible(), diaMin, diaMax, totalMaletas);
+        } catch (Exception ex) {
+            log.error("[SIM:chunk] failed range={}..{}", blockStartText, blockEndText, ex);
+            return null;
+        }
+    }
+
+    private void actualizarRunIntermedio(String simulationId, SimulationData data, ChunkResult chunk) {
+        SimulationRunEntity stored = simulationRunRepository.findBySimulationId(simulationId);
+        if (stored == null || data == null || chunk == null) {
+            return;
+        }
+        stored.totalEnvios = data.totalEnvios;
+        stored.totalMaletas = data.totalMaletas;
+        stored.inicio = data.inicio;
+        stored.fin = data.fin;
+        stored.estado = chunk.factible ? SimulationState.Status.READY.name() : SimulationState.Status.COMPLETED.name();
+        simulationRunRepository.save(stored);
+    }
+
+    private void actualizarRunFinal(String simulationId, String estado, SimulationData data) {
+        SimulationRunEntity stored = simulationRunRepository.findBySimulationId(simulationId);
+        if (stored == null) {
+            return;
+        }
+        stored.estado = estado;
+        stored.finalizadoEn = LocalDateTime.now();
+        if (data != null) {
+            stored.totalEnvios = data.totalEnvios;
+            stored.totalMaletas = data.totalMaletas;
+            stored.inicio = data.inicio;
+            stored.fin = data.fin;
+        }
+        simulationRunRepository.save(stored);
+    }
+
+    private static class ChunkResult {
+        final SimulationData data;
+        final boolean factible;
+        final int diaMin;
+        final int diaMax;
+        final long totalMaletas;
+
+        ChunkResult(SimulationData data, boolean factible, int diaMin, int diaMax, long totalMaletas) {
+            this.data = data;
+            this.factible = factible;
+            this.diaMin = diaMin;
+            this.diaMax = diaMax;
+            this.totalMaletas = totalMaletas;
         }
     }
 

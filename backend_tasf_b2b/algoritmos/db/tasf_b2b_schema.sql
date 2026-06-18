@@ -73,7 +73,7 @@ CREATE TABLE shipment (
 CREATE TABLE simulation_run (
   id BIGINT NOT NULL AUTO_INCREMENT,
   simulation_id VARCHAR(64) NOT NULL,
-  tipo VARCHAR(16) NOT NULL,
+  tipo VARCHAR(32) NOT NULL,
   inicio CHAR(8) NULL,
   fin CHAR(8) NULL,
   dias INT NULL,

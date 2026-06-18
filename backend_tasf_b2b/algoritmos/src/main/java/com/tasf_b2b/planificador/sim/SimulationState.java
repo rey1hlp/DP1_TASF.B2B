@@ -5,6 +5,7 @@ public class SimulationState {
         RUNNING,
         READY,
         PAUSED,
+        COMPLETED,
         FAILED
     }
 
@@ -12,6 +13,7 @@ public class SimulationState {
     public volatile Status status;
     public volatile SimulationData data;
     public volatile String error;
+    public volatile boolean incremental;
 
     public SimulationState(String simulationId) {
         this.simulationId = simulationId;

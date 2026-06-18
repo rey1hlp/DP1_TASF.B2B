@@ -16,6 +16,7 @@ export type RespuestaRutaEnvioDto = {
 }
 
 export type SimulationControlsProps = {
+  mode: 'period' | 'collapse'
   onStart: (payload: { inicio: string; dias: number }) => void
   onPause: () => void
   onResume: () => void
@@ -50,6 +51,7 @@ export type SimulationControlsProps = {
 }
 
 export default function SimulationControls({
+  mode,
   onStart,
   onPause,
   onResume,
@@ -208,26 +210,33 @@ export default function SimulationControls({
       {activeTab === 'config' ? (
         <>
           <h3>Configuracion de simulacion</h3>
-          <div className="chip-row">
-            <button
-              className={`chip ${dias === 3 ? 'active' : ''}`}
-              onClick={() => setDias(3)}
-            >
-              3 dias
-            </button>
-            <button
-              className={`chip ${dias === 5 ? 'active' : ''}`}
-              onClick={() => setDias(5)}
-            >
-              5 dias
-            </button>
-            <button
-              className={`chip ${dias === 7 ? 'active' : ''}`}
-              onClick={() => setDias(7)}
-            >
-              7 dias
-            </button>
-          </div>
+          {mode === 'period' ? (
+            <div className="chip-row">
+              <button
+                className={`chip ${dias === 3 ? 'active' : ''}`}
+                onClick={() => setDias(3)}
+              >
+                3 dias
+              </button>
+              <button
+                className={`chip ${dias === 5 ? 'active' : ''}`}
+                onClick={() => setDias(5)}
+              >
+                5 dias
+              </button>
+              <button
+                className={`chip ${dias === 7 ? 'active' : ''}`}
+                onClick={() => setDias(7)}
+              >
+                7 dias
+              </button>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
+              La simulacion hasta el colapso se ejecuta desde la fecha seleccionada y sigue
+              hasta que no haya mas capacidad o datos disponibles.
+            </div>
+          )}
 
           <label className="field">
             Fecha y hora de inicio
@@ -274,7 +283,11 @@ export default function SimulationControls({
               onClick={() => onStart({ inicio, dias })}
               disabled={isRunning}
             >
-              {isRunning ? 'Ejecutando...' : 'Iniciar'}
+              {isRunning
+                ? 'Ejecutando...'
+                : mode === 'collapse'
+                  ? 'Iniciar hasta el colapso'
+                  : 'Iniciar'}
             </button>
             <button
               className="btn"

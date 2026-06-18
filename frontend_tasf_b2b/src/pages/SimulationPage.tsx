@@ -61,6 +61,7 @@ export default function SimulationPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
+  const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>('period')
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
@@ -100,7 +101,7 @@ export default function SimulationPage() {
     setSimulation((prev) => ({
       ...prev,
       requestedStart: inicio,
-      requestedDays: dias,
+      requestedDays: simulationMode === 'period' ? dias : null,
       displayOffset: null,
       localCompleted: false,
     }))
@@ -114,19 +115,43 @@ export default function SimulationPage() {
       }
 
       const dateOnly = inicio.substring(0, 10).replaceAll('-', '')
-      const response = await startSimulation({
-        envios: enviosKey,
-        inicio: dateOnly,
-        dias,
-        maxEnvios: 5000000,
-        poblacion: 50,
-        generaciones: 10,
-        reporte: false,
-        paralelo: true,
-        hilos: 6,
-        estancamiento: 3,
-        speedMinPerSec: 20,
+      const payload: Parameters<typeof startSimulation>[0] =
+        simulationMode === 'collapse'
+          ? {
+              envios: enviosKey,
+              inicio: dateOnly,
+              colapsoIncremental: true,
+              bloqueDias: 5,
+              intervaloPlanMs: 240000,
+              maxEnvios: 5000000,
+              poblacion: 50,
+              generaciones: 10,
+              reporte: false,
+              paralelo: true,
+              hilos: 6,
+              estancamiento: 3,
+              speedMinPerSec: 20,
+            }
+          : {
+              envios: enviosKey,
+              inicio: dateOnly,
+              dias,
+              maxEnvios: 5000000,
+              poblacion: 50,
+              generaciones: 10,
+              reporte: false,
+              paralelo: true,
+              hilos: 6,
+              estancamiento: 3,
+              speedMinPerSec: 20,
+            }
+
+      console.debug('[SimulationPage] startSimulation payload', {
+        mode: simulationMode,
+        payload,
       })
+
+      const response = await startSimulation(payload)
 
       setSimulation((prev) => ({ ...prev, simId: response.simulationId }))
     } catch (err) {
@@ -227,17 +252,22 @@ export default function SimulationPage() {
   const displayMinute =
     localCompleted && requestedEndMinute !== null ? null : displayMinuteRaw
 
-  const duration = requestedDays ?? (meta ? getInclusiveDaySpan(meta.inicio, meta.fin) : null)
+  const duration = simulationMode === 'collapse'
+    ? 'Hasta colapso'
+    : requestedDays ?? (meta ? getInclusiveDaySpan(meta.inicio, meta.fin) : null)
   const running =
     (status === 'READY' || status === 'RUNNING' || status === 'PAUSED') && !localCompleted
 
   const preparingMessage = isPreparing
-    ? `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
+    ? simulationMode === 'collapse'
+      ? `Calculando simulacion hasta el colapso desde: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
+      : `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
     : null
 
   const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
 
   const bannerMessage = (() => {
+    if (status === 'COMPLETED' && statusMessage) return statusMessage
     if (status === 'COMPLETED') return 'Simulacion finalizada con exito.'
     if (status === 'FAILED') return statusMessage || 'La simulacion finalizo con error.'
     if (status === 'CLOSED') return statusMessage || 'Conexion finalizada.'
@@ -369,15 +399,25 @@ export default function SimulationPage() {
               ) : (
                 <>
                   <div className="tabs">
-                    <button className="tab active">Simulacion del periodo</button>
-                    <button className="tab">Simulacion hasta el colapso</button>
+                    <button
+                      className={`tab ${simulationMode === 'period' ? 'active' : ''}`}
+                      onClick={() => setSimulationMode('period')}
+                    >
+                      Simulacion del periodo
+                    </button>
+                    <button
+                      className={`tab ${simulationMode === 'collapse' ? 'active' : ''}`}
+                      onClick={() => setSimulationMode('collapse')}
+                    >
+                      Simulacion hasta el colapso
+                    </button>
                   </div>
                   <div className="status">
                     <div className="status-item">
                       Fecha: <strong>{displayStartDate}</strong>
                     </div>
                     <div className="status-item">
-                      Duracion: <strong>{duration ? `${duration} dias` : '--'}</strong>
+                      Duracion: <strong>{typeof duration === 'number' ? `${duration} dias` : duration}</strong>
                     </div>
                     <div className="status-item">
                       Vuelos activos: <strong>{cappedSegments.length}</strong>
@@ -414,6 +454,7 @@ export default function SimulationPage() {
             </div>
 
             <SimulationControls
+              mode={simulationMode}
               onStart={handleStart}
               onPause={pause}
               onResume={resume}

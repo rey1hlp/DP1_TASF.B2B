@@ -13,7 +13,7 @@ public class SimulationRunEntity {
     @Column(name = "simulation_id", length = 64, nullable = false, unique = true)
     public String simulationId;
 
-    @Column(name = "tipo", length = 16, nullable = false)
+    @Column(name = "tipo", length = 32, nullable = false)
     public String tipo;
 
     @Column(name = "inicio", length = 8)

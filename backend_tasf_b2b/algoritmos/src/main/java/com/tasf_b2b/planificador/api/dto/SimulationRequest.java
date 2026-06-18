@@ -19,8 +19,11 @@ public class SimulationRequest {
     public Long maxTiempoMs;
 
     public Boolean buscarColapso;
+    public Boolean colapsoIncremental;
     public Boolean reporte;
     public Integer diasExtra;
+    public Integer bloqueDias;
+    public Integer intervaloPlanMs;
 
     public Double speedMinPerSec;
 }

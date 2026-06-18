@@ -24,8 +24,11 @@ export type SimulationRequest = {
   estancamiento?: number
   maxTiempoMs?: number
   buscarColapso?: boolean
+  colapsoIncremental?: boolean
   reporte?: boolean
   diasExtra?: number
+  bloqueDias?: number
+  intervaloPlanMs?: number
   speedMinPerSec?: number
 }
 
@@ -82,6 +85,22 @@ export type WsInitMessage = {
   almacenes: WarehouseStatusDto[]
 }
 
+export type WsAppendMessage = {
+  type: 'append'
+  simulationId: string
+  inicio: string
+  fin: string
+  diaMin: number
+  diaMax: number
+  diasExtra: number
+  totalEnvios: number
+  totalMaletas: number
+  speedMinPerSec: number
+  vuelos: FlightSegmentDto[]
+  almacenes: WarehouseStatusDto[]
+  message?: string | null
+}
+
 export type WsTickMessage = {
   type: 'tick'
   simulationId: string
@@ -95,7 +114,7 @@ export type WsStatusMessage = {
   message?: string | null
 }
 
-export type WsMessage = WsInitMessage | WsTickMessage | WsStatusMessage
+export type WsMessage = WsInitMessage | WsAppendMessage | WsTickMessage | WsStatusMessage
 
 export type PageResponse<T> = {
   content: T[]

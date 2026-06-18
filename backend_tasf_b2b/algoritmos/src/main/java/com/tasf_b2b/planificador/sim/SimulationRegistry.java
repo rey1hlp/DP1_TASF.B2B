@@ -1,7 +1,12 @@
 package com.tasf_b2b.planificador.sim;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
+import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
+import com.tasf_b2b.planificador.api.dto.WarehouseEventDto;
+import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
 import com.tasf_b2b.planificador.sim.ws.SimulationInitMessage;
+import com.tasf_b2b.planificador.sim.ws.SimulationAppendMessage;
 import com.tasf_b2b.planificador.sim.ws.SimulationStatusMessage;
 import com.tasf_b2b.planificador.sim.ws.SimulationTickMessage;
 import org.slf4j.Logger;
@@ -71,6 +76,36 @@ public class SimulationRegistry {
         state.error = error;
         log.warn("[SIM:{}] FAILED -> {}", simulationId, error);
         broadcastStatus(simulationId, state.status.name(), error);
+    }
+
+    public void markCompleted(String simulationId, String message) {
+        SimulationState state = states.get(simulationId);
+        if (state == null) {
+            state = create(simulationId);
+        }
+        state.status = SimulationState.Status.COMPLETED;
+        state.error = message;
+        log.info("[SIM:{}] COMPLETED -> {}", simulationId, message);
+        broadcastStatus(simulationId, state.status.name(), message);
+    }
+
+    public void appendData(String simulationId, SimulationData data) {
+        SimulationState state = states.get(simulationId);
+        if (state == null || state.data == null) {
+            log.warn("[SIM:{}] append skipped because state/data is null", simulationId);
+            return;
+        }
+        SimulationData merged = mergeData(state.data, data);
+        state.data = merged;
+        log.info(
+            "[SIM:{}] APPEND -> vuelos={} almacenes={} envios={} maletas={}",
+            simulationId,
+            data != null && data.vuelos != null ? data.vuelos.size() : 0,
+            data != null && data.almacenes != null ? data.almacenes.size() : 0,
+            merged.totalEnvios,
+            merged.totalMaletas
+        );
+        broadcastAppend(simulationId, merged, data);
     }
 
     public void registerSession(String simulationId, WebSocketSession session) {
@@ -148,7 +183,9 @@ public class SimulationRegistry {
         if (state == null || state.data == null) {
             return;
         }
-        if (state.status != SimulationState.Status.READY && state.status != SimulationState.Status.PAUSED) {
+        if (state.status != SimulationState.Status.READY
+            && state.status != SimulationState.Status.PAUSED
+            && state.status != SimulationState.Status.COMPLETED) {
             return;
         }
         log.info("[WS][SIM:{}] Sending init to sessionId={}", simulationId, session.getId());
@@ -171,6 +208,18 @@ public class SimulationRegistry {
         }
     }
 
+    private void broadcastAppend(String simulationId, SimulationData mergedData, SimulationData blockData) {
+        Set<SessionContext> set = sessions.get(simulationId);
+        if (set == null || set.isEmpty()) {
+            return;
+        }
+        SimulationAppendMessage append = buildAppendMessage(simulationId, mergedData, blockData);
+        log.info("[WS][SIM:{}] Broadcasting append to {} session(s)", simulationId, set.size());
+        for (SessionContext ctx : new ArrayList<>(set)) {
+            send(ctx.session, append);
+        }
+    }
+
     private void broadcastStatus(String simulationId, String status, String message) {
         Set<SessionContext> set = sessions.get(simulationId);
         if (set == null || set.isEmpty()) {
@@ -188,18 +237,48 @@ public class SimulationRegistry {
 
     private SimulationInitMessage buildInitMessage(String simulationId, SimulationData data) {
         SimulationInitMessage init = new SimulationInitMessage();
-        init.simulationId = simulationId;
-        init.inicio = data.inicio;
-        init.fin = data.fin;
-        init.diaMin = data.diaMin;
-        init.diaMax = data.diaMax;
-        init.diasExtra = data.diasExtra;
-        init.totalEnvios = data.totalEnvios;
-        init.totalMaletas = data.totalMaletas;
-        init.speedMinPerSec = data.speedMinPerSec;
-        init.vuelos = data.vuelos;
-        init.almacenes = data.almacenes;
+        fillCommonFields(init, simulationId, data);
         return init;
+    }
+
+    private SimulationAppendMessage buildAppendMessage(String simulationId, SimulationData mergedData, SimulationData blockData) {
+        SimulationAppendMessage append = new SimulationAppendMessage();
+        fillCommonFields(append, simulationId, mergedData);
+        if (blockData != null) {
+            append.vuelos = blockData.vuelos;
+            append.almacenes = blockData.almacenes;
+        }
+        return append;
+    }
+
+    private void fillCommonFields(Object payload, String simulationId, SimulationData data) {
+        if (payload instanceof SimulationInitMessage init) {
+            init.simulationId = simulationId;
+            init.inicio = data.inicio;
+            init.fin = data.fin;
+            init.diaMin = data.diaMin;
+            init.diaMax = data.diaMax;
+            init.diasExtra = data.diasExtra;
+            init.totalEnvios = data.totalEnvios;
+            init.totalMaletas = data.totalMaletas;
+            init.speedMinPerSec = data.speedMinPerSec;
+            init.vuelos = data.vuelos;
+            init.almacenes = data.almacenes;
+            return;
+        }
+        if (payload instanceof SimulationAppendMessage append) {
+            append.simulationId = simulationId;
+            append.inicio = data.inicio;
+            append.fin = data.fin;
+            append.diaMin = data.diaMin;
+            append.diaMax = data.diaMax;
+            append.diasExtra = data.diasExtra;
+            append.totalEnvios = data.totalEnvios;
+            append.totalMaletas = data.totalMaletas;
+            append.speedMinPerSec = data.speedMinPerSec;
+            append.vuelos = data.vuelos;
+            append.almacenes = data.almacenes;
+        }
     }
 
     private void iniciarRelojSesion(String simulationId, WebSocketSession session, double speedMinPerSec) {
@@ -237,14 +316,19 @@ public class SimulationRegistry {
                 long simMin = baseMin + (long) Math.floor((elapsedMs * ctx.speedMinPerSec) / 1000.0);
 
                 if (simMin > maxMin) {
-                    ctx.finalizado = true;
-                    SimulationStatusMessage done = new SimulationStatusMessage();
-                    done.simulationId = simId;
-                    done.status = "COMPLETED";
-                    done.message = null;
-                    log.info("[WS][SIM:{}] Simulation completed for sessionId={}", simId, ctx.session.getId());
-                    send(ctx.session, done);
-                    continue;
+                    if (state.incremental) {
+                        simMin = maxMin;
+                        log.debug("[WS][SIM:{}] Incremental stream clamped at maxMin={} sessionId={}", simId, maxMin, ctx.session.getId());
+                    } else {
+                        ctx.finalizado = true;
+                        SimulationStatusMessage done = new SimulationStatusMessage();
+                        done.simulationId = simId;
+                        done.status = "COMPLETED";
+                        done.message = null;
+                        log.info("[WS][SIM:{}] Simulation completed for sessionId={}", simId, ctx.session.getId());
+                        send(ctx.session, done);
+                        continue;
+                    }
                 }
 
                 SimulationTickMessage tick = new SimulationTickMessage();
@@ -262,11 +346,99 @@ public class SimulationRegistry {
         }
         try {
             String json = mapper.writeValueAsString(payload);
-            log.info("[WS][SEND] sessionId={} payload={}", session.getId(), json);
+            String payloadType = payload != null ? payload.getClass().getSimpleName() : "null";
+            log.info("[WS][SEND] sessionId={} type={} bytes={}", session.getId(), payloadType, json.length());
             session.sendMessage(new TextMessage(json));
         } catch (IOException ex) {
             log.warn("[WS][SEND] Failed sessionId={} error={}", session != null ? session.getId() : "null", ex.getMessage(), ex);
         }
+    }
+
+    private SimulationData mergeData(SimulationData base, SimulationData extra) {
+        if (base == null) {
+            return extra;
+        }
+        if (extra == null) {
+            return base;
+        }
+
+        java.util.List<FlightSegmentDto> vuelos = new java.util.ArrayList<>();
+        if (base.vuelos != null) {
+            vuelos.addAll(base.vuelos);
+        }
+        if (extra.vuelos != null) {
+            vuelos.addAll(extra.vuelos);
+        }
+
+        java.util.List<WarehouseStatusDto> almacenes = mergeWarehouses(base.almacenes, extra.almacenes);
+
+        java.util.Map<String, RespuestaRutaEnvioDto> rutas = new java.util.LinkedHashMap<>();
+        if (base.rutasPorPaquete != null) {
+            rutas.putAll(base.rutasPorPaquete);
+        }
+        if (extra.rutasPorPaquete != null) {
+            rutas.putAll(extra.rutasPorPaquete);
+        }
+
+        int diaMin = Math.min(base.diaMin, extra.diaMin);
+        int diaMax = Math.max(base.diaMax, extra.diaMax);
+        int diasExtra = Math.max(base.diasExtra, extra.diasExtra);
+        int totalEnvios = base.totalEnvios + extra.totalEnvios;
+        long totalMaletas = base.totalMaletas + extra.totalMaletas;
+
+        return new SimulationData(
+            base.inicio != null ? base.inicio : extra.inicio,
+            extra.fin != null ? extra.fin : base.fin,
+            diaMin,
+            diaMax,
+            diasExtra,
+            totalEnvios,
+            totalMaletas,
+            base.speedMinPerSec > 0 ? base.speedMinPerSec : extra.speedMinPerSec,
+            vuelos,
+            almacenes,
+            rutas
+        );
+    }
+
+    private java.util.List<WarehouseStatusDto> mergeWarehouses(
+        java.util.List<WarehouseStatusDto> base,
+        java.util.List<WarehouseStatusDto> extra
+    ) {
+        java.util.Map<String, WarehouseStatusDto> merged = new java.util.LinkedHashMap<>();
+        if (base != null) {
+            for (WarehouseStatusDto dto : base) {
+                merged.put(dto.codigoOaci, cloneWarehouse(dto));
+            }
+        }
+        if (extra != null) {
+            for (WarehouseStatusDto dto : extra) {
+                WarehouseStatusDto current = merged.get(dto.codigoOaci);
+                if (current == null) {
+                    merged.put(dto.codigoOaci, cloneWarehouse(dto));
+                    continue;
+                }
+                java.util.List<com.tasf_b2b.planificador.api.dto.WarehouseEventDto> eventos = new java.util.ArrayList<>();
+                if (current.eventos != null) {
+                    eventos.addAll(current.eventos);
+                }
+                if (dto.eventos != null) {
+                    eventos.addAll(dto.eventos);
+                }
+                eventos.sort(java.util.Comparator.comparingInt(e -> e.minuto));
+                current.eventos = eventos;
+                current.capacidad = dto.capacidad > 0 ? dto.capacidad : current.capacidad;
+            }
+        }
+        return new java.util.ArrayList<>(merged.values());
+    }
+
+    private WarehouseStatusDto cloneWarehouse(WarehouseStatusDto source) {
+        WarehouseStatusDto copy = new WarehouseStatusDto();
+        copy.codigoOaci = source.codigoOaci;
+        copy.capacidad = source.capacidad;
+        copy.eventos = source.eventos != null ? new java.util.ArrayList<>(source.eventos) : new java.util.ArrayList<>();
+        return copy;
     }
 
     private static class SessionContext {

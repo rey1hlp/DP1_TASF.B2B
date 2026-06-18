@@ -9,5 +9,6 @@ public class SimulationResponse {
     public long maletas;
     public int diasExtra;
     public double speedMinPerSec;
+    public String modo;
     public String message;
 }
