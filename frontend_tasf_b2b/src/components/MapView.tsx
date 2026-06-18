@@ -23,6 +23,11 @@ export type MapViewProps = {
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
 const DEFAULT_ZOOM = 2
+const MAP_PANES = {
+  route: 'tasf-route-pane',
+  airport: 'tasf-airport-pane',
+  plane: 'tasf-plane-pane',
+} as const
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -80,19 +85,30 @@ function buildAirportIcon(
   colors: { stroke: string; fill: string },
   isSelected: boolean
 ) {
-  const size = isSelected ? 34 : 26;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"
+  const markerSize = isSelected ? 42 : 34
+  const iconSize = isSelected ? 30 : 24
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
     fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
     <path d="${AIRPORT_PATH}"/>
-  </svg>`;
+  </svg>`
 
   return L.divIcon({
     className: 'airport-marker',
-    html: `<div style="width:${size}px;height:${size}px;">${svg}</div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+    html: `<div style="
+      width:${markerSize}px;
+      height:${markerSize}px;
+      border-radius:999px;
+      background:#ffffff;
+      border:1px solid rgba(15, 23, 42, 0.18);
+      display:grid;
+      place-items:center;
+      box-shadow:0 2px 7px rgba(15, 23, 42, 0.25);
+    ">${svg}</div>`,
+    iconSize: [markerSize, markerSize],
+    iconAnchor: [markerSize / 2, markerSize / 2],
+  })
 }
 
 function resolveSemaphoreColor(percent: number, ranges: { greenMax: number; amberMax: number }) {
@@ -123,6 +139,31 @@ export default function MapView({
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
+  const resizeFrameRef = useRef<number | null>(null)
+  const resizeTimerRef = useRef<number | null>(null)
+
+  const invalidateMapSize = () => {
+    if (!mapRef.current) {
+      return
+    }
+
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current)
+    }
+    if (resizeTimerRef.current !== null) {
+      window.clearTimeout(resizeTimerRef.current)
+    }
+
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      mapRef.current?.invalidateSize({ animate: false })
+      resizeFrameRef.current = null
+    })
+
+    resizeTimerRef.current = window.setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: false })
+      resizeTimerRef.current = null
+    }, 350)
+  }
 
   useEffect(() => {
     if (mapRef.current || !containerRef.current) {
@@ -133,6 +174,14 @@ export default function MapView({
       zoomControl: false,
       worldCopyJump: true,
     }).setView(DEFAULT_CENTER, DEFAULT_ZOOM)
+
+    const routePane = map.createPane(MAP_PANES.route)
+    const airportPane = map.createPane(MAP_PANES.airport)
+    const planePane = map.createPane(MAP_PANES.plane)
+
+    routePane.style.zIndex = '420'
+    airportPane.style.zIndex = '520'
+    planePane.style.zIndex = '620'
 
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012',
@@ -147,13 +196,31 @@ export default function MapView({
     mapRef.current = map
   }, [])
 
-  // Notifica a Leaflet que el contenedor cambió de tamaño para evitar que el mapa se vea gris
+  // Leaflet no detecta cambios de tamaño provocados por CSS grid/flex, como el colapso del sidebar.
   useEffect(() => {
-    if (mapRef.current) {
-      const timer = setTimeout(() => mapRef.current?.invalidateSize(), 350);
-      return () => clearTimeout(timer);
+    const container = containerRef.current
+    if (!container) {
+      return
     }
-  }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed]);
+
+    const observer = new ResizeObserver(() => invalidateMapSize())
+    observer.observe(container)
+    invalidateMapSize()
+
+    return () => {
+      observer.disconnect()
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current)
+      }
+      if (resizeTimerRef.current !== null) {
+        window.clearTimeout(resizeTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    invalidateMapSize()
+  }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed])
 
   useEffect(() => {
     if (!airportLayerRef.current) {
@@ -171,7 +238,8 @@ export default function MapView({
 
       const icon = buildAirportIcon(colors, isSelected)
       const marker = L.marker([airport.latitud, airport.longitud], {
-        icon
+        icon,
+        pane: MAP_PANES.airport,
       })
       const tooltipParts = [
         `${airport.codigoOaci} - ${airport.nombre}`,
@@ -237,7 +305,10 @@ export default function MapView({
       ]
       const tooltip = `${tooltipParts.join('<br/>')}`
 
-      const marker = L.marker([lat, lon], { icon })
+      const marker = L.marker([lat, lon], {
+        icon,
+        pane: MAP_PANES.plane,
+      })
       marker.bindTooltip(tooltip, {
         direction: 'top',
         permanent: isSelected,
@@ -278,7 +349,8 @@ export default function MapView({
           color: '#0dcaf0',
           weight: 4,
           dashArray: '8, 8',
-          opacity: 0.8
+          opacity: 0.8,
+          pane: MAP_PANES.route,
         }).addTo(routeLayerRef.current)
 
         if (mapRef.current) {
