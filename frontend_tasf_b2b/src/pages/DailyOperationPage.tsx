@@ -41,6 +41,7 @@ type DailyOperationSnapshot = {
   warehouseSnapshot?: WarehouseSnapshot
   shipmentSummary?: ShipmentSummary
   alerts?: OperationAlert[]
+  envios?: any[]
 }
 
 type DailyOperationEvent =
@@ -132,19 +133,6 @@ export default function DailyOperationPage() {
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchSamples = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/db/shipments?size=100`)
-        const data = await res.json()
-        if (data.content) {
-          setSampleShipments(data.content.map((s: any) => s.codigoPedido))
-        }
-      } catch (e) {}
-    }
-    fetchSamples()
-  }, [])
-
   const handleSearchShipment = async (codigo: string) => {
     setShipmentSearchError(null)
     try {
@@ -202,6 +190,10 @@ export default function DailyOperationPage() {
 
     if (snapshot.alerts) {
       setAlerts(snapshot.alerts)
+    }
+
+    if (snapshot.envios) {
+      setSampleShipments(snapshot.envios.map((s: any) => s.codigoPedido))
     }
 
     if (snapshot.timestamp) {
