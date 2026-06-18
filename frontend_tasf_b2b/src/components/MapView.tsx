@@ -23,6 +23,11 @@ export type MapViewProps = {
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
 const DEFAULT_ZOOM = 2
+const MAP_PANES = {
+  route: 'tasf-route-pane',
+  airport: 'tasf-airport-pane',
+  plane: 'tasf-plane-pane',
+} as const
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -170,6 +175,14 @@ export default function MapView({
       worldCopyJump: true,
     }).setView(DEFAULT_CENTER, DEFAULT_ZOOM)
 
+    const routePane = map.createPane(MAP_PANES.route)
+    const airportPane = map.createPane(MAP_PANES.airport)
+    const planePane = map.createPane(MAP_PANES.plane)
+
+    routePane.style.zIndex = '420'
+    airportPane.style.zIndex = '520'
+    planePane.style.zIndex = '620'
+
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012',
     }).addTo(map)
@@ -225,7 +238,8 @@ export default function MapView({
 
       const icon = buildAirportIcon(colors, isSelected)
       const marker = L.marker([airport.latitud, airport.longitud], {
-        icon
+        icon,
+        pane: MAP_PANES.airport,
       })
       const tooltipParts = [
         `${airport.codigoOaci} - ${airport.nombre}`,
@@ -291,7 +305,10 @@ export default function MapView({
       ]
       const tooltip = `${tooltipParts.join('<br/>')}`
 
-      const marker = L.marker([lat, lon], { icon })
+      const marker = L.marker([lat, lon], {
+        icon,
+        pane: MAP_PANES.plane,
+      })
       marker.bindTooltip(tooltip, {
         direction: 'top',
         permanent: isSelected,
@@ -332,7 +349,8 @@ export default function MapView({
           color: '#0dcaf0',
           weight: 4,
           dashArray: '8, 8',
-          opacity: 0.8
+          opacity: 0.8,
+          pane: MAP_PANES.route,
         }).addTo(routeLayerRef.current)
 
         if (mapRef.current) {
