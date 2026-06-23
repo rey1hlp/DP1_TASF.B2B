@@ -6,10 +6,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 public interface ShipmentRepository extends JpaRepository<ShipmentEntity, Long> {
     Page<ShipmentEntity> findAllByOrderByAuditDateInsDesc(Pageable pageable);
 
     ShipmentEntity findByCodigoPedido(String codigoPedido);
+
+    List<ShipmentEntity> findByCodigoPedidoIn(List<String> codigosPedido);
 
     @Query("""
         select s from ShipmentEntity s

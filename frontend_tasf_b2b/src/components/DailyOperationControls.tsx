@@ -34,6 +34,7 @@ export type DailyOperationControlsProps = {
   shipmentSummary: {
     total: number
     pending: number
+    assigned: number
     inTransit: number
     delivered: number
   } | null
@@ -403,6 +404,11 @@ export default function DailyOperationControls({
               <div className="metric">
                 <div className="metric-value">{shipmentSummary?.total ?? '--'}</div>
                 <div className="metric-label">Totales</div>
+              </div>
+
+              <div className="metric">
+                <div className="metric-value">{shipmentSummary?.assigned ?? '--'}</div>
+                <div className="metric-label">Asignados</div>
               </div>
 
               <div className="metric">

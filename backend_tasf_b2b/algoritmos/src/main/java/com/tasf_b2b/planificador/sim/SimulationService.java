@@ -54,7 +54,7 @@ public class SimulationService {
     private static final double DEFAULT_CRUCE = 0.85;
     private static final double DEFAULT_MUTACION = 0.05;
     private static final int DEFAULT_TORNEO = 5;
-    private static final double DEFAULT_SPEED_MIN_PER_SEC = 20.0;
+    private static final double DEFAULT_SPEED_MIN_PER_SEC = 4.0;
     private static final Logger log = LoggerFactory.getLogger(SimulationService.class);
 
     private final SimulationRegistry registry;
@@ -121,6 +121,7 @@ public class SimulationService {
         SimulationState created = registry.get(simulationId);
         if (created != null) {
             created.incremental = collapseStreaming;
+            created.request = request;
         }
 
         executor.submit(() -> {
@@ -603,6 +604,40 @@ public class SimulationService {
             actualizarRunFinal(simulationId, SimulationState.Status.FAILED.name(), null);
         } finally {
             log.info("[SIM:{}] Incremental collapse simulation finished in {} ms", simulationId, System.currentTimeMillis() - simulationStart);
+        }
+    }
+
+    public void refreshActiveSimulations(String triggerType, String detail) {
+        for (String simulationId : registry.getSimulationIds()) {
+            SimulationState state = registry.get(simulationId);
+            if (state == null || state.data == null || state.request == null) {
+                continue;
+            }
+            if (state.status != SimulationState.Status.READY && state.status != SimulationState.Status.PAUSED) {
+                continue;
+            }
+            boolean wasPaused = state.status == SimulationState.Status.PAUSED;
+            state.startPausedAfterReady = wasPaused;
+            log.info(
+                "[SIM:{}] refresh requested triggerType={} detail={} wasPaused={}",
+                simulationId,
+                triggerType,
+                detail,
+                wasPaused
+            );
+            registry.pauseSimulation(simulationId);
+            registry.markRunning(simulationId, "Recalculando por " + triggerType);
+            SimulationRequest request = state.request;
+            executor.submit(() -> {
+                try {
+                    ejecutar(simulationId, request);
+                    if (wasPaused) {
+                        registry.pauseSimulation(simulationId);
+                    }
+                } catch (Exception ex) {
+                    log.error("[SIM:{}] refresh failed triggerType={} detail={}", simulationId, triggerType, detail, ex);
+                }
+            });
         }
     }
 

@@ -1,5 +1,7 @@
 // src/contexts/SimulationContext.tsx
 import { createContext, useContext, useState, type ReactNode } from 'react'
+import { useSimulationSocket } from '../hooks/useSimulationSocket'
+import type { FlightSegmentDto, WsAppendMessage, WsInitMessage } from '../types/sim'
 
 interface SimulationState {
   simId: string | null
@@ -16,6 +18,13 @@ interface SimulationContextType {
   simulation: SimulationState
   setSimulation: React.Dispatch<React.SetStateAction<SimulationState>>
   resetSimulation: () => void
+  status: string
+  statusMessage: string | null
+  currentMinute: number | null
+  segments: FlightSegmentDto[]
+  meta: WsInitMessage | WsAppendMessage | null
+  pause: () => void
+  resume: () => void
 }
 
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined)
@@ -30,6 +39,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     localCompleted: false,
     ranges: { greenMax: 30, amberMax: 70 },
   })
+  const { status, statusMessage, currentMinute, segments, meta, pause, resume } =
+    useSimulationSocket(simulation.simId)
 
   const resetSimulation = () => {
     setSimulation({
@@ -50,6 +61,13 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         simulation,
         setSimulation,
         resetSimulation,
+        status,
+        statusMessage,
+        currentMinute,
+        segments,
+        meta,
+        pause,
+        resume,
       }}
     >
       {children}

@@ -273,11 +273,21 @@ export async function uploadFlightsTxt(file: File): Promise<BulkImportResult> {
   return res.json()
 }
 
-export async function cancelFlightDay(id: number, fecha: string): Promise<void> {
+export type FlightDayCancelContext = {
+  contextDate?: string | null
+  contextMinuteOfDay?: number | null
+}
+
+export async function cancelFlightDay(id: number, fecha: string, context?: FlightDayCancelContext): Promise<void> {
   const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ flightId: id, fecha }),
+    body: JSON.stringify({
+      flightId: id,
+      fecha,
+      contextDate: context?.contextDate ?? null,
+      contextMinuteOfDay: context?.contextMinuteOfDay ?? null,
+    }),
   })
   if (res.status === 409) {
     throw new Error('Este vuelo ya está cancelado para ese día')

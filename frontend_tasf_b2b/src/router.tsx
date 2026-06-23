@@ -10,7 +10,6 @@ import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
 import ShipmentsCrud from './components/ShipmentsCrud'
 
-import { SimulationProvider } from './contexts/SimulationContext'
 import { PlaneIconDebug } from './debug/PlaneIconDebug'
 
 function FlightsRoute() {
@@ -72,11 +71,7 @@ function AirportWarehouseRoute() {
 }
 
 function SimulationRoute() {
-  return (
-    <SimulationProvider>
-      <SimulationPage />
-    </SimulationProvider>
-  )
+  return <SimulationPage />
 }
 
 export const router = createBrowserRouter([

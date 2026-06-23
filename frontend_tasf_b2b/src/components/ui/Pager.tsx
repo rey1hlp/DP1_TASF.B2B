@@ -9,7 +9,7 @@ type PagerProps = {
 
 export default function Pager({ page, totalPages, onPrev, onNext }: PagerProps) {
   return (
-    <div className="crud-pager">
+    <div className="crud-pagination">
       <Button variant="default" onClick={onPrev} disabled={page <= 0}>
         Anterior
       </Button>

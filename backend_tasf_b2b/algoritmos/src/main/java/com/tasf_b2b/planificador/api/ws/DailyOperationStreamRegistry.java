@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class DailyOperationStreamRegistry {
-    private static final long TICK_MS = 10_000L;
+    private static final long TICK_MS = 2_000L;
     private static final Logger log = LoggerFactory.getLogger(DailyOperationStreamRegistry.class);
 
     private final ObjectMapper mapper;

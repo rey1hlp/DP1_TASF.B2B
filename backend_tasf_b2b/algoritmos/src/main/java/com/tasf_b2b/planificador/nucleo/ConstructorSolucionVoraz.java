@@ -43,9 +43,11 @@ public final class ConstructorSolucionVoraz {
     ) {
         Individuo ind = new Individuo(envios.size());
         Contexto contexto = new Contexto(grafo, vuelos, maxEscalas);
+        Map<Integer, Integer> indiceVuelo = construirIndiceVuelos(vuelos);
         int[] capacidadResidual = new int[vuelos.size()];
-        for (Vuelo vuelo : vuelos) {
-            capacidadResidual[vuelo.id] = vuelo.capacidad;
+        for (int i = 0; i < vuelos.size(); i++) {
+            Vuelo vuelo = vuelos.get(i);
+            capacidadResidual[i] = vuelo.capacidad;
         }
 
         List<Integer> orden = new ArrayList<>(envios.size());
@@ -66,12 +68,17 @@ public final class ConstructorSolucionVoraz {
                 maxEscalas,
                 minEscalaMin,
                 minRecojoMin,
-                contexto
+                contexto,
+                indiceVuelo
             );
             if (ruta != null && ruta.cumpleSLA) {
                 ind.asignaciones[idx] = ruta;
                 for (Vuelo vuelo : ruta.vuelos) {
-                    capacidadResidual[vuelo.id] -= envio.cantidad;
+                    Integer idxVuelo = indiceVuelo.get(vuelo.id);
+                    if (idxVuelo == null || idxVuelo < 0 || idxVuelo >= capacidadResidual.length) {
+                        continue;
+                    }
+                    capacidadResidual[idxVuelo] -= envio.cantidad;
                 }
             } else {
                 ind.asignaciones[idx] = new Ruta(null, envio.horaIngresoMin, envio.slaHoras, minRecojoMin);
@@ -111,7 +118,8 @@ public final class ConstructorSolucionVoraz {
                     maxEscalas,
                     minEscalaMin,
                     minRecojoMin,
-                    contexto
+                    contexto,
+                    null
                 );
                 if (ruta != null && ruta.cumpleSLA) {
                     cache.put(clave, PlantillaRuta.desde(ruta, envio));
@@ -141,7 +149,8 @@ public final class ConstructorSolucionVoraz {
             maxEscalas,
             minEscalaMin,
             minRecojoMin,
-            new Contexto(grafo, grafo.obtenerVuelos(), maxEscalas)
+            new Contexto(grafo, grafo.obtenerVuelos(), maxEscalas),
+            construirIndiceVuelos(grafo.obtenerVuelos())
         );
     }
 
@@ -152,7 +161,8 @@ public final class ConstructorSolucionVoraz {
         int maxEscalas,
         int minEscalaMin,
         int minRecojoMin,
-        Contexto contexto
+        Contexto contexto,
+        Map<Integer, Integer> indiceVuelo
     ) {
         int[][] mejorTiempo = contexto.takeMejorTiempo();
         for (int i = 0; i < mejorTiempo.length; i++) {
@@ -194,8 +204,20 @@ public final class ConstructorSolucionVoraz {
                 if (vuelo.salidaMin < tiempoMinimoSalida) {
                     continue;
                 }
-                if (capacidadResidual != null && capacidadResidual[vuelo.id] < envio.cantidad) {
+                if (capacidadResidual != null && indiceVuelo != null) {
+                    Integer idxVuelo = indiceVuelo.get(vuelo.id);
+                    if (idxVuelo == null || idxVuelo < 0 || idxVuelo >= capacidadResidual.length) {
+                        continue;
+                    }
+                    if (capacidadResidual[idxVuelo] < envio.cantidad) {
+                        continue;
+                    }
+                }
+                if (capacidadResidual != null && indiceVuelo == null) {
                     continue;
+                }
+                if (capacidadResidual == null) {
+                    // sin control de capacidad
                 }
 
                 int tiempoFinalMin = vuelo.llegadaMin + minRecojoMin;
@@ -255,6 +277,14 @@ public final class ConstructorSolucionVoraz {
             aeropuertoIndex.put(codigo, next++);
         }
         return aeropuertoIndex;
+    }
+
+    private static Map<Integer, Integer> construirIndiceVuelos(List<Vuelo> vuelos) {
+        Map<Integer, Integer> indice = new HashMap<>();
+        for (int i = 0; i < vuelos.size(); i++) {
+            indice.put(vuelos.get(i).id, i);
+        }
+        return indice;
     }
 
     private static class Contexto {

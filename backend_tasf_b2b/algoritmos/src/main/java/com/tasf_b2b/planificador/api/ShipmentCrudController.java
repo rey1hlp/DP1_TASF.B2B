@@ -400,7 +400,7 @@ public class ShipmentCrudController {
         target.cantidad = Math.max(0, source.cantidad);
         target.idCliente = source.idCliente.trim();
         target.slaHoras = source.slaHoras;
-        target.status = source.status;
+        target.status = source.status != null ? source.status : (target.status != null ? target.status : ShipmentStatus.PENDING);
         return true;
     }
 

@@ -1,8 +1,8 @@
-import type { WsInitMessage } from '../types/sim'
+import type { WsAppendMessage, WsInitMessage } from '../types/sim'
 import { formatClockFromMinute, formatCompactDate, formatDateFromDayIndex } from '../utils/time'
 
 export type SimulationStatusProps = {
-  meta: WsInitMessage | null
+  meta: WsInitMessage | WsAppendMessage | null
   currentMinute: number | null
   status: string
   preparingMessage?: string | null

@@ -22,6 +22,7 @@ type FlightStatus =
 type ShipmentSummary = {
   total: number
   pending: number
+  assigned: number
   inTransit: number
   delivered: number
 }
@@ -361,7 +362,7 @@ export default function DailyOperationPage() {
     const activePct = totalFlights > 0 ? (totalActive * 100) / totalFlights : 0
   
     const shipmentProgressPct = shipmentSummary?.total
-      ? ((shipmentSummary.delivered + shipmentSummary.inTransit) * 100) /
+      ? ((shipmentSummary.delivered + shipmentSummary.inTransit + shipmentSummary.assigned) * 100) /
         shipmentSummary.total
       : 0
   

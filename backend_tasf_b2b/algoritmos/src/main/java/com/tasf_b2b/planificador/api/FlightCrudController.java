@@ -6,9 +6,12 @@ import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
+import com.tasf_b2b.planificador.persistence.ShipmentEntity;
+import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
+import com.tasf_b2b.planificador.sim.SimulationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -39,20 +42,26 @@ public class FlightCrudController {
     private static final Logger log = LoggerFactory.getLogger(FlightCrudController.class);
     private final FlightRepository repository;
     private final AirportRepository airportRepository;
+    private final ShipmentRepository shipmentRepository;
     private final JdbcTemplate jdbcTemplate;
     private final DailyPlanningService dailyPlanningService;
+    private final SimulationService simulationService;
     private static final int BATCH_SIZE = 2000; // Aumentado de 500 a 2000
 
     public FlightCrudController(
         FlightRepository repository,
         AirportRepository airportRepository,
+        ShipmentRepository shipmentRepository,
         JdbcTemplate jdbcTemplate,
-        DailyPlanningService dailyPlanningService
+        DailyPlanningService dailyPlanningService,
+        SimulationService simulationService
     ) {
         this.repository = repository;
         this.airportRepository = airportRepository;
+        this.shipmentRepository = shipmentRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.dailyPlanningService = dailyPlanningService;
+        this.simulationService = simulationService;
     }
 
     // ==================== ENDPOINTS EXISTENTES (sin cambios) ====================
@@ -71,38 +80,54 @@ public class FlightCrudController {
             return ResponseEntity.notFound().build();
         }
 
-        String fechaVuelo = flight.salida.toLocalDate().toString().replace("-", "");
+        String origenOaci = flight.origen.codigoOaci.trim().toUpperCase();
+        String destinoOaci = flight.destino.codigoOaci.trim().toUpperCase();
+        int salidaMin = flight.salida.getHour() * 60 + flight.salida.getMinute();
 
-        String sql = "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
-                    "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
-                    "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
-                    "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
-                    "FROM shipment s " +
-                    "JOIN airport ao ON s.origen_id = ao.id " +
-                    "JOIN airport ad ON s.destino_id = ad.id " +
-                    "WHERE s.origen_id = ? AND s.destino_id = ? AND s.fecha = ?";
+        // Primary: use the in-memory plan to find exactly which shipments are assigned to this flight
+        List<String> codes = dailyPlanningService.getShipmentCodesForFlight(origenOaci, destinoOaci, salidaMin);
+        if (!codes.isEmpty()) {
+            log.info(
+                "[FLIGHT_CRUD] flight shipments resolved from current plan flightId={} origen={} destino={} salidaMin={} count={}",
+                id,
+                origenOaci,
+                destinoOaci,
+                salidaMin,
+                codes.size()
+            );
+            List<ShipmentCrudDto> result = shipmentRepository.findByCodigoPedidoIn(codes).stream()
+                .map(this::shipmentToDto)
+                .collect(java.util.stream.Collectors.toList());
+            return ResponseEntity.ok(result);
+        }
+        log.warn(
+            "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} salidaMin={} -> returning empty list",
+            id,
+            origenOaci,
+            destinoOaci,
+            salidaMin
+        );
+        return ResponseEntity.ok(List.of());
+    }
 
-        List<ShipmentCrudDto> shipments = jdbcTemplate.query(sql, (rs, rowNum) -> {
-            ShipmentCrudDto dto = new ShipmentCrudDto();
-            dto.id = rs.getLong("id");
-            dto.codigoPedido = rs.getString("codigo_pedido");
-            dto.origen = rs.getString("origen_oaci");
-            dto.origenCiudad = rs.getString("origen_ciudad");
-            dto.destino = rs.getString("destino_oaci");
-            dto.destinoCiudad = rs.getString("destino_ciudad");
-            dto.fecha = rs.getString("fecha");
-            dto.ingresoUtc = rs.getTimestamp("hora_ingreso_utc").toLocalDateTime();
-            dto.ingresoLocal = rs.getTimestamp("hora_ingreso_local").toLocalDateTime();
-            dto.gmtOffset = rs.getInt("gmt_offset");
-            dto.cantidad = rs.getInt("cantidad");
-            dto.idCliente = rs.getString("id_cliente");
-            dto.slaHoras = rs.getInt("sla_horas");
-            dto.status = ShipmentStatus.valueOf(rs.getString("status"));
-            dto.auditDateIns = rs.getTimestamp("audit_date_ins").toLocalDateTime();
-            return dto;
-        }, flight.origen.id, flight.destino.id, fechaVuelo);
-
-        return ResponseEntity.ok(shipments);
+    private ShipmentCrudDto shipmentToDto(ShipmentEntity entity) {
+        ShipmentCrudDto dto = new ShipmentCrudDto();
+        dto.id = entity.id;
+        dto.codigoPedido = entity.codigoPedido;
+        dto.origen = entity.origen != null ? entity.origen.codigoOaci : null;
+        dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
+        dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
+        dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
+        dto.fecha = entity.fecha;
+        dto.ingresoUtc = entity.ingresoUtc;
+        dto.ingresoLocal = entity.ingresoLocal;
+        dto.gmtOffset = entity.gmtOffset;
+        dto.cantidad = entity.cantidad;
+        dto.idCliente = entity.idCliente;
+        dto.slaHoras = entity.slaHoras;
+        dto.status = entity.status;
+        dto.auditDateIns = entity.auditDateIns;
+        return dto;
     }
 
     @GetMapping
@@ -138,6 +163,7 @@ public class FlightCrudController {
         FlightEntity saved = repository.save(entity);
         log.info("[FLIGHT_CRUD] create saved id={} codigo={} cancelado={}", saved.id, saved.codigo, saved.cancelado);
         dailyPlanningService.replanNow("FLIGHT_CREATE", "nuevo vuelo");
+        simulationService.refreshActiveSimulations("FLIGHT_CREATE", "flightId=" + saved.id);
         return ResponseEntity.ok(toDto(saved));
     }
 
@@ -263,6 +289,7 @@ public class FlightCrudController {
                 skipped
             );
             dailyPlanningService.replanNow("FLIGHT_IMPORT", "txt masivo");
+            simulationService.refreshActiveSimulations("FLIGHT_IMPORT", file.getOriginalFilename());
         } else {
             log.info(
                 "[FLIGHT_CRUD] import finished file={} inserted={} updated={} skipped={} -> no replan",
@@ -349,6 +376,7 @@ public class FlightCrudController {
         );
         if (requiresReplan) {
             dailyPlanningService.replanNow("FLIGHT_UPDATE", saved.cancelado ? "flight cancelled" : "flight updated");
+            simulationService.refreshActiveSimulations("FLIGHT_UPDATE", "flightId=" + saved.id + " cancelado=" + saved.cancelado);
         }
         return ResponseEntity.ok(toDto(saved));
     }
@@ -362,6 +390,7 @@ public class FlightCrudController {
         log.info("[FLIGHT_CRUD] delete id={}", id);
         repository.deleteById(id);
         dailyPlanningService.replanNow("FLIGHT_DELETE", "vuelo eliminado");
+        simulationService.refreshActiveSimulations("FLIGHT_DELETE", "flightId=" + id);
         return ResponseEntity.noContent().build();
     }
 

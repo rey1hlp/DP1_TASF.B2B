@@ -13,7 +13,7 @@ export function useSimulationSocket(simId: string | null) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [currentMinute, setCurrentMinute] = useState<number | null>(null)
   const [segments, setSegments] = useState<FlightSegmentDto[]>([])
-  const [meta, setMeta] = useState<WsInitMessage | null>(null)
+  const [meta, setMeta] = useState<WsInitMessage | WsAppendMessage | null>(null)
 
   useEffect(() => {
     if (!simId) {

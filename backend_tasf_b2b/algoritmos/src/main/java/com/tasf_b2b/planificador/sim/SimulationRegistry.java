@@ -50,6 +50,10 @@ public class SimulationRegistry {
         return states.get(simulationId);
     }
 
+    public java.util.List<String> getSimulationIds() {
+        return new java.util.ArrayList<>(states.keySet());
+    }
+
     public void markReady(String simulationId, SimulationData data) {
         SimulationState state = states.get(simulationId);
         if (state == null) {
@@ -76,6 +80,17 @@ public class SimulationRegistry {
         state.error = error;
         log.warn("[SIM:{}] FAILED -> {}", simulationId, error);
         broadcastStatus(simulationId, state.status.name(), error);
+    }
+
+    public void markRunning(String simulationId, String message) {
+        SimulationState state = states.get(simulationId);
+        if (state == null) {
+            state = create(simulationId);
+        }
+        state.status = SimulationState.Status.RUNNING;
+        state.error = message;
+        log.info("[SIM:{}] RUNNING -> {}", simulationId, message);
+        broadcastStatus(simulationId, state.status.name(), message);
     }
 
     public void markCompleted(String simulationId, String message) {
@@ -143,6 +158,7 @@ public class SimulationRegistry {
             return;
         }
         state.status = SimulationState.Status.READY;
+        state.startPausedAfterReady = false;
         Set<SessionContext> set = sessions.get(simulationId);
         if (set == null || set.isEmpty()) {
             return;
@@ -190,7 +206,7 @@ public class SimulationRegistry {
         }
         log.info("[WS][SIM:{}] Sending init to sessionId={}", simulationId, session.getId());
         send(session, buildInitMessage(simulationId, state.data));
-        if (state.status == SimulationState.Status.READY) {
+        if (state.status == SimulationState.Status.READY && !state.startPausedAfterReady) {
             iniciarRelojSesion(simulationId, session, state.data.speedMinPerSec);
         }
     }
@@ -200,11 +216,17 @@ public class SimulationRegistry {
         if (set == null || set.isEmpty()) {
             return;
         }
+        SimulationState state = states.get(simulationId);
+        boolean startClock = state != null
+            && state.status == SimulationState.Status.READY
+            && !state.startPausedAfterReady;
         SimulationInitMessage init = buildInitMessage(simulationId, data);
         log.info("[WS][SIM:{}] Broadcasting init to {} session(s)", simulationId, set.size());
         for (SessionContext ctx : new ArrayList<>(set)) {
             send(ctx.session, init);
-            iniciarRelojSesion(simulationId, ctx.session, data.speedMinPerSec);
+            if (startClock) {
+                iniciarRelojSesion(simulationId, ctx.session, data.speedMinPerSec);
+            }
         }
     }
 

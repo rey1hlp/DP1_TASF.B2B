@@ -5,7 +5,8 @@ import com.tasf_b2b.planificador.api.dto.DailyShipmentSummaryDto;
 import com.tasf_b2b.planificador.api.dto.DailyWarehouseSnapshotDto;
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
 import com.tasf_b2b.planificador.api.dto.OperationAlertDto;
-    import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
+import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
+import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
@@ -27,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,6 +41,7 @@ public class DailyOperationService {
     private final AirportRepository airportRepository;
     private final ShipmentRepository shipmentRepository;
     private final DailyPlanningService dailyPlanningService;
+    private final Map<String, Boolean> observedInTransit = new ConcurrentHashMap<>();
 
     public DailyOperationService(
         AirportRepository airportRepository,
@@ -75,14 +78,11 @@ public class DailyOperationService {
                 LinkedHashMap::new
             ));
 
-        List<ShipmentEntity> shipments = shipmentRepository.findAll().stream()
+        List<ShipmentEntity> shipmentsForDate = shipmentRepository.findAll().stream()
             .filter(this::isValidShipment)
             .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipment.fecha))
-            .filter(shipment -> airportFilter == null
-                || airportFilter.equals(shipmentOrigen(shipment))
-                || airportFilter.equals(shipmentDestino(shipment)))
             .collect(Collectors.toList());
-        log.info("[DAILY_OP] shipments matched snapshot={}", shipments.size());
+        log.info("[DAILY_OP] shipments matched snapshot={}", shipmentsForDate.size());
 
         List<FlightSegmentDto> segments = dailyPlanningService.getCurrentPlanSegments().stream()
             .filter(segment -> airportFilter == null
@@ -91,6 +91,14 @@ public class DailyOperationService {
             .sorted(Comparator.comparingInt(segment -> segment.salidaMin))
             .collect(Collectors.toList());
         log.info("[DAILY_OP] segments matched snapshot={}", segments.size());
+
+        syncShipmentStatuses(shipmentsForDate, currentMinute);
+
+        List<ShipmentEntity> shipments = shipmentsForDate.stream()
+            .filter(shipment -> airportFilter == null
+                || airportFilter.equals(shipmentOrigen(shipment))
+                || airportFilter.equals(shipmentDestino(shipment)))
+            .collect(Collectors.toList());
 
         Map<String, DailyWarehouseSnapshotDto> warehouseSnapshot = buildWarehouseSnapshot(
             airportEntities,
@@ -126,7 +134,7 @@ public class DailyOperationService {
             if (origen == null) {
                 continue;
             }
-            if (shipment.status != ShipmentStatus.PENDING && shipment.status != ShipmentStatus.CANCELLED) {
+            if (shipment.status == ShipmentStatus.IN_TRANSIT || shipment.status == ShipmentStatus.DELIVERED) {
                 continue;
             }
             ocupacionPorAeropuerto.merge(origen, (long) Math.max(0, shipment.cantidad), Long::sum);
@@ -161,6 +169,9 @@ public class DailyOperationService {
         long pending   = shipments.stream()
             .filter(s -> s.status == ShipmentStatus.PENDING)
             .mapToLong(this::cantidadSegura).sum();
+        long assigned  = shipments.stream()
+            .filter(s -> s.status == ShipmentStatus.ASSIGNED)
+            .mapToLong(this::cantidadSegura).sum();
         long inTransit = shipments.stream()
             .filter(s -> s.status == ShipmentStatus.IN_TRANSIT)
             .mapToLong(this::cantidadSegura).sum();
@@ -171,9 +182,90 @@ public class DailyOperationService {
         DailyShipmentSummaryDto dto = new DailyShipmentSummaryDto();
         dto.total     = total;
         dto.pending   = pending;
+        dto.assigned  = assigned;
         dto.inTransit = inTransit;
         dto.delivered = delivered;
         return dto;
+    }
+
+    private void syncShipmentStatuses(List<ShipmentEntity> shipments, int currentMinute) {
+        if (shipments == null || shipments.isEmpty()) {
+            return;
+        }
+
+        List<ShipmentEntity> changed = new ArrayList<>();
+        for (ShipmentEntity shipment : shipments) {
+            if (shipment == null || shipment.status == ShipmentStatus.CANCELLED) {
+                continue;
+            }
+            RespuestaRutaEnvioDto route = dailyPlanningService.getShipmentRoute(shipment.codigoPedido);
+            // Only transition status when the shipment has an active route in the current plan.
+            // Without a route the status is kept as-is, avoiding stale cross-day DELIVERED transitions.
+            if (route == null || route.ruta == null || route.ruta.isEmpty()) {
+                log.debug("[DAILY_OP] shipment route missing code={} status={} currentMinute={}", shipment.codigoPedido, shipment.status, currentMinute);
+                continue;
+            }
+            ShipmentStatus next = deriveStatus(shipment, route, currentMinute);
+            if (next != null && next != shipment.status) {
+                int firstSalida = route.ruta.stream().mapToInt(p -> p.salidaMin).min().orElse(-1);
+                int lastLlegada = route.ruta.stream().mapToInt(p -> p.llegadaMin).max().orElse(-1);
+                log.info(
+                    "[DAILY_OP] shipment status change code={} from={} to={} currentMinute={} firstSalida={} lastLlegada={}",
+                    shipment.codigoPedido,
+                    shipment.status,
+                    next,
+                    currentMinute,
+                    firstSalida,
+                    lastLlegada
+                );
+                shipment.status = next;
+                changed.add(shipment);
+            }
+        }
+
+        if (!changed.isEmpty()) {
+            shipmentRepository.saveAll(changed);
+            log.info("[DAILY_OP] shipment statuses synchronized changed={}", changed.size());
+        }
+    }
+
+    private ShipmentStatus deriveStatus(ShipmentEntity shipment, RespuestaRutaEnvioDto route, int currentMinute) {
+        if (shipment == null) {
+            return null;
+        }
+        if (shipment.status == ShipmentStatus.CANCELLED) {
+            return ShipmentStatus.CANCELLED;
+        }
+        if (route == null || route.ruta == null || route.ruta.isEmpty()) {
+            return shipment.status != null ? shipment.status : ShipmentStatus.PENDING;
+        }
+
+        int firstSalida = route.ruta.stream().mapToInt(p -> p.salidaMin).min().orElse(Integer.MAX_VALUE);
+        int lastLlegada = route.ruta.stream().mapToInt(p -> p.llegadaMin).max().orElse(Integer.MIN_VALUE);
+
+        if (currentMinute < firstSalida) {
+            return ShipmentStatus.ASSIGNED;
+        }
+        boolean inAir = route.ruta.stream().anyMatch(p -> currentMinute >= p.salidaMin && currentMinute <= p.llegadaMin);
+        if (inAir) {
+            observedInTransit.put(shipment.codigoPedido, Boolean.TRUE);
+            return ShipmentStatus.IN_TRANSIT;
+        }
+        if (currentMinute > lastLlegada) {
+            boolean transitSeen = Boolean.TRUE.equals(observedInTransit.get(shipment.codigoPedido))
+                || shipment.status == ShipmentStatus.IN_TRANSIT;
+            if (transitSeen) {
+                return ShipmentStatus.DELIVERED;
+            }
+            log.info(
+                "[DAILY_OP] delivery deferred because transit was not observed code={} currentMinute={} lastLlegada={} status={}",
+                shipment.codigoPedido,
+                currentMinute,
+                lastLlegada,
+                shipment.status
+            );
+        }
+        return ShipmentStatus.ASSIGNED;
     }
 
     private List<OperationAlertDto> buildAlerts(Map<String, DailyWarehouseSnapshotDto> warehouseSnapshot) {

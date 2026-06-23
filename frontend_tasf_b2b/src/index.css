@@ -1003,8 +1003,89 @@ body {
   color: #1e2c44;
 }
 
+/* === Mejoras y Alineación de Tabla de Vuelos === */
 .crud-row.flights {
-  grid-template-columns: 120px repeat(4, minmax(110px, 1fr)) 70px 90px 140px;
+  display: grid !important;
+  /* Ajuste de columnas con más espacio para acciones */
+  grid-template-columns: 170px minmax(120px, 1fr) minmax(120px, 1fr) minmax(140px, 1.1fr) minmax(140px, 1.1fr) 115px 75px minmax(170px, 1.3fr) !important;
+  gap: 8px !important;
+  align-items: center !important;
+  padding: 10px 12px !important;
+  background: #f6f8fc;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #1e2c44;
+  transition: background 0.15s;
+}
+
+/* Aseguramos que el header tenga las mismas columnas */
+.crud-row.flights.header {
+  background: #eaf0fb;
+  font-weight: 600;
+}
+
+/* Alineación del texto en cabeceras */
+.crud-row.flights.header span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Centra el texto del título "Cap." y los números reales uniformemente */
+.crud-row.flights .capacity {
+  text-align: center !important;
+  display: block;
+  width: 100%;
+}
+
+/* Centrado del encabezado de Estado y su etiqueta */
+.crud-row.flights .status-header {
+  text-align: center !important;
+  display: block;
+  width: 100%;
+}
+
+.crud-row.flights .status-badge {
+  text-align: center;
+  justify-self: center;
+}
+
+/* Encabezado y contenedor de botones de acciones alineados uniformemente */
+.crud-row.flights .flight-actions-header {
+  text-align: center !important;
+  display: block;
+  width: 100%;
+}
+
+.crud-row.flights .flight-actions {
+  display: flex !important;
+  gap: 3px !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Botones más compactos */
+.btn-icon {
+  font-size: 0.85rem !important;
+  padding: 4px 6px !important;
+  border-radius: 6px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Para pantallas pequeñas, permite scroll horizontal */
+@media (max-width: 1100px) {
+  .crud-table {
+    overflow-x: auto !important;
+  }
+  .crud-row.flights {
+    min-width: 950px !important;
+  }
 }
 
 .crud-row.warehouses {
@@ -1013,6 +1094,10 @@ body {
 
 .crud-row.airports {
   grid-template-columns: 90px 1fr 1fr 70px 120px 140px;
+}
+
+.crud-row.shipments {
+  grid-template-columns: 130px minmax(120px, 1fr) minmax(120px, 1fr) minmax(160px, 1.1fr) 80px minmax(120px, 1fr) 120px 140px;
 }
 
 .status-badge {
@@ -1029,6 +1114,26 @@ body {
   color: #1f7a39;
 }
 
+.status-badge.pending {
+  background: rgba(82, 92, 113, 0.12);
+  color: #4b5568;
+}
+
+.status-badge.assigned {
+  background: rgba(58, 124, 246, 0.12);
+  color: #2459c7;
+}
+
+.status-badge.in-transit {
+  background: rgba(244, 162, 55, 0.14);
+  color: #bb6e10;
+}
+
+.status-badge.delivered {
+  background: rgba(56, 163, 85, 0.14);
+  color: #1f7a39;
+}
+
 .status-badge.cancelled {
   background: rgba(220, 72, 72, 0.12);
   color: #a53939;
@@ -1037,6 +1142,19 @@ body {
 .crud-row.header {
   background: #eaf0fb;
   font-weight: 600;
+}
+
+.crud-row.shipments.header {
+  background: #eaf0fb;
+  font-weight: 600;
+}
+
+.crud-row.shipments .shipment-status-header {
+  text-align: center;
+}
+
+.crud-row.shipments .status-badge {
+  justify-self: center;
 }
 
 .crud-row-actions {
@@ -1057,6 +1175,11 @@ body {
   gap: 10px;
   align-items: center;
   font-size: 12px;
+}
+
+.spacer {
+  width: 10px;
+  display: inline-block;
 }
 
 .modal-backdrop {
@@ -1276,10 +1399,10 @@ body {
 .crud-row.flights {
   display: grid;
   /* Se cambia 'auto' al final por '140px' para que los botones con texto queden perfectamente en línea */
-  grid-template-columns: 130px minmax(140px, 1fr) minmax(140px, 1fr) minmax(150px, 1.2fr) minmax(150px, 1.2fr) 70px 100px 140px;
-  gap: 12px;
+  grid-template-columns: 120px minmax(130px, 1fr) minmax(130px, 1fr) minmax(150px, 1.1fr) minmax(150px, 1.1fr) 68px 96px 116px;
+  gap: 10px;
   align-items: center;
-  padding: 12px 16px;
+  padding: 12px 14px;
   background: #f6f8fc;
   border-radius: 10px;
   font-size: 12px;
@@ -1328,7 +1451,7 @@ body {
 
 .crud-row.flights .flight-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   justify-content: center;
   align-items: center;
   width: 100%;
@@ -1357,7 +1480,7 @@ body {
   border: none;
   font-size: 1.1rem;
   cursor: pointer;
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-radius: 8px;
   transition: all 0.2s ease;
   display: inline-flex;
@@ -1370,6 +1493,16 @@ body {
   background-color: #e6f0ff;
   color: #1e6fdf;
   border: 1px solid #bdd9ff;
+}
+
+.btn-day-cancel {
+  background-color: #fff1cf;
+  color: #9a5b00;
+  border: 1px solid #f0cf8f;
+}
+
+.btn-day-cancel:hover {
+  background-color: #ffe3a4;
 }
 .btn-view:hover {
   background-color: #d0e4ff;

@@ -1,19 +1,28 @@
 package com.tasf_b2b.planificador.api;
 
 import com.tasf_b2b.planificador.api.dto.FlightDayCancellationDto;
-import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationEntity;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationRepository;
+import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import com.tasf_b2b.planificador.sim.SimulationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -23,7 +32,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/db/flights")
-@CrossOrigin(origins = "*")
 public class FlightCancellationController {
     private static final Logger log = LoggerFactory.getLogger(FlightCancellationController.class);
     private static final ZoneId ZONE = ZoneId.of("America/Lima");
@@ -31,43 +39,84 @@ public class FlightCancellationController {
     private final FlightDayCancellationRepository cancellationRepository;
     private final FlightRepository flightRepository;
     private final DailyPlanningService dailyPlanningService;
+    private final SimulationService simulationService;
 
     public FlightCancellationController(
         FlightDayCancellationRepository cancellationRepository,
         FlightRepository flightRepository,
-        DailyPlanningService dailyPlanningService
+        DailyPlanningService dailyPlanningService,
+        SimulationService simulationService
     ) {
         this.cancellationRepository = cancellationRepository;
         this.flightRepository = flightRepository;
         this.dailyPlanningService = dailyPlanningService;
+        this.simulationService = simulationService;
     }
 
     @PostMapping("/{id}/day-cancel")
     public ResponseEntity<?> cancelFlightDay(@PathVariable Long id, @RequestBody FlightDayCancellationDto dto) {
-        log.info("[FLIGHT_CANCEL] request cancel flightId={} fecha={}", id, dto != null ? dto.fecha : null);
+        log.info(
+            "[FLIGHT_CANCEL] request cancel flightId={} fecha={} contextDate={} contextMinuteOfDay={}",
+            id,
+            dto != null ? dto.fecha : null,
+            dto != null ? dto.contextDate : null,
+            dto != null ? dto.contextMinuteOfDay : null
+        );
         FlightEntity flight = flightRepository.findById(id).orElse(null);
         if (flight == null) {
             log.warn("[FLIGHT_CANCEL] cancel rejected because flight does not exist id={}", id);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Vuelo no encontrado");
         }
+        if (dto == null || dto.fecha == null || dto.fecha.isBlank()) {
+            log.warn("[FLIGHT_CANCEL] cancel rejected because fecha is missing flightId={}", id);
+            return ResponseEntity.badRequest().body("La fecha es obligatoria");
+        }
 
-        LocalDate date = LocalDate.parse(dto.fecha, DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalDate requestedDate = LocalDate.parse(dto.fecha, DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalDate effectiveDate = resolveEffectiveCancellationDate(
+            flight,
+            requestedDate,
+            dto.contextDate,
+            dto.contextMinuteOfDay
+        );
 
-        if (cancellationRepository.existsByFlightIdAndFechaCancelacion(id, date)) {
-            log.warn("[FLIGHT_CANCEL] cancel rejected because it is already cancelled id={} fecha={}", id, dto.fecha);
+        if (cancellationRepository.existsByFlightIdAndFechaCancelacion(id, effectiveDate)) {
+            log.warn("[FLIGHT_CANCEL] cancel rejected because it is already cancelled id={} fecha={}", id, effectiveDate);
             return ResponseEntity.status(HttpStatus.CONFLICT).body("El vuelo ya está cancelado para ese día");
         }
 
         FlightDayCancellationEntity entity = new FlightDayCancellationEntity();
         entity.flightId = id;
-        entity.fechaCancelacion = date;
+        entity.fechaCancelacion = effectiveDate;
         cancellationRepository.save(entity);
-        log.info("[FLIGHT_CANCEL] cancel saved flightId={} fecha={}", id, dto.fecha);
-        if (shouldReplan(flight, date)) {
-            log.info("[FLIGHT_CANCEL] replan triggered flightId={} fecha={}", id, dto.fecha);
+        boolean simulationContextUsed = hasSimulationContext(dto);
+        log.info(
+            "[FLIGHT_CANCEL] cancel saved flightId={} requestedDate={} effectiveDate={} cutoff={} contextDate={} contextMinuteOfDay={} simulationContextUsed={}",
+            id,
+            requestedDate,
+            effectiveDate,
+            flight.salida != null ? flight.salida.toLocalTime().minusHours(1) : null,
+            dto.contextDate,
+            dto.contextMinuteOfDay,
+            simulationContextUsed
+        );
+
+        if (shouldReplan(effectiveDate, simulationContextUsed)) {
+            log.info(
+                "[FLIGHT_CANCEL] replan triggered flightId={} fecha={} simulationContextUsed={}",
+                id,
+                effectiveDate,
+                simulationContextUsed
+            );
             dailyPlanningService.replanNow("FLIGHT_CANCEL", "cancel day");
+            simulationService.refreshActiveSimulations("FLIGHT_CANCEL", "flightId=" + id + " fecha=" + effectiveDate);
         } else {
-            log.info("[FLIGHT_CANCEL] replan skipped because flight already departed flightId={} fecha={}", id, dto.fecha);
+            log.info(
+                "[FLIGHT_CANCEL] replan skipped because cancellation is in the past flightId={} fecha={} simulationContextUsed={}",
+                id,
+                effectiveDate,
+                simulationContextUsed
+            );
         }
 
         return ResponseEntity.ok().build();
@@ -79,7 +128,7 @@ public class FlightCancellationController {
         FlightEntity flight = flightRepository.findById(id).orElse(null);
         LocalDate date = LocalDate.parse(fecha, DateTimeFormatter.ISO_LOCAL_DATE);
         Optional<FlightDayCancellationEntity> opt = cancellationRepository.findByFlightIdAndFechaCancelacion(id, date);
-        
+
         if (opt.isEmpty()) {
             log.warn("[FLIGHT_CANCEL] remove rejected because cancellation does not exist flightId={} fecha={}", id, fecha);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Cancelación no encontrada");
@@ -87,28 +136,79 @@ public class FlightCancellationController {
 
         cancellationRepository.delete(opt.get());
         log.info("[FLIGHT_CANCEL] cancellation removed flightId={} fecha={}", id, fecha);
-        if (shouldReplan(flight, date)) {
+        if (shouldReplan(date, false) && flight != null) {
             dailyPlanningService.replanNow("FLIGHT_CANCEL", "remove cancel");
+            simulationService.refreshActiveSimulations("FLIGHT_CANCEL_REMOVE", "flightId=" + id + " fecha=" + date);
         }
         return ResponseEntity.ok().build();
     }
 
-    private boolean shouldReplan(FlightEntity flight, LocalDate date) {
-        if (flight == null || flight.salida == null) {
+    private LocalDate resolveEffectiveCancellationDate(
+        FlightEntity flight,
+        LocalDate requestedDate,
+        String contextDate,
+        Integer contextMinuteOfDay
+    ) {
+        if (flight == null || flight.salida == null || requestedDate == null) {
+            return requestedDate;
+        }
+
+        LocalDate baseDate = requestedDate;
+        if (contextDate != null && !contextDate.isBlank()) {
+            try {
+                baseDate = LocalDate.parse(contextDate, DateTimeFormatter.ISO_LOCAL_DATE);
+            } catch (Exception ex) {
+                log.warn("[FLIGHT_CANCEL] invalid simulation contextDate={} fallback to requestedDate={}", contextDate, requestedDate);
+                baseDate = requestedDate;
+            }
+        }
+
+        LocalTime referenceTime = null;
+        boolean usingSimulationClock = false;
+        if (contextMinuteOfDay != null && contextMinuteOfDay >= 0 && contextMinuteOfDay < 24 * 60) {
+            referenceTime = LocalTime.of(contextMinuteOfDay / 60, contextMinuteOfDay % 60);
+            usingSimulationClock = true;
+        } else {
+            OffsetDateTime now = OffsetDateTime.now(ZONE);
+            LocalDate today = now.toLocalDate();
+            if (!requestedDate.equals(today)) {
+                return requestedDate;
+            }
+            referenceTime = now.toLocalTime();
+        }
+
+        LocalTime cutoff = flight.salida.toLocalTime().minusHours(1);
+        if (referenceTime.isAfter(cutoff)) {
+            log.info(
+                "[FLIGHT_CANCEL] effective date moved to next day by cutoff baseDate={} referenceTime={} cutoff={} usingSimulationClock={}",
+                baseDate,
+                referenceTime,
+                cutoff,
+                usingSimulationClock
+            );
+            return baseDate.plusDays(1);
+        }
+        return baseDate;
+    }
+
+    private boolean shouldReplan(LocalDate date, boolean forceReplan) {
+        if (date == null) {
             return false;
+        }
+
+        if (forceReplan) {
+            return true;
         }
 
         OffsetDateTime now = OffsetDateTime.now(ZONE);
         LocalDate today = now.toLocalDate();
-        LocalDateTime salida = flight.salida;
+        return !date.isBefore(today);
+    }
 
-        if (date.isAfter(today)) {
-            return true;
-        }
-        if (date.isBefore(today)) {
-            return false;
-        }
-        return !now.toLocalTime().isAfter(salida.toLocalTime());
+    private boolean hasSimulationContext(FlightDayCancellationDto dto) {
+        return dto != null
+            && ((dto.contextDate != null && !dto.contextDate.isBlank())
+            || dto.contextMinuteOfDay != null);
     }
 
     @GetMapping("/{id}/day-cancels")

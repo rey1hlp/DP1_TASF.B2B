@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FlightCrudDto } from '../types/sim'
-import { createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
+import { cancelFlightDay, createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
+import { useSimulationContext } from '../contexts/SimulationContext'
+import { formatIsoDateFromDayIndex } from '../utils/time'
 
 interface FlightsCrudProps {
   onViewDetail: (id: number) => void;
 }
 
 export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
+  const { simulation, currentMinute, status } = useSimulationContext()
   const [items, setItems] = useState<FlightCrudDto[]>([])
-  const [query, setQuery] = useState('')
+  const query = ''
   const [filterOrigen, setFilterOrigen] = useState('')
   const [filterDestino, setFilterDestino] = useState('')
   const [page, setPage] = useState(0)
@@ -32,6 +35,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
   } | null>(null)
   const [airports, setAirports] = useState<AirportCrudDto[]>([])
   const [airportsLoaded, setAirportsLoaded] = useState(false)
+  const [dayCancelLoadingId, setDayCancelLoadingId] = useState<number | null>(null)
 
   const [activeOaciList, setActiveOaciList] = useState<'origen' | 'destino' | null>(null)
   const [form, setForm] = useState<FlightCrudDto>({
@@ -121,6 +125,67 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     if (!id) return
     await deleteFlight(id)
     await load()
+  }
+
+  const getLimaDate = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Lima',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date())
+
+    const year = parts.find((part) => part.type === 'year')?.value ?? ''
+    const month = parts.find((part) => part.type === 'month')?.value ?? ''
+    const day = parts.find((part) => part.type === 'day')?.value ?? ''
+    return `${year}-${month}-${day}`
+  }
+
+  const getSimulatedCancelContext = () => {
+    if (!simulation.requestedStart || currentMinute === null) {
+      return null
+    }
+
+    const displayMinuteRaw =
+      simulation.displayOffset !== null
+        ? currentMinute + simulation.displayOffset
+        : currentMinute
+
+    if (displayMinuteRaw === null) {
+      return null
+    }
+
+    const dayIndex = Math.floor(displayMinuteRaw / 1440)
+    const minuteOfDay = ((displayMinuteRaw % 1440) + 1440) % 1440
+
+    return {
+      contextDate: formatIsoDateFromDayIndex(dayIndex),
+      contextMinuteOfDay: minuteOfDay,
+    }
+  }
+
+  const handleCancelDay = async (id?: number) => {
+    if (!id) return
+    setDayCancelLoadingId(id)
+    setError(null)
+    try {
+      const simulationActive = status === 'READY' || status === 'RUNNING' || status === 'PAUSED'
+      const simulatedContext = simulationActive ? getSimulatedCancelContext() : null
+      const fecha = simulatedContext?.contextDate ?? getLimaDate()
+      console.debug('[FlightsCrud] cancel day', {
+        flightId: id,
+        fecha,
+        simulationActive,
+        simulatedContext,
+      })
+      await cancelFlightDay(id, fecha, simulatedContext ?? undefined)
+      await load()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo cancelar el vuelo para el dia'
+      setError(msg)
+    } finally {
+      setDayCancelLoadingId(null)
+    }
   }
 
   const handleNew = () => {
@@ -294,6 +359,14 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
             <div className="flight-actions">
               <button className="btn-icon btn-view" onClick={() => onViewDetail(item.id!)} title="Ver detalle">📋</button>
               <button className="btn-icon btn-edit" onClick={() => handleEdit(item)} title="Editar">✏️</button>
+              <button
+                className="btn-icon btn-day-cancel"
+                onClick={() => handleCancelDay(item.id)}
+                title="Cancelar solo este día"
+                disabled={dayCancelLoadingId === item.id}
+              >
+                {dayCancelLoadingId === item.id ? '...' : '🗓️'}
+              </button>
               <button className="btn-icon btn-delete" onClick={() => handleDelete(item.id)} title="Eliminar">🗑️</button>
             </div>
           </div>
@@ -401,8 +474,11 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
               </label>
               <label className="crud-checkbox">
                 <input type="checkbox" checked={form.cancelado} onChange={(e) => setForm({ ...form, cancelado: e.target.checked })} />
-                Cancelado
+                Cancelado global
               </label>
+              <div className="field-hint">
+                Use DIA para cancelar solo el vuelo operativo del dia actual con regla de 1 hora.
+              </div>
             </div>
             <div className="modal-actions">
               <button className="btn primary" onClick={handleSubmit}>{form.id ? 'Actualizar' : 'Crear'}</button>
@@ -465,3 +541,5 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     </div>
   )
 }
+
+

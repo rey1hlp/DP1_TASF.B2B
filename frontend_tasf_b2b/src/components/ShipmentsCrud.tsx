@@ -20,6 +20,22 @@ const EMPTY_FORM: ShipmentCrudDto = {
   asignado: false,
 }
 
+function getShipmentStatusLabel(status?: ShipmentCrudDto['status']) {
+  if (status === 'ASSIGNED') return 'Asignado'
+  if (status === 'IN_TRANSIT') return 'En tránsito'
+  if (status === 'DELIVERED') return 'Entregado'
+  if (status === 'CANCELLED') return 'Cancelado'
+  return 'Pendiente'
+}
+
+function getShipmentStatusClass(status?: ShipmentCrudDto['status']) {
+  if (status === 'ASSIGNED') return 'assigned'
+  if (status === 'IN_TRANSIT') return 'in-transit'
+  if (status === 'DELIVERED') return 'delivered'
+  if (status === 'CANCELLED') return 'cancelled'
+  return 'pending'
+}
+
 export default function ShipmentsCrud() {
   const [items, setItems] = useState<ShipmentCrudDto[]>([])
   const [query, setQuery] = useState('')
@@ -258,6 +274,7 @@ export default function ShipmentsCrud() {
           <span>Fecha Ingreso UTC</span>
           <span>Cantidad</span>
           <span>Cliente</span>
+          <span className="shipment-status-header">Estado</span>
           <span></span>
         </div>
         {loading ? <div className="crud-empty">Cargando envios...</div> : null}
@@ -270,6 +287,9 @@ export default function ShipmentsCrud() {
             <span>{item.ingresoUtc}</span>
             <span>{item.cantidad}</span>
             <span>{item.idCliente}</span>
+            <span className={`status-badge ${getShipmentStatusClass(item.status)}`}>
+              {getShipmentStatusLabel(item.status)}
+            </span>
             <div className="crud-row-actions">
               <Button onClick={() => handleEdit(item)}>Editar</Button>
               <Button variant="secondary" onClick={() => handleDelete(item.id)}>Eliminar</Button>

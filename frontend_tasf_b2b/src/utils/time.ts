@@ -55,6 +55,15 @@ export function formatDateFromDayIndex(dayIndex: number): string {
   return `${dd}/${mm}/${yyyy}`
 }
 
+export function formatIsoDateFromDayIndex(dayIndex: number): string {
+  const ms = dayIndex * MS_PER_DAY
+  const d = new Date(ms)
+  const yyyy = d.getUTCFullYear()
+  const mm = `${d.getUTCMonth() + 1}`.padStart(2, '0')
+  const dd = `${d.getUTCDate()}`.padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export function formatClockFromMinute(minute: number): string {
   const totalMin = Math.max(0, minute)
   const hh = Math.floor((totalMin / 60) % 24)

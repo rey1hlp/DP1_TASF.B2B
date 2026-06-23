@@ -136,11 +136,17 @@ export default function MapView({
   const mapRef = useRef<L.Map | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [animatedMinute, setAnimatedMinute] = useState<number | null>(currentMinute)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const resizeFrameRef = useRef<number | null>(null)
   const resizeTimerRef = useRef<number | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const animationStartRef = useRef<number | null>(null)
+  const animationFromRef = useRef<number | null>(null)
+  const animationToRef = useRef<number | null>(null)
+  const animatedMinuteRef = useRef<number | null>(currentMinute)
 
   const invalidateMapSize = () => {
     if (!mapRef.current) {
@@ -223,6 +229,63 @@ export default function MapView({
   }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed])
 
   useEffect(() => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+
+    if (currentMinute === null) {
+      setAnimatedMinute(null)
+      return
+    }
+
+    const from = animatedMinuteRef.current ?? currentMinute
+    const to = currentMinute
+
+    if (from === to) {
+      setAnimatedMinute(currentMinute)
+      return
+    }
+
+    const durationMs = 450
+    animationStartRef.current = performance.now()
+    animationFromRef.current = from
+    animationToRef.current = to
+
+    const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2)
+
+    const step = (now: number) => {
+      const start = animationStartRef.current ?? now
+      const elapsed = now - start
+      const progress = Math.min(1, Math.max(0, elapsed / durationMs))
+      const eased = easeInOut(progress)
+      const source = animationFromRef.current ?? from
+      const target = animationToRef.current ?? to
+      setAnimatedMinute(source + (target - source) * eased)
+
+      if (progress < 1) {
+        animationFrameRef.current = window.requestAnimationFrame(step)
+      } else {
+        animationFrameRef.current = null
+        setAnimatedMinute(target)
+      }
+    }
+
+    animationFrameRef.current = window.requestAnimationFrame(step)
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+    }
+  }, [currentMinute])
+
+  useEffect(() => {
+    animatedMinuteRef.current = animatedMinute
+  }, [animatedMinute])
+
+  useEffect(() => {
     if (!airportLayerRef.current) {
       return
     }
@@ -274,13 +337,17 @@ export default function MapView({
       return
     }
 
+    const minuteForRender = animatedMinute ?? currentMinute
+
     const activeSegments = segments.filter(
-      (seg) => currentMinute >= seg.salidaMin && currentMinute <= seg.llegadaMin
+      (seg) => minuteForRender !== null && minuteForRender >= seg.salidaMin && minuteForRender <= seg.llegadaMin
     )
 
     activeSegments.forEach((seg) => {
       const total = Math.max(1, seg.llegadaMin - seg.salidaMin)
-      const progress = Math.min(1, Math.max(0, (currentMinute - seg.salidaMin) / total))
+      const progress = minuteForRender !== null
+        ? Math.min(1, Math.max(0, (minuteForRender - seg.salidaMin) / total))
+        : 0
       const lat = seg.origenLat + (seg.destinoLat - seg.origenLat) * progress
       const lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
       const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
@@ -320,7 +387,7 @@ export default function MapView({
       }
       marker.addTo(planeLayerRef.current as L.LayerGroup)
     })
-  }, [segments, currentMinute, selectedFlightId])
+  }, [segments, animatedMinute, currentMinute, selectedFlightId, selectedShipmentRoute, ranges])
 
   useEffect(() => {
     if (!routeLayerRef.current) {

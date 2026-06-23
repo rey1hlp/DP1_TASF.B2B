@@ -165,6 +165,7 @@ export type ShipmentCrudDto = {
   cantidad: number
   idCliente: string
   slaHoras: number
+  status?: 'PENDING' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
   asignado: boolean
   auditDateIns?: string
 }

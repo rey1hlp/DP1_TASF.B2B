@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react' // ✅ useState importado
 import type { AirportDto } from '../types/sim'
 import { fetchAirports, startSimulation } from '../services/api'
-import { useSimulationSocket } from '../hooks/useSimulationSocket'
 import MapView from '../components/MapView'
 import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
@@ -70,8 +69,20 @@ export default function SimulationPage() {
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
 
-  const { enviosKey, setEnviosKey, simulation, setSimulation, resetSimulation } =
-    useSimulationContext()
+  const {
+    enviosKey,
+    setEnviosKey,
+    simulation,
+    setSimulation,
+    resetSimulation,
+    status,
+    statusMessage,
+    currentMinute,
+    segments,
+    meta,
+    pause,
+    resume,
+  } = useSimulationContext()
 
   const {
     simId,
@@ -81,9 +92,6 @@ export default function SimulationPage() {
     localCompleted,
     ranges,
   } = simulation
-
-  const { status, statusMessage, currentMinute, segments, meta, pause, resume } =
-    useSimulationSocket(simId)
 
   // Cargar aeropuertos una sola vez
   useEffect(() => {
@@ -122,7 +130,7 @@ export default function SimulationPage() {
               inicio: dateOnly,
               colapsoIncremental: true,
               bloqueDias: 5,
-              intervaloPlanMs: 240000,
+              intervaloPlanMs: 600000,
               maxEnvios: 5000000,
               poblacion: 50,
               generaciones: 10,
@@ -130,7 +138,7 @@ export default function SimulationPage() {
               paralelo: true,
               hilos: 6,
               estancamiento: 3,
-              speedMinPerSec: 20,
+              speedMinPerSec: 4,
             }
           : {
               envios: enviosKey,
@@ -143,7 +151,7 @@ export default function SimulationPage() {
               paralelo: true,
               hilos: 6,
               estancamiento: 3,
-              speedMinPerSec: 20,
+              speedMinPerSec: 4,
             }
 
       console.debug('[SimulationPage] startSimulation payload', {

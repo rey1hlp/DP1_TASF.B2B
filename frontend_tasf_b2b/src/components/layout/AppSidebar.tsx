@@ -22,7 +22,7 @@ import {
             <div className="profile-role">Supervisor de operaciones</div>
           </div>
         </div>
-  
+        <div className="spacer"></div>
         <nav className="nav">
           <SidebarNavItem to="/operacion-diaria" label="Operación diaria" icon={ClipboardList} />
           <SidebarNavItem to="/envios" label="Envíos" icon={Package} />

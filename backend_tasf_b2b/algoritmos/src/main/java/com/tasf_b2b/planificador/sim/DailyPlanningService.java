@@ -24,6 +24,7 @@ import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
+import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,6 +196,7 @@ public class DailyPlanningService {
             log.info("[DAILY_PLAN] segments built={}", segmentos.size());
 
             this.lastRutasPorPaquete = construirRutasPorPaquete(mejor, envios);
+            syncStatusesAfterPlan();
 
             DailyPlanRunEntity run = new DailyPlanRunEntity();
             run.planDate = window.planDate;
@@ -375,9 +377,10 @@ public class DailyPlanningService {
     private List<Envio> cargarEnviosDb(Map<String, Aeropuerto> aeropuertos, PlanWindow window) {
         List<Envio> envios = new ArrayList<>();
         List<ShipmentEntity> entities = shipmentRepository.findAll();
+        LocalDate planLocalDate = LocalDate.parse(window.planDate, DATE_FORMAT);
         int total = 0;
         int invalid = 0;
-        int wrongDate = 0;
+        int futureDate = 0;
         int outOfWindow = 0;
         int loaded = 0;
         for (ShipmentEntity entity : entities) {
@@ -386,8 +389,21 @@ public class DailyPlanningService {
                 invalid++;
                 continue;
             }
-            if (!window.planDate.equals(entity.fecha)) {
-                wrongDate++;
+            // Delivered and cancelled shipments are excluded; in-transit and assigned stay in planning
+            // so their routes remain in lastRutasPorPaquete and status can transition to DELIVERED.
+            if (entity.status == ShipmentStatus.DELIVERED || entity.status == ShipmentStatus.CANCELLED) {
+                continue;
+            }
+            LocalDate shipmentDate;
+            try {
+                shipmentDate = LocalDate.parse(entity.fecha, DATE_FORMAT);
+            } catch (Exception e) {
+                invalid++;
+                continue;
+            }
+            // Skip shipments from future dates; past-dated pending shipments are eligible
+            if (shipmentDate.isAfter(planLocalDate)) {
+                futureDate++;
                 continue;
             }
             int hh = entity.ingresoLocal.getHour();
@@ -401,7 +417,8 @@ public class DailyPlanningService {
                 ? aeroOrigen.calcularSla(aeroDestino)
                 : 24;
 
-            if (ingresoMin > window.windowEndMin) {
+            // For today's shipments apply the ingresso window filter; past ones are always eligible
+            if (shipmentDate.equals(planLocalDate) && ingresoMin > window.windowEndMin) {
                 outOfWindow++;
                 continue;
             }
@@ -437,10 +454,10 @@ public class DailyPlanningService {
 
         envios.sort((a, b) -> Integer.compare(a.horaIngresoMin, b.horaIngresoMin));
         log.info(
-            "[DAILY_PLAN] shipment scan total={} invalid={} wrongDate={} outOfWindow={} loaded={}",
+            "[DAILY_PLAN] shipment scan total={} invalid={} futureDate={} outOfWindow={} loaded={}",
             total,
             invalid,
-            wrongDate,
+            futureDate,
             outOfWindow,
             loaded
         );
@@ -594,6 +611,60 @@ public class DailyPlanningService {
             return null;
         }
         return airportCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void syncStatusesAfterPlan() {
+        if (lastRutasPorPaquete.isEmpty()) {
+            return;
+        }
+        List<ShipmentEntity> allShipments = shipmentRepository.findAll();
+        List<ShipmentEntity> toUpdate = new ArrayList<>();
+        int toAssigned = 0;
+        int toPending = 0;
+        for (ShipmentEntity entity : allShipments) {
+            if (entity.codigoPedido == null) continue;
+            RespuestaRutaEnvioDto route = lastRutasPorPaquete.get(entity.codigoPedido);
+            boolean hasRoute = route != null && route.ruta != null && !route.ruta.isEmpty();
+
+            // Reconcile only the planning states here.
+            // Real-time transitions (IN_TRANSIT, DELIVERED) remain managed by the operation clock.
+            if (entity.status == ShipmentStatus.PENDING && hasRoute) {
+                entity.status = ShipmentStatus.ASSIGNED;
+                toUpdate.add(entity);
+                toAssigned++;
+                continue;
+            }
+
+            if (entity.status == ShipmentStatus.ASSIGNED && !hasRoute) {
+                entity.status = ShipmentStatus.PENDING;
+                toUpdate.add(entity);
+                toPending++;
+            }
+        }
+        if (!toUpdate.isEmpty()) {
+            shipmentRepository.saveAll(toUpdate);
+            log.info(
+                "[DAILY_PLAN] post-plan status sync assigned={} pending={} total={}",
+                toAssigned,
+                toPending,
+                toUpdate.size()
+            );
+        }
+    }
+
+    public List<String> getShipmentCodesForFlight(String origen, String destino, int salidaMin) {
+        List<String> result = new ArrayList<>();
+        for (Map.Entry<String, RespuestaRutaEnvioDto> entry : lastRutasPorPaquete.entrySet()) {
+            RespuestaRutaEnvioDto route = entry.getValue();
+            if (route == null || route.ruta == null) continue;
+            for (PasoRutaDto paso : route.ruta) {
+                if (origen.equals(paso.origen) && destino.equals(paso.destino) && paso.salidaMin == salidaMin) {
+                    result.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        return result;
     }
 
     private boolean isWithinWindow(int minute, int start, int end) {
