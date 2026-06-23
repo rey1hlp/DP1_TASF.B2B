@@ -1,3 +1,4 @@
+import type { FlightOccupancyData } from '../components/OccupancyReport';
 import type {
   AirportDto,
   AirportCrudDto,
@@ -313,6 +314,15 @@ export async function getCancelledDays(id: number): Promise<string[]> {
   const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancels`)
   if (!res.ok) {
     throw new Error('No se pudieron cargar los días cancelados')
+  }
+  return res.json()
+}
+
+// Reporte de ocupación histórica por vuelo
+export async function fetchOccupancyReport(): Promise<FlightOccupancyData[]> {
+  const res = await fetch(`${API_BASE}/api/reports/occupancy`)
+  if (!res.ok) {
+    throw new Error('No se pudo cargar el reporte de ocupación')
   }
   return res.json()
 }
