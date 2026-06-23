@@ -9,6 +9,7 @@ import WarehouseDetailPage from './pages/WarehouseDetailPage'
 import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
 import ShipmentsCrud from './components/ShipmentsCrud'
+import OccupancyReport from './components/OccupancyReport'
 
 import { PlaneIconDebug } from './debug/PlaneIconDebug'
 
@@ -117,7 +118,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'reportes',
-        element: <div>Reportes</div>,
+        element: <OccupancyReport />,
       },
       {
         path: 'configuracion',

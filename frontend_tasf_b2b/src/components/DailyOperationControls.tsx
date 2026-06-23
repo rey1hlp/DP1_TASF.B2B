@@ -311,7 +311,17 @@ export default function DailyOperationControls({
             <div className="field-label">Rangos de semáforo</div>
 
             <div className="range-row">
-              <span className="range-label">Verde</span>
+              <span className="range-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle at 35% 35%, #6ee77a, #22c55e)',
+                  boxShadow: '0 0 6px 2px rgba(34, 197, 94, 0.55)',
+                  flexShrink: 0,
+                }} />
+              </span>
               <input
                 type="range"
                 min={0}
@@ -323,7 +333,17 @@ export default function DailyOperationControls({
             </div>
 
             <div className="range-row">
-              <span className="range-label">Ámbar</span>
+              <span className="range-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle at 35% 35%, #fde68a, #f59e0b)',
+                  boxShadow: '0 0 6px 2px rgba(245, 158, 11, 0.55)',
+                  flexShrink: 0,
+                }} />
+              </span>
               <input
                 type="range"
                 min={0}
@@ -335,7 +355,17 @@ export default function DailyOperationControls({
             </div>
 
             <div className="range-row">
-              <span className="range-label">Rojo</span>
+              <span className="range-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle at 35% 35%, #fca5a5, #ef4444)',
+                  boxShadow: '0 0 6px 2px rgba(239, 68, 68, 0.55)',
+                  flexShrink: 0,
+                }} />
+              </span>
               <div className="range-static">{`${amberMax}% - 100%`}</div>
             </div>
           </div>
