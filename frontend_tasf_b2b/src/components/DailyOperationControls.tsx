@@ -7,6 +7,7 @@ import {
   formatMinuteRange,
   formatPercent,
 } from '../utils/time'
+import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -133,19 +134,6 @@ export default function DailyOperationControls({
   const [airportScrollTop, setAirportScrollTop] = useState(0)
   const [shipmentQuery, setShipmentQuery] = useState('')
   const [shipmentScrollTop, setShipmentScrollTop] = useState(0)
-
-  const greenMax = ranges.greenMax
-  const amberMax = ranges.amberMax
-
-  const handleGreenChange = (value: number) => {
-    const next = Math.min(value, amberMax - 1)
-    onRangesChange({ greenMax: Math.max(0, next), amberMax })
-  }
-
-  const handleAmberChange = (value: number) => {
-    const next = Math.max(value, greenMax + 1)
-    onRangesChange({ greenMax, amberMax: Math.min(100, next) })
-  }
 
   const allFlights = useMemo(() => {
     const map = new Map<number, DailyOperationControlsProps['flightItems'][number]>()
@@ -313,68 +301,7 @@ export default function DailyOperationControls({
             <div className="range-static">{lastSyncLabel}</div>
           </div>
 
-          <div className="field">
-            <div className="field-label">Rangos de semáforo</div>
-
-            <div className="range-row">
-              <span className="range-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{
-                  display: 'inline-block',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle at 35% 35%, #6ee77a, #22c55e)',
-                  boxShadow: '0 0 6px 2px rgba(34, 197, 94, 0.55)',
-                  flexShrink: 0,
-                }} />
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={greenMax}
-                onChange={(event) => handleGreenChange(Number(event.target.value))}
-              />
-              <span className="range-value">{`0% - ${greenMax}%`}</span>
-            </div>
-
-            <div className="range-row">
-              <span className="range-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{
-                  display: 'inline-block',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle at 35% 35%, #fde68a, #f59e0b)',
-                  boxShadow: '0 0 6px 2px rgba(245, 158, 11, 0.55)',
-                  flexShrink: 0,
-                }} />
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={amberMax}
-                onChange={(event) => handleAmberChange(Number(event.target.value))}
-              />
-              <span className="range-value">{`${greenMax}% - ${amberMax}%`}</span>
-            </div>
-
-            <div className="range-row">
-              <span className="range-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{
-                  display: 'inline-block',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle at 35% 35%, #fca5a5, #ef4444)',
-                  boxShadow: '0 0 6px 2px rgba(239, 68, 68, 0.55)',
-                  flexShrink: 0,
-                }} />
-              </span>
-              <div className="range-static">{`${amberMax}% - 100%`}</div>
-            </div>
-          </div>
+          <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
 
           <div className="buttons">
             <button className="btn primary" onClick={onRefresh} disabled={loading}>

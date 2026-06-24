@@ -504,11 +504,6 @@ body {
   text-align: right;
 }
 
-.range-row input[type="range"] {
-  width: 100%;
-  accent-color: #2f62b5;
-}
-
 /* ─── Control panel ─────────────────────────────────────────────── */
 .control-panel {
   background: #ffffff;
@@ -1589,3 +1584,43 @@ body {
   color: white;
   border-color: #2b5fb0;
 }
+
+.range-summary-bar {
+  display: flex;
+  height: 10px;
+  border-radius: var(--border-radius-md, 6px);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.range-summary-segment {
+  height: 100%;
+  transition: width 0.15s ease;
+}
+
+.range-summary-green { background: #5a9c3f; }
+.range-summary-amber { background: #d99a2b; }
+.range-summary-red   { background: #c2483f; }
+
+.range-summary-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #8a98ad;
+  margin-bottom: 14px;
+}
+
+.range-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.range-dot-green { background: #5a9c3f; }
+.range-dot-amber { background: #d99a2b; }
+.range-dot-red   { background: #c2483f; }
+
+/* el accent-color tiñe thumb + track-recorrido en navegadores modernos */
+.range-input-green { accent-color: #5a9c3f; }
+.range-input-amber { accent-color: #d99a2b; }

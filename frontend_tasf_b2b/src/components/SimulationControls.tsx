@@ -1,10 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
-import {
-  formatDurationHours,
-  formatInteger,
-  formatMinuteRange,
-  formatPercent,
-} from '../utils/time'
+import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -93,19 +88,6 @@ export default function SimulationControls({
   const [airportScrollTop, setAirportScrollTop] = useState(0)
   const [shipmentQuery, setShipmentQuery] = useState('')
   const [shipmentScrollTop, setShipmentScrollTop] = useState(0)
-
-  const greenMax = ranges.greenMax
-  const amberMax = ranges.amberMax
-
-  const handleGreenChange = (value: number) => {
-    const next = Math.min(value, amberMax - 1)
-    onRangesChange({ greenMax: Math.max(0, next), amberMax })
-  }
-
-  const handleAmberChange = (value: number) => {
-    const next = Math.max(value, greenMax + 1)
-    onRangesChange({ greenMax, amberMax: Math.min(100, next) })
-  }
 
   const filteredFlights = useMemo(() => {
     const query = flightQuery.trim().toLowerCase()
@@ -204,13 +186,13 @@ export default function SimulationControls({
               className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
               onClick={() => setActiveTab('config')}
             >
-              Configuración
+              Configuracion
             </button>
             <button
               className={`panel-tab ${activeTab === 'stats' ? 'active' : ''}`}
               onClick={() => setActiveTab('stats')}
             >
-              Estadísticas
+              Estadisticas
             </button>
             <button
               className={`panel-tab ${activeTab === 'entities' ? 'active' : ''}`}
@@ -222,23 +204,23 @@ export default function SimulationControls({
 
           {activeTab === 'config' ? (
             <>
-              <h3>Configuración de simulación</h3>
+              <h3>Configuracion de simulacion</h3>
               {mode === 'period' ? (
                 <div className="chip-row">
                   <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
-                    3 días
+                    3 dias
                   </button>
                   <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
-                    5 días
+                    5 dias
                   </button>
                   <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
-                    7 días
+                    7 dias
                   </button>
                 </div>
               ) : (
                 <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
-                  La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
-                  hasta que no haya más capacidad o datos disponibles.
+                  La simulacion hasta el colapso se ejecuta desde la fecha seleccionada y sigue
+                  hasta que no haya mas capacidad o datos disponibles.
                 </div>
               )}
 
@@ -251,35 +233,7 @@ export default function SimulationControls({
                 />
               </label>
 
-              <div className="field">
-                <div className="field-label">Rangos de semáforo</div>
-                <div className="range-row">
-                  <span className="range-label">Verde</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={greenMax}
-                    onChange={(event) => handleGreenChange(Number(event.target.value))}
-                  />
-                  <span className="range-value">{`0% - ${greenMax}%`}</span>
-                </div>
-                <div className="range-row">
-                  <span className="range-label">Ambar</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={amberMax}
-                    onChange={(event) => handleAmberChange(Number(event.target.value))}
-                  />
-                  <span className="range-value">{`${greenMax + 1}% - ${amberMax}%`}</span>
-                </div>
-                <div className="range-row">
-                  <span className="range-label">Rojo</span>
-                  <div className="range-static">{`${amberMax + 1}% - 100%`}</div>
-                </div>
-              </div>
+              <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
 
               <div className="buttons">
                 <button className="btn primary" onClick={() => onStart({ inicio, dias })} disabled={isRunning}>
@@ -297,7 +251,7 @@ export default function SimulationControls({
 
           {activeTab === 'stats' ? (
             <>
-              <h3>Estadísticas de la simulación</h3>
+              <h3>Estadisticas de la simulacion</h3>
               <div className="metric-grid">
                 {stats.cards.map((card) => (
                   <div className="metric" key={card.label}>
@@ -308,7 +262,7 @@ export default function SimulationControls({
               </div>
 
               <div className="progress-block">
-                <div className="progress-title">Progreso de simulación</div>
+                <div className="progress-title">Progreso de simulacion</div>
                 {stats.bars.map((bar) => (
                   <div className="progress-item" key={bar.label}>
                     <span>{bar.label}</span>
@@ -320,7 +274,7 @@ export default function SimulationControls({
               </div>
 
               <div className="warehouse">
-                <h4>Ocupación de almacenes</h4>
+                <h4>Ocupacion de almacenes</h4>
                 <div className="warehouse-list">
                   {warehouseItems.map((item) => (
                     <div className="warehouse-item" key={item.codigoOaci}>
@@ -329,7 +283,7 @@ export default function SimulationControls({
                         <div className="warehouse-sub">{item.pais}</div>
                       </div>
                       <div className="warehouse-right">
-                        <span>{formatPercent(item.porcentaje, 0)}</span>
+                        <span>{`${item.porcentaje.toFixed(0)}%`}</span>
                         <span className="warehouse-dot" style={{ background: item.color }} />
                       </div>
                     </div>
@@ -346,19 +300,19 @@ export default function SimulationControls({
                   className={`entity-subtab ${activeEntityTab === 'flights' ? 'active' : ''}`}
                   onClick={() => setActiveEntityTab('flights')}
                 >
-                  {`Vuelos (${formatInteger(filteredFlights.length)})`}
+                  {`Vuelos (${filteredFlights.length})`}
                 </button>
                 <button
                   className={`entity-subtab ${activeEntityTab === 'shipments' ? 'active' : ''}`}
                   onClick={() => setActiveEntityTab('shipments')}
                 >
-                  {`Envíos (${formatInteger(filteredShipments.length)})`}
+                  {`Envíos (${filteredShipments.length})`}
                 </button>
                 <button
                   className={`entity-subtab ${activeEntityTab === 'airports' ? 'active' : ''}`}
                   onClick={() => setActiveEntityTab('airports')}
                 >
-                  {`Aeropuertos (${formatInteger(filteredAirports.length)})`}
+                  {`Aeropuertos (${filteredAirports.length})`}
                 </button>
               </div>
 
@@ -392,19 +346,19 @@ export default function SimulationControls({
                             style={{ height: `${itemHeight}px` }}
                           >
                             <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
-                            <div className="flight-meta">{`Salida ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}</div>
+                            <div className="flight-meta">{`Salida ${flight.salidaMin} - Llegada ${flight.llegadaMin}`}</div>
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>
-                  <div className="flight-hint">{`${formatInteger(filteredFlights.length)} vuelos activos`}</div>
+                  <div className="flight-hint">{`${filteredFlights.length} vuelos activos`}</div>
                 </>
               ) : null}
 
               {activeEntityTab === 'shipments' ? (
                 <>
-                  <h3>Buscar envío o maleta</h3>
+                  <h3>Buscar envío / maleta</h3>
                   <label className="field">
                     <input
                       type="text"
@@ -444,7 +398,7 @@ export default function SimulationControls({
                       </div>
                     </div>
                   </div>
-                  <div className="flight-hint">{`${formatInteger(filteredShipments.length)} envíos de muestra`}</div>
+                  <div className="flight-hint">{`${filteredShipments.length} envíos de muestra`}</div>
 
                   <div className="buttons" style={{ marginTop: '4px', marginBottom: '4px' }}>
                     <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>
@@ -467,7 +421,7 @@ export default function SimulationControls({
                         }}
                       >
                         <strong>Estado:</strong> {getDynamicShipmentStatus(selectedShipmentRoute)} <br />
-                        <strong>Tiempo total:</strong> {formatDurationHours(selectedShipmentRoute.tiempoTotalHoras)}
+                        <strong>Tiempo total:</strong> {selectedShipmentRoute.tiempoTotalHoras.toFixed(1)} h
                       </div>
                       {selectedShipmentRoute.ruta.length === 0 && (
                         <div style={{ padding: '10px', fontSize: '12px' }}>No hay saltos registrados.</div>
@@ -482,7 +436,7 @@ export default function SimulationControls({
                             {paso.vueloId} | {paso.origen} → {paso.destino}
                           </div>
                           <div className="flight-meta">
-                            Salida {formatMinuteRange(paso.salidaMin, paso.llegadaMin)}
+                            Salida {paso.salidaMin} - Llegada {paso.llegadaMin}
                           </div>
                         </div>
                       ))}
@@ -497,7 +451,7 @@ export default function SimulationControls({
                   <label className="field">
                     <input
                       type="text"
-                      placeholder="Buscar por OACI, nombre o país"
+                      placeholder="Buscar por OACI, nombre o pais"
                       value={airportQuery}
                       onChange={(event) => setAirportQuery(event.target.value)}
                     />
