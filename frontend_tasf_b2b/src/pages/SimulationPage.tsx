@@ -177,6 +177,8 @@ export default function SimulationPage() {
     try {
       setShipmentSearchError(null)
       const route = await fetchShipmentRoute(simId, codigo)
+      setSelectedFlightId(null)
+      setSelectedAirportCode(null)
       setSelectedShipmentRoute(route)
     } catch (err) {
       setSelectedShipmentRoute(null)
@@ -378,11 +380,23 @@ export default function SimulationPage() {
   }, [warehouseSnapshot, airportsByCode, ranges])
 
   const handleSelectFlight = (flightId: number) => {
-    setSelectedFlightId((prev: number | null) => (prev === flightId ? null : flightId)) // ✅ tipo explícito
+    const nextFlightId = selectedFlightId === flightId ? null : flightId
+    setSelectedFlightId(nextFlightId)
+    if (nextFlightId !== null) {
+      setSelectedAirportCode(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   const handleSelectAirport = (codigoOaci: string) => {
-    setSelectedAirportCode((prev: string | null) => (prev === codigoOaci ? null : codigoOaci)) // ✅ tipo explícito
+    const nextAirportCode = selectedAirportCode === codigoOaci ? null : codigoOaci
+    setSelectedAirportCode(nextAirportCode)
+    if (nextAirportCode !== null) {
+      setSelectedFlightId(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
