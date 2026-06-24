@@ -8,7 +8,11 @@ import UploadEnvios from '../components/UploadEnvios'
 import { useSimulationContext } from '../contexts/SimulationContext'
 
 import {
+  formatDurationHours,
   formatCompactDate,
+  formatInteger,
+  formatKg,
+  formatPercent,
   getDayIndexFromDateString,
   getInclusiveDaySpan,
 } from '../utils/time'
@@ -342,10 +346,10 @@ export default function SimulationPage() {
     const activePct = totalSegments > 0 ? (totalActive * 100) / totalSegments : 0
     return {
       cards: [
-        { label: 'Vuelos activos', value: `${totalActive}` },
-        { label: 'Carga en aire', value: `${Math.round(totalCargo)}` },
-        { label: 'Capacidad usada', value: `${capacityPct.toFixed(1)}%` },
-        { label: 'Duracion prom. vuelo', value: `${(avgDurationMin / 60).toFixed(2)}h` },
+        { label: 'Vuelos activos', value: formatInteger(totalActive) },
+        { label: 'Carga en aire', value: formatKg(totalCargo) },
+        { label: 'Capacidad usada', value: formatPercent(capacityPct) },
+        { label: 'Duracion prom. vuelo', value: formatDurationHours(avgDurationMin / 60, 2) },
       ],
       bars: [
         { label: 'Completado', value: progressPct },
@@ -428,10 +432,10 @@ export default function SimulationPage() {
                       Duracion: <strong>{typeof duration === 'number' ? `${duration} dias` : duration}</strong>
                     </div>
                     <div className="status-item">
-                      Vuelos activos: <strong>{cappedSegments.length}</strong>
+                      Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
                     </div>
                     <div className="status-item">
-                      Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong>
+                      Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
                     </div>
                   </div>
                 </>

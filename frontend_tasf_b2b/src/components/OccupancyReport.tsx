@@ -17,6 +17,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { fetchOccupancyReport } from '../services/api';
+import { formatDate, formatInteger, formatPercent } from '../utils/time';
 
 // --- Types ---
 export interface FlightOccupancyData {
@@ -276,7 +277,7 @@ export default function OccupancyReport() {
                 <Percent size={18} color="#2f62b5" />
               </div>
             </div>
-            <div style={styles.kpiValue}>{globalKpis.averageRate.toFixed(1)}%</div>
+            <div style={styles.kpiValue}>{formatPercent(globalKpis.averageRate)}</div>
             <div style={styles.kpiFooter}>Capacidad total utilizada en vuelos seleccionados</div>
           </div>
 
@@ -288,8 +289,8 @@ export default function OccupancyReport() {
               </div>
             </div>
             <div style={styles.kpiValue}>
-              {globalKpis.totalBags.toLocaleString()}{' '}
-              <span style={styles.kpiUnit}>/ {globalKpis.totalCapacity.toLocaleString()}</span>
+              {formatInteger(globalKpis.totalBags)}{' '}
+              <span style={styles.kpiUnit}>/ {formatInteger(globalKpis.totalCapacity)}</span>
             </div>
             <div style={styles.kpiFooter}>Maletas asignadas frente al límite de bodega</div>
           </div>
@@ -307,7 +308,7 @@ export default function OccupancyReport() {
                 color: globalKpis.criticalCount > 0 ? '#ef4444' : '#0f1b2d',
               }}
             >
-              {globalKpis.criticalCount}
+              {formatInteger(globalKpis.criticalCount)}
             </div>
             <div style={styles.kpiFooter}>Vuelos que superan el límite de equipaje establecido</div>
           </div>
@@ -320,7 +321,7 @@ export default function OccupancyReport() {
               </div>
             </div>
             <div style={styles.kpiValue}>
-              {globalKpis.warningCount} <span style={styles.kpiUnit}>en riesgo</span>
+              {formatInteger(globalKpis.warningCount)} <span style={styles.kpiUnit}>en riesgo</span>
             </div>
             <div style={styles.kpiFooter}>Vuelos con ocupación entre el 80% y el 100%</div>
           </div>
@@ -349,11 +350,11 @@ export default function OccupancyReport() {
                   <div style={styles.periodBarInfo}>
                     <div>
                       <span style={styles.periodName}>{pm.period}</span>
-                      <span style={styles.periodSub}>({pm.flightCount} vuelos registrados)</span>
+                      <span style={styles.periodSub}>({formatInteger(pm.flightCount)} vuelos registrados)</span>
                     </div>
                     <div style={styles.periodValues}>
-                      <span style={styles.periodPercent}>{pct.toFixed(1)}%</span>
-                      <span style={styles.periodBags}>{pm.totalBags.toLocaleString()} maletas</span>
+                      <span style={styles.periodPercent}>{formatPercent(pct)}</span>
+                      <span style={styles.periodBags}>{formatInteger(pm.totalBags)} maletas</span>
                     </div>
                   </div>
                   <div style={styles.progressTrack}>
@@ -371,8 +372,8 @@ export default function OccupancyReport() {
                     />
                   </div>
                   <div style={styles.periodFooter}>
-                    <span>Capacidad Total: {pm.totalCapacity.toLocaleString()}</span>
-                    <span>Ocupación Máx. Individual: {pm.maxOccupancy.toFixed(1)}%</span>
+                    <span>Capacidad Total: {formatInteger(pm.totalCapacity)}</span>
+                    <span>Ocupación Máx. Individual: {formatPercent(pm.maxOccupancy)}</span>
                   </div>
                 </div>
               );
@@ -488,19 +489,19 @@ export default function OccupancyReport() {
                         <td style={styles.td}>
                           <div style={styles.dateContainer}>
                             <Calendar size={13} color="#94a3b8" style={{ marginRight: 6 }} />
-                            {item.date}
+                            {formatDate(item.date)}
                           </div>
                         </td>
                         <td style={styles.td}>
                           <div style={styles.capacityText}>
-                            <strong>{item.bagsCount}</strong>{' '}
-                            <span style={{ color: '#94a3b8' }}>/ {item.maxCapacity}</span>
+                            <strong>{formatInteger(item.bagsCount)}</strong>{' '}
+                            <span style={{ color: '#94a3b8' }}>/ {formatInteger(item.maxCapacity)}</span>
                           </div>
                         </td>
                         <td style={styles.td}>
                           <div style={styles.occupancyCellContainer}>
                             <span style={{ fontWeight: 600, marginRight: 8, fontSize: 13 }}>
-                              {percentage.toFixed(1)}%
+                              {formatPercent(percentage)}
                             </span>
                             <div style={styles.tableProgressTrack}>
                               <div

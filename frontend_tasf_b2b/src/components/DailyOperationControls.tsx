@@ -1,6 +1,12 @@
 // src/components/DailyOperationControls.tsx
 
 import { useMemo, useState, type KeyboardEvent } from 'react'
+import {
+  formatDurationHours,
+  formatInteger,
+  formatMinuteRange,
+  formatPercent,
+} from '../utils/time'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -432,27 +438,27 @@ export default function DailyOperationControls({
 
             <div className="metric-grid">
               <div className="metric">
-                <div className="metric-value">{shipmentSummary?.total ?? '--'}</div>
+                <div className="metric-value">{formatInteger(shipmentSummary?.total)}</div>
                 <div className="metric-label">Totales</div>
               </div>
 
               <div className="metric">
-                <div className="metric-value">{shipmentSummary?.assigned ?? '--'}</div>
+                <div className="metric-value">{formatInteger(shipmentSummary?.assigned)}</div>
                 <div className="metric-label">Asignados</div>
               </div>
 
               <div className="metric">
-                <div className="metric-value">{shipmentSummary?.inTransit ?? '--'}</div>
+                <div className="metric-value">{formatInteger(shipmentSummary?.inTransit)}</div>
                 <div className="metric-label">En ruta</div>
               </div>
 
               <div className="metric">
-                <div className="metric-value">{shipmentSummary?.pending ?? '--'}</div>
+                <div className="metric-value">{formatInteger(shipmentSummary?.pending)}</div>
                 <div className="metric-label">Pendientes</div>
               </div>
 
               <div className="metric">
-                <div className="metric-value">{shipmentSummary?.delivered ?? '--'}</div>
+                <div className="metric-value">{formatInteger(shipmentSummary?.delivered)}</div>
                 <div className="metric-label">Entregados</div>
               </div>
             </div>
@@ -473,7 +479,7 @@ export default function DailyOperationControls({
                     </div>
 
                     <div className="warehouse-right">
-                      <span>{`${item.porcentaje.toFixed(0)}%`}</span>
+                      <span>{formatPercent(item.porcentaje, 0)}</span>
                       <span className="warehouse-dot" style={{ background: item.color }} />
                     </div>
                   </div>
@@ -524,7 +530,7 @@ export default function DailyOperationControls({
                       {`${flight.flightId} | ${flight.origen} → ${flight.destino}`}
                     </div>
                     <div className="flight-meta">
-                      {`${flight.estado ?? 'Planificado'} · Salida ${flight.salidaMin} - Llegada ${flight.llegadaMin}`}
+                      {`${flight.estado ?? 'Planificado'} · Salida ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}
                     </div>
                   </button>
                 ))}
@@ -532,7 +538,7 @@ export default function DailyOperationControls({
             </div>
           </div>
 
-          <div className="flight-hint">{`${filteredFlights.length} vuelos encontrados`}</div>
+          <div className="flight-hint">{`${formatInteger(filteredFlights.length)} vuelos encontrados`}</div>
 
           <h3>Buscar envío / maleta</h3>
           <label className="field">
@@ -569,7 +575,7 @@ export default function DailyOperationControls({
               </div>
             </div>
           </div>
-          <div className="flight-hint">{`${filteredShipments.length} envíos de muestra`}</div>
+          <div className="flight-hint">{`${formatInteger(filteredShipments.length)} envíos de muestra`}</div>
 
           <div className="buttons" style={{ marginTop: '4px', marginBottom: '4px' }}>
             <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>Buscar ruta</button>
@@ -579,7 +585,7 @@ export default function DailyOperationControls({
             <div className="flight-list" style={{ maxHeight: '200px', height: 'auto', marginBottom: '10px' }}>
               <div style={{ padding: '10px', fontSize: '12px', background: '#eaf0fb', borderBottom: '1px solid #d9e4f4' }}>
                 <strong>Estado:</strong> {getDynamicShipmentStatus(selectedShipmentRoute)} <br />
-                <strong>Tiempo total:</strong> {selectedShipmentRoute.tiempoTotalHoras.toFixed(1)} h
+                <strong>Tiempo total:</strong> {formatDurationHours(selectedShipmentRoute.tiempoTotalHoras)}
               </div>
               {selectedShipmentRoute.ruta.length === 0 && (
                 <div style={{ padding: '10px', fontSize: '12px' }}>No hay saltos registrados.</div>
@@ -587,7 +593,7 @@ export default function DailyOperationControls({
               {selectedShipmentRoute.ruta.map((paso, idx) => (
                 <div key={idx} className="flight-item" style={{ borderBottom: '1px solid rgba(217, 228, 244, 0.8)', cursor: 'default' }}>
                   <div className="flight-label">{paso.vueloId} | {paso.origen} → {paso.destino}</div>
-                  <div className="flight-meta">Salida {paso.salidaMin} - Llegada {paso.llegadaMin}</div>
+                  <div className="flight-meta">Salida {formatMinuteRange(paso.salidaMin, paso.llegadaMin)}</div>
                 </div>
               ))}
             </div>

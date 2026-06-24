@@ -1,4 +1,10 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
+import {
+  formatDurationHours,
+  formatInteger,
+  formatMinuteRange,
+  formatPercent,
+} from '../utils/time'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -323,7 +329,7 @@ export default function SimulationControls({
                         <div className="warehouse-sub">{item.pais}</div>
                       </div>
                       <div className="warehouse-right">
-                        <span>{`${item.porcentaje.toFixed(0)}%`}</span>
+                        <span>{formatPercent(item.porcentaje, 0)}</span>
                         <span className="warehouse-dot" style={{ background: item.color }} />
                       </div>
                     </div>
@@ -340,19 +346,19 @@ export default function SimulationControls({
                   className={`entity-subtab ${activeEntityTab === 'flights' ? 'active' : ''}`}
                   onClick={() => setActiveEntityTab('flights')}
                 >
-                  {`Vuelos (${filteredFlights.length})`}
+                  {`Vuelos (${formatInteger(filteredFlights.length)})`}
                 </button>
                 <button
                   className={`entity-subtab ${activeEntityTab === 'shipments' ? 'active' : ''}`}
                   onClick={() => setActiveEntityTab('shipments')}
                 >
-                  {`Envíos (${filteredShipments.length})`}
+                  {`Envíos (${formatInteger(filteredShipments.length)})`}
                 </button>
                 <button
                   className={`entity-subtab ${activeEntityTab === 'airports' ? 'active' : ''}`}
                   onClick={() => setActiveEntityTab('airports')}
                 >
-                  {`Aeropuertos (${filteredAirports.length})`}
+                  {`Aeropuertos (${formatInteger(filteredAirports.length)})`}
                 </button>
               </div>
 
@@ -386,13 +392,13 @@ export default function SimulationControls({
                             style={{ height: `${itemHeight}px` }}
                           >
                             <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
-                            <div className="flight-meta">{`Salida ${flight.salidaMin} - Llegada ${flight.llegadaMin}`}</div>
+                            <div className="flight-meta">{`Salida ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}</div>
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>
-                  <div className="flight-hint">{`${filteredFlights.length} vuelos activos`}</div>
+                  <div className="flight-hint">{`${formatInteger(filteredFlights.length)} vuelos activos`}</div>
                 </>
               ) : null}
 
@@ -438,7 +444,7 @@ export default function SimulationControls({
                       </div>
                     </div>
                   </div>
-                  <div className="flight-hint">{`${filteredShipments.length} envíos de muestra`}</div>
+                  <div className="flight-hint">{`${formatInteger(filteredShipments.length)} envíos de muestra`}</div>
 
                   <div className="buttons" style={{ marginTop: '4px', marginBottom: '4px' }}>
                     <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>
@@ -461,7 +467,7 @@ export default function SimulationControls({
                         }}
                       >
                         <strong>Estado:</strong> {getDynamicShipmentStatus(selectedShipmentRoute)} <br />
-                        <strong>Tiempo total:</strong> {selectedShipmentRoute.tiempoTotalHoras.toFixed(1)} h
+                        <strong>Tiempo total:</strong> {formatDurationHours(selectedShipmentRoute.tiempoTotalHoras)}
                       </div>
                       {selectedShipmentRoute.ruta.length === 0 && (
                         <div style={{ padding: '10px', fontSize: '12px' }}>No hay saltos registrados.</div>
@@ -476,7 +482,7 @@ export default function SimulationControls({
                             {paso.vueloId} | {paso.origen} → {paso.destino}
                           </div>
                           <div className="flight-meta">
-                            Salida {paso.salidaMin} - Llegada {paso.llegadaMin}
+                            Salida {formatMinuteRange(paso.salidaMin, paso.llegadaMin)}
                           </div>
                         </div>
                       ))}

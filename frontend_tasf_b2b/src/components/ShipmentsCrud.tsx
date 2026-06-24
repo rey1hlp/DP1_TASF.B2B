@@ -4,6 +4,7 @@ import { createShipment, deleteShipment, listAirports, listShipments, updateShip
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
+import { formatDate, formatDateTime, formatFileSize, formatInteger } from '../utils/time'
 
 const EMPTY_FORM: ShipmentCrudDto = {
   codigoPedido: '',
@@ -284,8 +285,8 @@ export default function ShipmentsCrud() {
             <span>{item.codigoPedido}</span>
             <span>{item.origen}</span>
             <span>{item.destino}</span>
-            <span>{item.ingresoUtc}</span>
-            <span>{item.cantidad}</span>
+            <span>{formatDateTime(item.ingresoUtc)}</span>
+            <span>{formatInteger(item.cantidad)}</span>
             <span>{item.idCliente}</span>
             <span className={`status-badge ${getShipmentStatusClass(item.status)}`}>
               {getShipmentStatusLabel(item.status)}
@@ -319,12 +320,12 @@ export default function ShipmentsCrud() {
             </div>
             <div className="upload-summary">
               <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
-              <span>{`Tamano: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
+              <span>{`Tamano: ${formatFileSize(uploadFile?.size ?? 0)}`}</span>
             </div>
             {uploadError ? <div className="upload-error">{uploadError}</div> : null}
             {uploadResult ? (
               <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
-                <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
+                <div>{`Total: ${formatInteger(uploadResult.total)}. Insertados: ${formatInteger(uploadResult.inserted)}. Actualizados: ${formatInteger(uploadResult.updated)}. Omitidos: ${formatInteger(uploadResult.skipped)}.`}</div>
                 {uploadResult.invalidAirportLines.length > 0 ? (
                   <div>
                     <div>Los siguientes registros referencian aeropuertos que no existen:</div>
@@ -418,7 +419,7 @@ export default function ShipmentsCrud() {
           </label>
           <label className="field">
             Fecha
-            <input value={form.fecha} onChange={(event) => handleChange('fecha', event.target.value)} placeholder="AAAAMMDD" />
+            <input value={form.fecha} onChange={(event) => handleChange('fecha', event.target.value)} placeholder="AAAAMMDD" title={formatDate(form.fecha)} />
           </label>
           <label className="field">
             Ingreso local

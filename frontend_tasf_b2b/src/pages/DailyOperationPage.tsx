@@ -6,6 +6,7 @@ import type { AirportDto } from '../types/sim'
 import { fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
+import { formatDateTime, formatInteger, formatKg, formatPercent } from '../utils/time'
 
 type MapViewProps = ComponentProps<typeof MapView>
 type MapSegment = MapViewProps['segments'][number]
@@ -80,13 +81,6 @@ function toWsUrl(httpUrl: string) {
 
 function getCurrentMinuteOfDay(date: Date) {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
-}
-
-function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat('es-PE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
 }
 
 function getFlightStatusLabel(status?: FlightStatus) {
@@ -368,10 +362,10 @@ export default function DailyOperationPage() {
   
     return {
       cards: [
-        { label: 'Vuelos activos', value: `${totalActive}` },
-        { label: 'Vuelos planificados', value: `${totalFlights}` },
-        { label: 'Carga en aire', value: `${Math.round(totalCargo)}` },
-        { label: 'Capacidad usada', value: `${capacityPct.toFixed(1)}%` },
+        { label: 'Vuelos activos', value: formatInteger(totalActive) },
+        { label: 'Vuelos planificados', value: formatInteger(totalFlights) },
+        { label: 'Carga en aire', value: formatKg(totalCargo) },
+        { label: 'Capacidad usada', value: formatPercent(capacityPct) },
       ],
       bars: [
         { label: 'Actividad de vuelos', value: activePct },
@@ -411,7 +405,7 @@ export default function DailyOperationPage() {
     }))
   }, [airports])
   
-  const lastSyncLabel = lastSyncAt ? formatDateTime(new Date(lastSyncAt)) : '--'
+  const lastSyncLabel = formatDateTime(lastSyncAt)
 
   const handleSelectFlight = (flightId: number) => {
     setSelectedFlightId((prev) => (prev === flightId ? null : flightId))
@@ -448,11 +442,11 @@ export default function DailyOperationPage() {
               </div>
 
               <div className="status-item">
-                Vuelos activos: <strong>{totalActiveFlights}</strong>
+                Vuelos activos: <strong>{formatInteger(totalActiveFlights)}</strong>
               </div>
 
               <div className="status-item">
-                Vuelos planificados: <strong>{totalFlights}</strong>
+                Vuelos planificados: <strong>{formatInteger(totalFlights)}</strong>
               </div>
 
               <div className="status-item">

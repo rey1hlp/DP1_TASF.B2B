@@ -3,7 +3,7 @@ import type { FlightCrudDto } from '../types/sim'
 import { cancelFlightDay, createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
 import { useSimulationContext } from '../contexts/SimulationContext'
-import { formatIsoDateFromDayIndex } from '../utils/time'
+import { formatDateTime, formatFileSize, formatInteger, formatIsoDateFromDayIndex } from '../utils/time'
 
 interface FlightsCrudProps {
   onViewDetail: (id: number) => void;
@@ -348,9 +348,9 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
             <span className="flight-code">{item.codigo}</span>
             <span>{formatLocation(item.origenOaci, item.origenCiudad)}</span>
             <span>{formatLocation(item.destinoOaci, item.destinoCiudad)}</span>
-            <span className="datetime">{item.salida?.replace('T', ' ')}</span>
-            <span className="datetime">{item.llegada?.replace('T', ' ')}</span>
-            <span className="capacity">{item.capacidad}</span>
+            <span className="datetime">{formatDateTime(item.salida)}</span>
+            <span className="datetime">{formatDateTime(item.llegada)}</span>
+            <span className="capacity">{formatInteger(item.capacidad)}</span>
             <span className={`status-badge ${item.cancelado ? 'cancelled' : 'active'}`}>
               {item.cancelado ? 'Cancelado' : 'Activo'}
             </span>
@@ -508,12 +508,12 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
                 </div>
                 <div className="upload-summary">
                   <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
-                  <span>{`Tamaño: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
+                  <span>{`Tamaño: ${formatFileSize(uploadFile?.size ?? 0)}`}</span>
                 </div>
                 {uploadError && <div className="upload-error">{uploadError}</div>}
                 {uploadResult && (
                   <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
-                    <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
+                    <div>{`Total: ${formatInteger(uploadResult.total)}. Insertados: ${formatInteger(uploadResult.inserted)}. Actualizados: ${formatInteger(uploadResult.updated)}. Omitidos: ${formatInteger(uploadResult.skipped)}.`}</div>
                     {uploadResult.invalidAirportLines.length > 0 && (
                       <div>
                         <div>Los siguientes registros referencian Aeropuertos que no existen:</div>
@@ -541,5 +541,4 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     </div>
   )
 }
-
 
