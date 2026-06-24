@@ -1,4 +1,5 @@
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
+import EntityExplorer from './EntityExplorer'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 
 export type PasoRutaDto = {
@@ -51,8 +52,6 @@ export type SimulationControlsProps = {
   currentMinute: number | null
 }
 
-type EntityTab = 'flights' | 'shipments' | 'airports'
-
 export default function SimulationControls({
   mode,
   onStart,
@@ -79,95 +78,8 @@ export default function SimulationControls({
   currentMinute,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
-  const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>('flights')
   const [inicio, setInicio] = useState('2026-02-15T00:00')
   const [dias, setDias] = useState(3)
-  const [flightQuery, setFlightQuery] = useState('')
-  const [flightScrollTop, setFlightScrollTop] = useState(0)
-  const [airportQuery, setAirportQuery] = useState('')
-  const [airportScrollTop, setAirportScrollTop] = useState(0)
-  const [shipmentQuery, setShipmentQuery] = useState('')
-  const [shipmentScrollTop, setShipmentScrollTop] = useState(0)
-
-  const filteredFlights = useMemo(() => {
-    const query = flightQuery.trim().toLowerCase()
-    if (!query) {
-      return flightItems
-    }
-    return flightItems.filter((flight) => {
-      const label = `${flight.flightId} ${flight.origen} ${flight.destino}`.toLowerCase()
-      return label.includes(query)
-    })
-  }, [flightItems, flightQuery])
-
-  const filteredAirports = useMemo(() => {
-    const query = airportQuery.trim().toLowerCase()
-    if (!query) {
-      return airportItems
-    }
-    return airportItems.filter((airport) => {
-      const label = `${airport.codigoOaci} ${airport.nombre} ${airport.pais}`.toLowerCase()
-      return label.includes(query)
-    })
-  }, [airportItems, airportQuery])
-
-  const filteredShipments = useMemo(() => {
-    const query = shipmentQuery.trim().toLowerCase()
-    if (!query) return sampleShipments
-    return sampleShipments.filter((s) => s.toLowerCase().includes(query))
-  }, [sampleShipments, shipmentQuery])
-
-  // Las sub-pestañas de entidades ahora tienen todo el alto disponible,
-  // ya que ya no comparten el panel con las otras dos listas.
-  const listHeight = 320
-  const itemHeight = 44
-  const visibleCount = Math.ceil(listHeight / itemHeight) + 6
-  const startIndex = Math.max(0, Math.floor(flightScrollTop / itemHeight))
-  const endIndex = Math.min(filteredFlights.length, startIndex + visibleCount)
-  const visibleFlights = filteredFlights.slice(startIndex, endIndex)
-  const offsetY = startIndex * itemHeight
-  const airportStartIndex = Math.max(0, Math.floor(airportScrollTop / itemHeight))
-  const airportEndIndex = Math.min(filteredAirports.length, airportStartIndex + visibleCount)
-  const visibleAirports = filteredAirports.slice(airportStartIndex, airportEndIndex)
-  const airportOffsetY = airportStartIndex * itemHeight
-
-  const shipmentListHeight = 220
-  const shipmentVisibleCount = Math.ceil(shipmentListHeight / itemHeight) + 6
-  const shipmentStartIndex = Math.max(0, Math.floor(shipmentScrollTop / itemHeight))
-  const shipmentEndIndex = Math.min(filteredShipments.length, shipmentStartIndex + shipmentVisibleCount)
-  const visibleShipments = filteredShipments.slice(shipmentStartIndex, shipmentEndIndex)
-  const shipmentOffsetY = shipmentStartIndex * itemHeight
-
-  const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Enter') {
-      return
-    }
-    const target = filteredFlights[0]
-    if (target) {
-      onSelectFlight(target.flightId)
-    }
-  }
-
-  const getDynamicShipmentStatus = (route: RespuestaRutaEnvioDto) => {
-    if (!route || route.ruta.length === 0) return route?.estado || 'DESCONOCIDO'
-    if (currentMinute === null) return route.estado === 'CON_RETRASO' ? 'ENTREGADO (CON RETRASO)' : route.estado
-
-    const first = route.ruta[0]
-    const last = route.ruta[route.ruta.length - 1]
-
-    if (currentMinute < first.salidaMin) {
-      return 'EN ALMACÉN (Origen)'
-    } else if (currentMinute > last.llegadaMin) {
-      return route.estado === 'CON_RETRASO' ? 'ENTREGADO (CON RETRASO)' : 'ENTREGADO'
-    } else {
-      for (const paso of route.ruta) {
-        if (currentMinute >= paso.salidaMin && currentMinute <= paso.llegadaMin) {
-          return `EN VUELO (${paso.origen} → ${paso.destino})`
-        }
-      }
-      return 'EN ESCALA (Almacén)'
-    }
-  }
 
   return (
     <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
@@ -294,196 +206,23 @@ export default function SimulationControls({
           ) : null}
 
           {activeTab === 'entities' ? (
-            <>
-              <div className="entity-subtabs">
-                <button
-                  className={`entity-subtab ${activeEntityTab === 'flights' ? 'active' : ''}`}
-                  onClick={() => setActiveEntityTab('flights')}
-                >
-                  {`Vuelos (${filteredFlights.length})`}
-                </button>
-                <button
-                  className={`entity-subtab ${activeEntityTab === 'shipments' ? 'active' : ''}`}
-                  onClick={() => setActiveEntityTab('shipments')}
-                >
-                  {`Envíos (${filteredShipments.length})`}
-                </button>
-                <button
-                  className={`entity-subtab ${activeEntityTab === 'airports' ? 'active' : ''}`}
-                  onClick={() => setActiveEntityTab('airports')}
-                >
-                  {`Aeropuertos (${filteredAirports.length})`}
-                </button>
-              </div>
-
-              {activeEntityTab === 'flights' ? (
-                <>
-                  <h3>Buscar vuelo en la simulación</h3>
-                  <label className="field">
-                    <input
-                      type="text"
-                      placeholder="Buscar por ID, origen o destino"
-                      value={flightQuery}
-                      onChange={(event) => setFlightQuery(event.target.value)}
-                      onKeyDown={handleFlightKeyDown}
-                    />
-                  </label>
-                  <div
-                    className="flight-list"
-                    onScroll={(event) => setFlightScrollTop(event.currentTarget.scrollTop)}
-                    style={{ height: `${listHeight}px` }}
-                  >
-                    <div
-                      className="flight-list-spacer"
-                      style={{ height: `${filteredFlights.length * itemHeight}px` }}
-                    >
-                      <div className="flight-list-items" style={{ transform: `translateY(${offsetY}px)` }}>
-                        {visibleFlights.map((flight) => (
-                          <button
-                            key={flight.flightId}
-                            className={`flight-item ${selectedFlightId === flight.flightId ? 'active' : ''}`}
-                            onClick={() => onSelectFlight(flight.flightId)}
-                            style={{ height: `${itemHeight}px` }}
-                          >
-                            <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
-                            <div className="flight-meta">{`Salida ${flight.salidaMin} - Llegada ${flight.llegadaMin}`}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flight-hint">{`${filteredFlights.length} vuelos activos`}</div>
-                </>
-              ) : null}
-
-              {activeEntityTab === 'shipments' ? (
-                <>
-                  <h3>Buscar envío / maleta</h3>
-                  <label className="field">
-                    <input
-                      type="text"
-                      placeholder="Ingresar ID del envío (ej. 000000001)"
-                      value={shipmentQuery}
-                      onChange={(event) => setShipmentQuery(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') onSearchShipment(shipmentQuery)
-                      }}
-                    />
-                  </label>
-
-                  <div
-                    className="flight-list"
-                    onScroll={(event) => setShipmentScrollTop(event.currentTarget.scrollTop)}
-                    style={{ height: `${shipmentListHeight}px`, marginTop: '8px' }}
-                  >
-                    <div
-                      className="flight-list-spacer"
-                      style={{ height: `${filteredShipments.length * itemHeight}px` }}
-                    >
-                      <div className="flight-list-items" style={{ transform: `translateY(${shipmentOffsetY}px)` }}>
-                        {visibleShipments.length === 0 && (
-                          <div style={{ padding: '10px', fontSize: '12px' }}>No hay muestras (inicia simulación)</div>
-                        )}
-                        {visibleShipments.map((codigo) => (
-                          <button
-                            key={codigo}
-                            className={`flight-item ${selectedShipmentRoute?.codigoPedido === codigo ? 'active' : ''}`}
-                            onClick={() => onSearchShipment(codigo)}
-                            style={{ height: `${itemHeight}px` }}
-                          >
-                            <div className="flight-label">{`📦 Pedido: ${codigo}`}</div>
-                            <div className="flight-meta">Click para ver ruta</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flight-hint">{`${filteredShipments.length} envíos de muestra`}</div>
-
-                  <div className="buttons" style={{ marginTop: '4px', marginBottom: '4px' }}>
-                    <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>
-                      Buscar ruta
-                    </button>
-                  </div>
-                  {shipmentSearchError && (
-                    <div className="upload-error" style={{ marginBottom: '8px' }}>
-                      {shipmentSearchError}
-                    </div>
-                  )}
-                  {selectedShipmentRoute && (
-                    <div className="flight-list" style={{ maxHeight: '220px', height: 'auto', marginBottom: '10px' }}>
-                      <div
-                        style={{
-                          padding: '10px',
-                          fontSize: '12px',
-                          background: '#eaf0fb',
-                          borderBottom: '1px solid #d9e4f4',
-                        }}
-                      >
-                        <strong>Estado:</strong> {getDynamicShipmentStatus(selectedShipmentRoute)} <br />
-                        <strong>Tiempo total:</strong> {selectedShipmentRoute.tiempoTotalHoras.toFixed(1)} h
-                      </div>
-                      {selectedShipmentRoute.ruta.length === 0 && (
-                        <div style={{ padding: '10px', fontSize: '12px' }}>No hay saltos registrados.</div>
-                      )}
-                      {selectedShipmentRoute.ruta.map((paso, idx) => (
-                        <div
-                          key={idx}
-                          className="flight-item"
-                          style={{ borderBottom: '1px solid rgba(217, 228, 244, 0.8)', cursor: 'default' }}
-                        >
-                          <div className="flight-label">
-                            {paso.vueloId} | {paso.origen} → {paso.destino}
-                          </div>
-                          <div className="flight-meta">
-                            Salida {paso.salidaMin} - Llegada {paso.llegadaMin}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : null}
-
-              {activeEntityTab === 'airports' ? (
-                <>
-                  <h3>Buscar aeropuerto en la simulación</h3>
-                  <label className="field">
-                    <input
-                      type="text"
-                      placeholder="Buscar por OACI, nombre o pais"
-                      value={airportQuery}
-                      onChange={(event) => setAirportQuery(event.target.value)}
-                    />
-                  </label>
-                  <div
-                    className="flight-list"
-                    onScroll={(event) => setAirportScrollTop(event.currentTarget.scrollTop)}
-                    style={{ height: `${listHeight}px` }}
-                  >
-                    <div
-                      className="flight-list-spacer"
-                      style={{ height: `${filteredAirports.length * itemHeight}px` }}
-                    >
-                      <div className="flight-list-items" style={{ transform: `translateY(${airportOffsetY}px)` }}>
-                        {visibleAirports.map((airport) => (
-                          <button
-                            key={airport.codigoOaci}
-                            className={`flight-item ${selectedAirportCode === airport.codigoOaci ? 'active' : ''}`}
-                            onClick={() => onSelectAirport(airport.codigoOaci)}
-                            style={{ height: `${itemHeight}px` }}
-                          >
-                            <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
-                            <div className="flight-meta">{airport.pais}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flight-hint">{`${filteredAirports.length} aeropuertos`}</div>
-                </>
-              ) : null}
-            </>
+            <EntityExplorer
+              flights={flightItems}
+              airports={airportItems}
+              shipments={sampleShipments}
+              selectedFlightId={selectedFlightId}
+              selectedAirportCode={selectedAirportCode}
+              selectedShipmentRoute={selectedShipmentRoute}
+              onSelectFlight={onSelectFlight}
+              onSelectAirport={onSelectAirport}
+              onSearchShipment={onSearchShipment}
+              shipmentSearchError={shipmentSearchError}
+              currentMinute={currentMinute}
+              labels={{
+                flightHintNoun: 'vuelos activos',
+                shipmentEmpty: 'No hay muestras (inicia simulación)',
+              }}
+            />
           ) : null}
         </div>
       )}
