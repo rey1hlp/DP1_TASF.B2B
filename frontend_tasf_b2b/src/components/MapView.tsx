@@ -306,12 +306,10 @@ export default function MapView({
       })
       const tooltipParts = [
         `${airport.codigoOaci} - ${airport.nombre}`,
-        `Capacidad: ${airport.capacidad}`,
       ]
       if (snapshot) {
-        tooltipParts.push(`Ocupacion: ${snapshot.ocupacion}`)
-        tooltipParts.push(`Libre: ${snapshot.libre}`)
         tooltipParts.push(`Uso: ${snapshot.porcentaje.toFixed(1)}%`)
+        tooltipParts.push(`Ocupacion: ${snapshot.ocupacion}/${snapshot.capacidad}`)
       }
       const tooltip = tooltipParts.join('<br/>')
       marker.bindTooltip(tooltip, {
@@ -352,7 +350,6 @@ export default function MapView({
       const lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
       const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
       const capacity = seg.capacidad
-      const free = capacity !== undefined ? Math.max(0, capacity - seg.carga) : undefined
 
       const isSelectedFlight = selectedFlightId !== null && seg.flightId === selectedFlightId
       const isSelectedShipment = selectedShipmentRoute != null && selectedShipmentRoute.ruta.some(p => p.vueloId === seg.flightId)
@@ -364,11 +361,9 @@ export default function MapView({
       const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, isDimmed)
 
       const tooltipParts = [
+        `Vuelo ${seg.flightId}`,
         `${seg.origen} → ${seg.destino}`,
-        `Vuelo: ${seg.flightId}`,
-        `Carga: ${Math.round(seg.carga)}`,
-        capacity !== undefined ? `Capacidad: ${capacity}` : 'Capacidad: n/d',
-        free !== undefined ? `Libre: ${free}` : 'Libre: n/d',
+        capacity !== undefined ? `Carga: ${Math.round(seg.carga)}/${capacity}` : 'Capacidad: n/d',
       ]
       const tooltip = `${tooltipParts.join('<br/>')}`
 
