@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AirportCrudDto, ShipmentCrudDto } from '../types/sim'
 import { getAirportByCode, getWarehouseShipments } from '../services/api'
-import { formatGmtOffset, formatKg } from '../utils/time'
+import { formatBags, formatGmtOffset } from '../utils/time'
 
 interface WarehouseDetailPageProps {
   airportCode: string
@@ -63,7 +63,7 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
         <h3>{airport?.nombre}</h3>
         <p style={{ margin: '0.2rem 0' }}><b>Ubicación:</b> {airport?.ciudad}, {airport?.pais} ({formatGmtOffset(airport?.gmt)})</p>
         <p style={{ margin: '0.5rem 0 0 0', fontWeight: 'bold' }}>
-          Ocupación Física de Bodega: {formatKg(totalCargaAlmacenada)}
+          Ocupación Física de Bodega: {formatBags(totalCargaAlmacenada)}
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
           <span>Código Pedido</span>
           <span>Tipo en Almacén</span>
           <span>Ruta Original</span>
-          <span>Volumen/Peso</span>
+          <span>Maletas</span>
           <span>Cliente</span>
           <span>Estado</span>
         </div>
@@ -109,7 +109,7 @@ export default function WarehouseDetailPage({ airportCode, onVolver }: Warehouse
                 {esSaliente ? 'Carga Saliente' : 'Carga Entrante'}
               </span>
               <span>{ship.origen} → {ship.destino}</span>
-              <span>{formatKg(ship.cantidad)}</span>
+              <span>{formatBags(ship.cantidad)}</span>
               <span>{ship.idCliente}</span>
               <span>En Almacén</span>
             </div>

@@ -6,7 +6,7 @@ import type { AirportDto } from '../types/sim'
 import { fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
-import { formatDateTime, formatInteger, formatKg, formatPercent } from '../utils/time'
+import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 
 type MapViewProps = ComponentProps<typeof MapView>
 type MapSegment = MapViewProps['segments'][number]
@@ -364,7 +364,7 @@ export default function DailyOperationPage() {
       cards: [
         { label: 'Vuelos activos', value: formatInteger(totalActive) },
         { label: 'Vuelos planificados', value: formatInteger(totalFlights) },
-        { label: 'Carga en aire', value: formatKg(totalCargo) },
+        { label: 'Maletas en aire', value: formatBags(totalCargo) },
         { label: 'Capacidad usada', value: formatPercent(capacityPct) },
       ],
       bars: [

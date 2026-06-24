@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FlightCrudDto, ShipmentCrudDto } from '../types/sim'
 import { getFlightById, getShipmentsByFlight } from '../services/api'
-import { formatDate, formatDateTime, formatDurationHours, formatKg, formatPercent } from '../utils/time'
+import { formatBags, formatDate, formatDateTime, formatDurationHours, formatPercent } from '../utils/time'
 
 interface FlightDetailPageProps {
   flightId: number
@@ -73,9 +73,9 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
         </div>
 
         <div className="upload-card" style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.05)', padding: '1rem' }}>
-          <h3>Capacidad de Carga</h3>
+          <h3>Capacidad de Maletas</h3>
           <p style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '0.5rem 0 0 0' }}>
-            {formatKg(totalCargaAsignada)} / {formatKg(flight?.capacidad)}
+            {formatBags(totalCargaAsignada)} / {formatBags(flight?.capacidad)}
           </p>
           <div style={{ background: '#eee', borderRadius: '4px', height: '8px', marginTop: '0.5rem', overflow: 'hidden' }}>
             <div style={{ background: porcentajeOcupacion > 90 ? '#ef4444' : '#3b82f6', width: `${porcentajeOcupacion}%`, height: '100%' }}></div>
@@ -119,7 +119,7 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
           <span>Origen</span>
           <span>Destino</span>
           <span>Fecha Asignación</span>
-          <span>Carga (kg)</span>
+          <span>Maletas</span>
           <span>Cliente</span>
           <span>SLA</span>
         </div>
@@ -133,7 +133,7 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
               <span>{ship.origen}-{ship.origenCiudad}</span>
               <span>{ship.destino}-{ship.destinoCiudad}</span>
               <span>{formatDate(ship.fecha)}</span>
-              <span>{formatKg(ship.cantidad)}</span>
+              <span>{formatBags(ship.cantidad)}</span>
               <span>{ship.idCliente}</span>
               <span>{formatDurationHours(ship.slaHoras, 0)}</span>
             </div>

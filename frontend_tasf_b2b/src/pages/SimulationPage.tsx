@@ -11,7 +11,7 @@ import {
   formatDurationHours,
   formatCompactDate,
   formatInteger,
-  formatKg,
+  formatBags,
   formatPercent,
   getDayIndexFromDateString,
   getInclusiveDaySpan,
@@ -349,7 +349,7 @@ export default function SimulationPage() {
     return {
       cards: [
         { label: 'Vuelos activos', value: formatInteger(totalActive) },
-        { label: 'Carga en aire', value: formatKg(totalCargo) },
+        { label: 'Maletas en aire', value: formatBags(totalCargo) },
         { label: 'Capacidad usada', value: formatPercent(capacityPct) },
         { label: 'Duración prom. vuelo', value: formatDurationHours(avgDurationMin / 60, 2) },
       ],

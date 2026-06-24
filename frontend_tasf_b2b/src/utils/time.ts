@@ -165,11 +165,11 @@ export function formatPercent(value?: number | null, fractionDigits = 1): string
   return `${formatDecimal(value, fractionDigits)}%`
 }
 
-export function formatKg(value?: number | null): string {
+export function formatBags(value?: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '--'
   }
-  return `${formatInteger(Math.round(value))} kg`
+  return `${formatInteger(Math.round(value))}`
 }
 
 export function formatDurationHours(value?: number | null, fractionDigits = 1): string {
