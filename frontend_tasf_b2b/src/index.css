@@ -1564,3 +1564,28 @@ body {
   font-size: 18px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.4);
 }
+
+.entity-subtabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #d9e4f4;
+  padding-bottom: 8px;
+}
+
+.entity-subtab {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #d9e4f4;
+  border-radius: 6px;
+  background: #f4f7fc;
+  color: #4b5f7a;
+  cursor: pointer;
+}
+
+.entity-subtab.active {
+  background: #2b5fb0;
+  color: white;
+  border-color: #2b5fb0;
+}
