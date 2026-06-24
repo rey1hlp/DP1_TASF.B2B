@@ -204,13 +204,13 @@ export default function SimulationControls({
               className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
               onClick={() => setActiveTab('config')}
             >
-              Configuracion
+              Configuración
             </button>
             <button
               className={`panel-tab ${activeTab === 'stats' ? 'active' : ''}`}
               onClick={() => setActiveTab('stats')}
             >
-              Estadisticas
+              Estadísticas
             </button>
             <button
               className={`panel-tab ${activeTab === 'entities' ? 'active' : ''}`}
@@ -222,23 +222,23 @@ export default function SimulationControls({
 
           {activeTab === 'config' ? (
             <>
-              <h3>Configuracion de simulacion</h3>
+              <h3>Configuración de simulación</h3>
               {mode === 'period' ? (
                 <div className="chip-row">
                   <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
-                    3 dias
+                    3 días
                   </button>
                   <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
-                    5 dias
+                    5 días
                   </button>
                   <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
-                    7 dias
+                    7 días
                   </button>
                 </div>
               ) : (
                 <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
-                  La simulacion hasta el colapso se ejecuta desde la fecha seleccionada y sigue
-                  hasta que no haya mas capacidad o datos disponibles.
+                  La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
+                  hasta que no haya más capacidad o datos disponibles.
                 </div>
               )}
 
@@ -252,7 +252,7 @@ export default function SimulationControls({
               </label>
 
               <div className="field">
-                <div className="field-label">Rangos de semaforo</div>
+                <div className="field-label">Rangos de semáforo</div>
                 <div className="range-row">
                   <span className="range-label">Verde</span>
                   <input
@@ -297,7 +297,7 @@ export default function SimulationControls({
 
           {activeTab === 'stats' ? (
             <>
-              <h3>Estadisticas de la simulacion</h3>
+              <h3>Estadísticas de la simulación</h3>
               <div className="metric-grid">
                 {stats.cards.map((card) => (
                   <div className="metric" key={card.label}>
@@ -308,7 +308,7 @@ export default function SimulationControls({
               </div>
 
               <div className="progress-block">
-                <div className="progress-title">Progreso de simulacion</div>
+                <div className="progress-title">Progreso de simulación</div>
                 {stats.bars.map((bar) => (
                   <div className="progress-item" key={bar.label}>
                     <span>{bar.label}</span>
@@ -320,7 +320,7 @@ export default function SimulationControls({
               </div>
 
               <div className="warehouse">
-                <h4>Ocupacion de almacenes</h4>
+                <h4>Ocupación de almacenes</h4>
                 <div className="warehouse-list">
                   {warehouseItems.map((item) => (
                     <div className="warehouse-item" key={item.codigoOaci}>
@@ -404,7 +404,7 @@ export default function SimulationControls({
 
               {activeEntityTab === 'shipments' ? (
                 <>
-                  <h3>Buscar envío / maleta</h3>
+                  <h3>Buscar envío o maleta</h3>
                   <label className="field">
                     <input
                       type="text"
@@ -497,7 +497,7 @@ export default function SimulationControls({
                   <label className="field">
                     <input
                       type="text"
-                      placeholder="Buscar por OACI, nombre o pais"
+                      placeholder="Buscar por OACI, nombre o país"
                       value={airportQuery}
                       onChange={(event) => setAirportQuery(event.target.value)}
                     />

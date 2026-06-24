@@ -349,7 +349,7 @@ export default function SimulationPage() {
         { label: 'Vuelos activos', value: formatInteger(totalActive) },
         { label: 'Carga en aire', value: formatKg(totalCargo) },
         { label: 'Capacidad usada', value: formatPercent(capacityPct) },
-        { label: 'Duracion prom. vuelo', value: formatDurationHours(avgDurationMin / 60, 2) },
+        { label: 'Duración prom. vuelo', value: formatDurationHours(avgDurationMin / 60, 2) },
       ],
       bars: [
         { label: 'Completado', value: progressPct },
