@@ -467,11 +467,19 @@ body {
 
 .plane-marker {
   background: transparent;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   filter: drop-shadow(0 4px 10px rgba(19, 49, 90, 0.4));
+  cursor: pointer;
+}
+
+.plane-marker-hitbox {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
 }
 
 .airport-marker {

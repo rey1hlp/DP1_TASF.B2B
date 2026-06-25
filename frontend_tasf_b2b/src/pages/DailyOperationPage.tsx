@@ -485,6 +485,29 @@ export default function DailyOperationPage() {
     })
   }, [handleMapAirportPreview])
 
+  const handleMapFlightPreview = useCallback((flightId: number | null) => {
+    if (flightId === null) {
+      setSelectedFlightId(null)
+      return
+    }
+
+    setSelectedFlightId(flightId)
+    setSelectedAirportCode(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapFlightDetailRequest = useCallback((flightId: number) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapFlightPreview(flightId)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'flight',
+      id: flightId,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapFlightPreview])
+
   return (
     <div className="daily-operation-page">
       <section className={`toolbar`}>
@@ -523,6 +546,8 @@ export default function DailyOperationPage() {
             isPanelCollapsed={isPanelCollapsed}
             onAirportPreview={handleMapAirportPreview}
             onAirportDetailRequest={handleMapAirportDetailRequest}
+            onFlightPreview={handleMapFlightPreview}
+            onFlightDetailRequest={handleMapFlightDetailRequest}
           />
 
           {loading ? (

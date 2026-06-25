@@ -478,6 +478,29 @@ export default function SimulationPage() {
     })
   }, [handleMapAirportPreview])
 
+  const handleMapFlightPreview = useCallback((flightId: number | null) => {
+    if (flightId === null) {
+      setSelectedFlightId(null)
+      return
+    }
+
+    setSelectedFlightId(flightId)
+    setSelectedAirportCode(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapFlightDetailRequest = useCallback((flightId: number) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapFlightPreview(flightId)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'flight',
+      id: flightId,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapFlightPreview])
+
   const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
     setSimulation((prev) => ({ ...prev, ranges: newRanges }))
   }
@@ -554,6 +577,8 @@ export default function SimulationPage() {
                 selectedShipmentRoute={selectedShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
                 onAirportDetailRequest={handleMapAirportDetailRequest}
+                onFlightPreview={handleMapFlightPreview}
+                onFlightDetailRequest={handleMapFlightDetailRequest}
               />
               {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
