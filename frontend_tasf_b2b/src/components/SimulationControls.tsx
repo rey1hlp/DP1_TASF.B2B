@@ -107,13 +107,13 @@ export default function SimulationControls({
               className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
               onClick={() => setActiveTab('config')}
             >
-              Configuracion
+              Configuración
             </button>
             <button
               className={`panel-tab ${activeTab === 'stats' ? 'active' : ''}`}
               onClick={() => setActiveTab('stats')}
             >
-              Estadisticas
+              Estadísticas
             </button>
             <button
               className={`panel-tab ${activeTab === 'entities' ? 'active' : ''}`}
@@ -125,7 +125,7 @@ export default function SimulationControls({
 
           {activeTab === 'config' ? (
             <>
-              <h3>Configuracion de simulacion</h3>
+              <h3>Configuración de simulación</h3>
               {mode === 'period' ? (
                 <div className="chip-row">
                   <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
@@ -140,7 +140,7 @@ export default function SimulationControls({
                 </div>
               ) : (
                 <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
-                  La simulacion hasta el colapso se ejecuta desde la fecha seleccionada y sigue
+                  La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
                   hasta que no haya mas capacidad o datos disponibles.
                 </div>
               )}
@@ -177,7 +177,7 @@ export default function SimulationControls({
 
           {activeTab === 'stats' ? (
             <>
-              <h3>Estadisticas de la simulacion</h3>
+              <h3>Estadísticas de la simulación</h3>
               <div className="metric-grid">
                 {stats.cards.map((card) => (
                   <div className="metric" key={card.label}>
@@ -188,7 +188,7 @@ export default function SimulationControls({
               </div>
 
               <div className="progress-block">
-                <div className="progress-title">Progreso de simulacion</div>
+                <div className="progress-title">Progreso de simulación</div>
                 {stats.bars.map((bar) => (
                   <div className="progress-item" key={bar.label}>
                     <span>{bar.label}</span>
