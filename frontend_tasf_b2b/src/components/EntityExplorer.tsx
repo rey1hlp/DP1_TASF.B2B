@@ -1,5 +1,6 @@
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
+import type { EntityFocusRequest } from '../types/entityFocus'
 import {
   formatDurationHours,
   formatBags,
@@ -60,6 +61,7 @@ export type EntityExplorerProps = {
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   currentMinute: number | null
+  focusRequest?: EntityFocusRequest | null
   labels?: {
     airportHint?: string
     airportHintNoun?: string
@@ -119,6 +121,7 @@ export default function EntityExplorer({
   onSearchShipment,
   shipmentSearchError,
   currentMinute,
+  focusRequest,
   labels,
   listHeight = 320,
   shipmentListHeight = 220,
@@ -196,6 +199,30 @@ export default function EntityExplorer({
     const target = displayedAirports[0];
     if (target) onSelectAirport(target.codigoOaci);
   };
+
+  useEffect(() => {
+    if (!focusRequest) return
+
+    if (focusRequest.type === 'airport') {
+      setActiveEntityTab('airports')
+      setAirportQuery(String(focusRequest.id))
+      airportList.setScrollTop(0)
+      return
+    }
+
+    if (focusRequest.type === 'flight') {
+      setActiveEntityTab('flights')
+      setFlightQuery(String(focusRequest.id))
+      flightList.setScrollTop(0)
+      return
+    }
+
+    if (focusRequest.type === 'shipment') {
+      setActiveEntityTab('shipments')
+      setShipmentQuery(String(focusRequest.id))
+      shipmentList.setScrollTop(0)
+    }
+  }, [focusRequest])
 
   const renderFlights = () => (
     <>

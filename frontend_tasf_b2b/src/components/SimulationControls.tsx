@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { MapSemaphoreFilters } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -48,6 +49,7 @@ export type SimulationControlsProps = {
   shipmentSearchError: string | null
   sampleShipments: string[]
   currentMinute: number | null
+  entityFocusRequest?: EntityFocusRequest | null
 }
 
 export default function SimulationControls({
@@ -76,10 +78,17 @@ export default function SimulationControls({
   shipmentSearchError,
   sampleShipments,
   currentMinute,
+  entityFocusRequest,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15T00:00')
   const [dias, setDias] = useState(3)
+
+  useEffect(() => {
+    if (entityFocusRequest) {
+      setActiveTab('entities')
+    }
+  }, [entityFocusRequest])
 
   return (
     <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
@@ -205,6 +214,7 @@ export default function SimulationControls({
               onSearchShipment={onSearchShipment}
               shipmentSearchError={shipmentSearchError}
               currentMinute={currentMinute}
+              focusRequest={entityFocusRequest}
               labels={{
                 flightHintNoun: 'vuelos activos',
                 shipmentEmpty: 'No hay muestras (inicia simulación)',

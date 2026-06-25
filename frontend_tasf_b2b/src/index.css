@@ -1642,6 +1642,133 @@ body {
   box-shadow: 0 1px 5px rgba(0,0,0,0.4);
 }
 
+.map-floating-card {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 1002;
+  width: min(340px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  background: #ffffff;
+  border: 1px solid #d9deea;
+  border-radius: 14px;
+  box-shadow: 0 18px 38px rgba(18, 36, 68, 0.18);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.map-floating-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2e7f0;
+}
+
+.map-floating-card-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  font-size: 18px;
+  color: #111827;
+}
+
+.map-floating-card-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-floating-card-badge {
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #d7e5fb;
+  color: #2f62b5;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.map-floating-card-close {
+  border: none;
+  background: transparent;
+  color: #687383;
+  cursor: pointer;
+  font-size: 28px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.map-floating-card-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  overflow: auto;
+}
+
+.map-floating-card-subtitle {
+  font-size: 15px;
+  color: #374151;
+}
+
+.map-floating-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.map-floating-card-metric {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 74px;
+  border-radius: 12px;
+  background: #f1f2ee;
+  color: #111827;
+}
+
+.map-floating-card-metric strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.map-floating-card-metric span {
+  font-size: 13px;
+  color: #3f4651;
+}
+
+.map-floating-card-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  color: #3f4651;
+}
+
+.map-floating-card-status span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.map-floating-card-action {
+  min-height: 46px;
+  border: none;
+  border-radius: 12px;
+  background: #d7e5fb;
+  color: #2f62b5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.map-floating-card-action:hover {
+  background: #c8daf6;
+}
+
 .entity-subtabs {
   display: flex;
   gap: 4px;

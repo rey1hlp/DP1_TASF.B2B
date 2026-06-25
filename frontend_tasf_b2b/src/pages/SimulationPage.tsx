@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react' // ✅ useState importado
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react' // ✅ useState importado
 import type { AirportDto } from '../types/sim'
 import { fetchAirports, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
@@ -7,6 +7,7 @@ import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
 import { useSimulationContext } from '../contexts/SimulationContext'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
@@ -79,6 +80,8 @@ export default function SimulationPage() {
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
+  const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
+  const entityFocusRequestIdRef = useRef(0)
 
   const {
     enviosKey,
@@ -452,6 +455,29 @@ export default function SimulationPage() {
     }
   }
 
+  const handleMapAirportPreview = useCallback((codigoOaci: string | null) => {
+    if (codigoOaci === null) {
+      setSelectedAirportCode(null)
+      return
+    }
+
+    setSelectedAirportCode(codigoOaci)
+    setSelectedFlightId(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapAirportPreview(codigoOaci)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'airport',
+      id: codigoOaci,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapAirportPreview])
+
   const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
     setSimulation((prev) => ({ ...prev, ranges: newRanges }))
   }
@@ -526,6 +552,8 @@ export default function SimulationPage() {
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
                 selectedShipmentRoute={selectedShipmentRoute}
+                onAirportPreview={handleMapAirportPreview}
+                onAirportDetailRequest={handleMapAirportDetailRequest}
               />
               {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
@@ -558,6 +586,7 @@ export default function SimulationPage() {
                 shipmentSearchError={shipmentSearchError}
                 sampleShipments={sampleShipments}
                 currentMinute={displayMinute}
+                entityFocusRequest={entityFocusRequest}
             />
           </section>
         </>

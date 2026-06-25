@@ -1,6 +1,6 @@
 // src/components/DailyOperationControls.tsx
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import {
@@ -8,6 +8,7 @@ import {
 } from '../utils/time'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { MapSemaphoreFilters } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -76,6 +77,7 @@ export type DailyOperationControlsProps = {
   shipmentSearchError: string | null
   sampleShipments: string[]
   currentMinute: number | null
+  entityFocusRequest?: EntityFocusRequest | null
 }
 
 export default function DailyOperationControls({
@@ -105,6 +107,7 @@ export default function DailyOperationControls({
   shipmentSearchError,
   sampleShipments,
   currentMinute,
+  entityFocusRequest,
 }: DailyOperationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('stats')
 
@@ -121,6 +124,12 @@ export default function DailyOperationControls({
 
     return Array.from(map.values())
   }, [flightItems, upcomingFlightItems])
+
+  useEffect(() => {
+    if (entityFocusRequest) {
+      setActiveTab('entities')
+    }
+  }, [entityFocusRequest])
 
   return (
     <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
@@ -288,6 +297,7 @@ export default function DailyOperationControls({
           onSearchShipment={onSearchShipment}
           shipmentSearchError={shipmentSearchError}
           currentMinute={currentMinute}
+          focusRequest={entityFocusRequest}
           listHeight={280}
           shipmentListHeight={150}
           labels={{

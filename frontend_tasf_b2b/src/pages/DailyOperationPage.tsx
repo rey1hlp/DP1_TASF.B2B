@@ -7,6 +7,7 @@ import { fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
@@ -133,6 +134,8 @@ export default function DailyOperationPage() {
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
+  const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
+  const entityFocusRequestIdRef = useRef(0)
 
   const handleSearchShipment = async (codigo: string) => {
     setShipmentSearchError(null)
@@ -459,6 +462,29 @@ export default function DailyOperationPage() {
     }
   }
 
+  const handleMapAirportPreview = useCallback((codigoOaci: string | null) => {
+    if (codigoOaci === null) {
+      setSelectedAirportCode(null)
+      return
+    }
+
+    setSelectedAirportCode(codigoOaci)
+    setSelectedFlightId(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapAirportPreview(codigoOaci)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'airport',
+      id: codigoOaci,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapAirportPreview])
+
   return (
     <div className="daily-operation-page">
       <section className={`toolbar`}>
@@ -495,6 +521,8 @@ export default function DailyOperationPage() {
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             isPanelCollapsed={isPanelCollapsed}
+            onAirportPreview={handleMapAirportPreview}
+            onAirportDetailRequest={handleMapAirportDetailRequest}
           />
 
           {loading ? (
@@ -531,6 +559,7 @@ export default function DailyOperationPage() {
           alerts={alerts}
           isCollapsed={isPanelCollapsed}
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+          entityFocusRequest={entityFocusRequest}
         />
       </section>
     </div>
