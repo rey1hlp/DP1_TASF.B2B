@@ -11,6 +11,7 @@ import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
+import { resolveSemaphoreColor } from '../utils/semaphore'
 
 import {
   formatDurationHours,
@@ -315,14 +316,6 @@ export default function SimulationPage() {
     return snapshot
   }, [meta, displayMinute])
 
-  const airportsByCode = useMemo(() => {
-    const map: Record<string, AirportDto> = {}
-    airports.forEach((airport: AirportDto) => { // ✅ tipo explícito
-      map[airport.codigoOaci] = airport
-    })
-    return map
-  }, [airports])
-
   const activeSegments = useMemo(() => {
     if (displayMinute === null) return []
     return cappedSegments.filter(
@@ -402,23 +395,21 @@ export default function SimulationPage() {
     }
   }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute])
 
-  const warehouseItems = useMemo(() => {
-    const entries = Object.entries(warehouseSnapshot).map(([codigo, data]) => {
-      const airport = airportsByCode[codigo]
-      const percent = data.porcentaje
-      let color = '#54b86c'
-      if (percent > ranges.amberMax) color = '#e36b60'
-      else if (percent > ranges.greenMax) color = '#f0be62'
+  const airportItems = useMemo(() => {
+    return airports.map((airport) => {
+      const snapshot = warehouseSnapshot[airport.codigoOaci]
+      const percent = snapshot?.porcentaje
       return {
-        codigoOaci: codigo,
-        nombre: airport?.nombre ?? codigo,
-        pais: airport?.pais ?? '--',
+        codigoOaci: airport.codigoOaci,
+        nombre: airport.nombre,
+        pais: airport.pais,
+        capacidad: snapshot?.capacidad ?? airport.capacidad,
+        ocupacion: snapshot?.ocupacion,
         porcentaje: percent,
-        color,
+        color: percent !== undefined ? resolveSemaphoreColor(percent, ranges).fill : undefined,
       }
     })
-    return entries.sort((a, b) => b.porcentaje - a.porcentaje)
-  }, [warehouseSnapshot, airportsByCode, ranges])
+  }, [airports, warehouseSnapshot, ranges])
 
   const handleSelectFlight = (flightId: number) => {
     const nextFlightId = selectedFlightId === flightId ? null : flightId
@@ -533,15 +524,10 @@ export default function SimulationPage() {
               onMapFiltersChange={setMapFilters}
               mapFilterCounts={mapFilterCounts}
               stats={stats}
-              warehouseItems={warehouseItems}
               flightItems={activeSegments}
               selectedFlightId={selectedFlightId}
               onSelectFlight={handleSelectFlight}
-              airportItems={airports.map((airport: AirportDto) => ({ // ✅ tipo explícito
-                codigoOaci: airport.codigoOaci,
-                nombre: airport.nombre,
-                pais: airport.pais,
-              }))}
+              airportItems={airportItems}
               selectedAirportCode={selectedAirportCode}
               onSelectAirport={handleSelectAirport}
                 isCollapsed={isPanelCollapsed}

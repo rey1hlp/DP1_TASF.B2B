@@ -11,6 +11,7 @@ import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
+import { resolveSemaphoreColor } from '../utils/semaphore'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 
 type MapViewProps = ComponentProps<typeof MapView>
@@ -127,7 +128,6 @@ export default function DailyOperationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
-  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
@@ -302,16 +302,6 @@ export default function DailyOperationPage() {
       }
     }, [applySnapshot])
 
-  const airportsByCode = useMemo(() => {
-    const map: Record<string, AirportDto> = {}
-
-    airports.forEach((airport) => {
-      map[airport.codigoOaci] = airport
-    })
-
-    return map
-  }, [airports])
-
   const activeSegments = useMemo(() => {
     return segments.filter(
       (segment) => currentMinute >= segment.salidaMin && currentMinute <= segment.llegadaMin
@@ -358,31 +348,6 @@ export default function DailyOperationPage() {
 
   const totalFlights = segments.length;
   const totalActiveFlights = activeSegments.length;
-
-  const warehouseItems = useMemo(() => {
-    const entries = Object.entries(warehouseSnapshot).map(([codigo, data]) => {
-      const airport = airportsByCode[codigo]
-      const percent = data.porcentaje
-
-      let color = '#54b86c'
-
-      if (percent > ranges.amberMax) {
-        color = '#e36b60'
-      } else if (percent > ranges.greenMax) {
-        color = '#f0be62'
-      }
-
-      return {
-        codigoOaci: codigo,
-        nombre: airport?.nombre ?? codigo,
-        pais: airport?.pais ?? '--',
-        porcentaje: percent,
-        color,
-      }
-    })
-
-    return entries.sort((a, b) => b.porcentaje - a.porcentaje)
-  }, [warehouseSnapshot, airportsByCode, ranges])
 
   const stats = useMemo(() => {
     const totalFlights = segments.length
@@ -443,8 +408,14 @@ export default function DailyOperationPage() {
       codigoOaci: airport.codigoOaci,
       nombre: airport.nombre,
       pais: airport.pais,
+      capacidad: warehouseSnapshot[airport.codigoOaci]?.capacidad ?? airport.capacidad,
+      ocupacion: warehouseSnapshot[airport.codigoOaci]?.ocupacion,
+      porcentaje: warehouseSnapshot[airport.codigoOaci]?.porcentaje,
+      color: warehouseSnapshot[airport.codigoOaci]
+        ? resolveSemaphoreColor(warehouseSnapshot[airport.codigoOaci].porcentaje, ranges).fill
+        : undefined,
     }))
-  }, [airports])
+  }, [airports, warehouseSnapshot, ranges])
   
   const lastSyncLabel = formatDateTime(lastSyncAt)
 
@@ -469,51 +440,31 @@ export default function DailyOperationPage() {
   }
 
   return (
-    <>
-      <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
-        <button 
-          className="toggle-toolbar-btn" 
-          onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
-          title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
-        >
-          {isToolbarCollapsed ? '▼' : '▲'}
-        </button>
-
-        {isToolbarCollapsed ? (
-          <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
-            Resumen de la Operación
+    <div className="daily-operation-page">
+      <section className={`toolbar`}>
+        <div className="status">
+          <div className="status-item">
+            Hora actual: <strong>{formatDateTime(now)}</strong>
           </div>
-        ) : (
-          <>
-            <div className="tabs">
-              <button className="tab active">Operación diaria</button>
-            </div>
 
-            <div className="status">
-              <div className="status-item">
-                Hora actual: <strong>{formatDateTime(now)}</strong>
-              </div>
+          <div className="status-item">
+            Vuelos activos: <strong>{formatInteger(totalActiveFlights)}</strong>
+          </div>
 
-              <div className="status-item">
-                Vuelos activos: <strong>{formatInteger(totalActiveFlights)}</strong>
-              </div>
+          <div className="status-item">
+            Vuelos planificados: <strong>{formatInteger(totalFlights)}</strong>
+          </div>
 
-              <div className="status-item">
-                Vuelos planificados: <strong>{formatInteger(totalFlights)}</strong>
-              </div>
-
-              <div className="status-item">
-                Conexión:{" "}
-                <strong>
-                  {socketConnected ? "En vivo" : "Sin conexión"}
-                </strong>
-              </div>
-            </div>
-          </>
-        )}
+          <div className="status-item">
+            Conexión:{" "}
+            <strong>{socketConnected ? "En vivo" : "Sin conexión"}</strong>
+          </div>
+        </div>
       </section>
 
-      <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
+      <section
+        className={`map-area ${isPanelCollapsed ? "panel-collapsed" : ""}`}
+      >
         <div className="map-placeholder">
           <MapView
             airports={mapAirports}
@@ -524,7 +475,6 @@ export default function DailyOperationPage() {
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             isPanelCollapsed={isPanelCollapsed}
-            isToolbarCollapsed={isToolbarCollapsed}
           />
 
           {loading ? (
@@ -546,7 +496,6 @@ export default function DailyOperationPage() {
           mapFilterCounts={mapFilterCounts}
           stats={stats}
           shipmentSummary={shipmentSummary}
-          warehouseItems={warehouseItems}
           flightItems={activeFlightItems}
           upcomingFlightItems={upcomingFlightItems}
           selectedFlightId={selectedFlightId}
@@ -564,6 +513,6 @@ export default function DailyOperationPage() {
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         />
       </section>
-    </>
+    </div>
   );
 }

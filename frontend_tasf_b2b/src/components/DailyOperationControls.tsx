@@ -1,11 +1,10 @@
 // src/components/DailyOperationControls.tsx
 
 import { useMemo, useState } from 'react'
-import EntityExplorer from './EntityExplorer'
+import EntityExplorer, { type EntityAirportItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import {
   formatInteger,
-  formatPercent,
 } from '../utils/time'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { MapSemaphoreFilters } from '../types/mapFilters'
@@ -50,14 +49,6 @@ export type DailyOperationControlsProps = {
     delivered: number
   } | null
 
-  warehouseItems: Array<{
-    codigoOaci: string
-    nombre: string
-    pais: string
-    porcentaje: number
-    color: string
-  }>
-
   flightItems: Array<{
     flightId: number
     origen: string
@@ -79,11 +70,7 @@ export type DailyOperationControlsProps = {
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void
 
-  airportItems: Array<{
-    codigoOaci: string
-    nombre: string
-    pais: string
-  }>
+  airportItems: EntityAirportItem[]
 
   selectedAirportCode: string | null
   onSelectAirport: (codigoOaci: string) => void
@@ -117,7 +104,6 @@ export default function DailyOperationControls({
   mapFilterCounts,
   stats,
   shipmentSummary,
-  warehouseItems,
   flightItems,
   upcomingFlightItems,
   selectedFlightId,
@@ -298,30 +284,6 @@ export default function DailyOperationControls({
                 <div className="metric-value">{formatInteger(shipmentSummary?.delivered)}</div>
                 <div className="metric-label">Entregados</div>
               </div>
-            </div>
-          </div>
-
-          <div className="warehouse">
-            <h4>Ocupación de almacenes</h4>
-
-            <div className="warehouse-list">
-              {warehouseItems.length === 0 ? (
-                <div className="flight-hint">No hay ocupación disponible.</div>
-              ) : (
-                warehouseItems.map((item) => (
-                  <div className="warehouse-item" key={item.codigoOaci}>
-                    <div>
-                      <div className="warehouse-title">{`${item.codigoOaci} - ${item.nombre}`}</div>
-                      <div className="warehouse-sub">{item.pais}</div>
-                    </div>
-
-                    <div className="warehouse-right">
-                      <span>{formatPercent(item.porcentaje, 0)}</span>
-                      <span className="warehouse-dot" style={{ background: item.color }} />
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
           </div>
         </>

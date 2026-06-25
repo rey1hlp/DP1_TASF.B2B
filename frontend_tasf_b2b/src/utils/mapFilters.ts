@@ -1,10 +1,6 @@
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
 import type { MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
-
-type SemaphoreRanges = {
-  greenMax: number
-  amberMax: number
-}
+import { resolveSemaphoreLevel, type SemaphoreRanges } from './semaphore'
 
 type WarehouseSnapshot = Record<
   string,
@@ -15,19 +11,7 @@ export function getSemaphoreLevel(
   percent: number | null | undefined,
   ranges: SemaphoreRanges
 ): Exclude<SemaphoreFilterLevel, 'all'> {
-  if (percent === null || percent === undefined || !Number.isFinite(percent)) {
-    return 'unknown'
-  }
-
-  if (percent <= ranges.greenMax) {
-    return 'green'
-  }
-
-  if (percent <= ranges.amberMax) {
-    return 'amber'
-  }
-
-  return 'red'
+  return resolveSemaphoreLevel(percent, ranges)
 }
 
 export function matchesSemaphoreFilter(

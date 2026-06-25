@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import EntityExplorer from './EntityExplorer'
+import EntityExplorer, { type EntityAirportItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { MapSemaphoreFilters } from '../types/mapFilters'
@@ -35,7 +35,6 @@ export type SimulationControlsProps = {
     cards: Array<{ label: string; value: string }>
     bars: Array<{ label: string; value: number }>
   }
-  warehouseItems: Array<{ codigoOaci: string; nombre: string; pais: string; porcentaje: number; color: string }>
   flightItems: Array<{
     flightId: number
     origen: string
@@ -45,7 +44,7 @@ export type SimulationControlsProps = {
   }>
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void
-  airportItems: Array<{ codigoOaci: string; nombre: string; pais: string }>
+  airportItems: EntityAirportItem[]
   selectedAirportCode: string | null
   onSelectAirport: (codigoOaci: string) => void
   isCollapsed: boolean
@@ -70,7 +69,6 @@ export default function SimulationControls({
   onMapFiltersChange,
   mapFilterCounts,
   stats,
-  warehouseItems,
   flightItems,
   selectedFlightId,
   onSelectFlight,
@@ -196,24 +194,6 @@ export default function SimulationControls({
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className="warehouse">
-                <h4>Ocupacion de almacenes</h4>
-                <div className="warehouse-list">
-                  {warehouseItems.map((item) => (
-                    <div className="warehouse-item" key={item.codigoOaci}>
-                      <div>
-                        <div className="warehouse-title">{`${item.codigoOaci} - ${item.nombre}`}</div>
-                        <div className="warehouse-sub">{item.pais}</div>
-                      </div>
-                      <div className="warehouse-right">
-                        <span>{`${item.porcentaje.toFixed(0)}%`}</span>
-                        <span className="warehouse-dot" style={{ background: item.color }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </>
           ) : null}

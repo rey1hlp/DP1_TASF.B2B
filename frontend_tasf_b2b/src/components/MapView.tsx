@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
 import { formatBags, formatInteger, formatPercent } from '../utils/time'
+import {
+  NEUTRAL_SEMAPHORE_COLORS,
+  resolveSemaphoreColor,
+} from '../utils/semaphore'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 
 const AIRPORT_PATH = "M2 21h20M3 7l9-4 9 4v14H3V7zm6 14v-7h6v7"
-
-const NEUTRAL_COLORS = { stroke: '#b8923f', fill: '#e8c97a' }
 
 export type MapViewProps = {
   airports: AirportDto[]
@@ -68,7 +70,7 @@ function buildPlaneIcon(
 
   const colors =
     percent === null
-      ? NEUTRAL_COLORS
+      ? NEUTRAL_SEMAPHORE_COLORS
       : resolveSemaphoreColor(percent, ranges)
 
   const isEmpty = carga === 0
@@ -118,16 +120,6 @@ function buildAirportIcon(
     iconSize: [markerSize, markerSize],
     iconAnchor: [markerSize / 2, markerSize / 2],
   })
-}
-
-function resolveSemaphoreColor(percent: number, ranges: { greenMax: number; amberMax: number }) {
-  if (percent <= ranges.greenMax) {
-    return { stroke: '#2f8f46', fill: '#54b86c' }
-  }
-  if (percent <= ranges.amberMax) {
-    return { stroke: '#d3952a', fill: '#f0be62' }
-  }
-  return { stroke: '#c4473d', fill: '#e36b60' }
 }
 
 function addSelectedRouteToLayer(latlngs: L.LatLngExpression[], layer: L.LayerGroup) {
@@ -332,7 +324,7 @@ export default function MapView({
       const snapshot = warehouseSnapshot[airport.codigoOaci]
       const percent = snapshot ? snapshot.porcentaje : null
       const colors = percent === null
-        ? { stroke: '#d9a441', fill: '#f7d48a' }
+        ? NEUTRAL_SEMAPHORE_COLORS
         : resolveSemaphoreColor(percent, ranges)
       const isSelected = selectedAirportCode !== null && airport.codigoOaci === selectedAirportCode
 

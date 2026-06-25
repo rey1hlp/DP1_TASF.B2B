@@ -1,6 +1,11 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
-import { formatDurationHours, formatInteger, formatMinuteRange } from '../utils/time'
+import {
+  formatDurationHours,
+  formatInteger,
+  formatMinuteRange,
+  formatPercent,
+} from '../utils/time'
 
 export type EntityTab = 'flights' | 'shipments' | 'airports'
 
@@ -17,6 +22,10 @@ export type EntityAirportItem = {
   codigoOaci: string
   nombre: string
   pais: string
+  capacidad?: number
+  ocupacion?: number
+  porcentaje?: number
+  color?: string
 }
 
 export type EntityRouteStep = {
@@ -67,6 +76,8 @@ export type EntityExplorerProps = {
 }
 
 const ITEM_HEIGHT = 44
+const AIRPORT_ITEM_HEIGHT = 56
+const AIRPORT_PREVIEW_LIMIT = 30
 
 function getDynamicShipmentStatus(route: EntityShipmentRoute, currentMinute: number | null) {
   if (!route || route.ruta.length === 0) return route?.estado || 'DESCONOCIDO'
@@ -121,15 +132,31 @@ export default function EntityExplorer({
     });
   }, [flights, flightQuery]);
 
+  const airportQueryText = airportQuery.trim().toLowerCase()
+
   const filteredAirports = useMemo(() => {
     const query = airportQuery.trim().toLowerCase();
-    if (!query) return airports;
-    return airports.filter((airport) => {
+    const matchesQuery = (airport: EntityAirportItem) => {
       const label =
-        `${airport.codigoOaci} ${airport.nombre} ${airport.pais}`.toLowerCase();
+        `${airport.codigoOaci} ${airport.nombre} ${airport.pais}`.toLowerCase()
       return label.includes(query);
-    });
+    }
+    const results = query ? airports.filter(matchesQuery) : airports
+
+    return [...results].sort((a, b) => {
+      const aPercent = a.porcentaje ?? -1
+      const bPercent = b.porcentaje ?? -1
+      if (aPercent !== bPercent) {
+        return bPercent - aPercent
+      }
+      return a.codigoOaci.localeCompare(b.codigoOaci)
+    })
   }, [airports, airportQuery]);
+
+  const displayedAirports = useMemo(() => {
+    if (airportQueryText) return filteredAirports
+    return filteredAirports.slice(0, AIRPORT_PREVIEW_LIMIT)
+  }, [airportQueryText, filteredAirports])
 
   const filteredShipments = useMemo(() => {
     const query = shipmentQuery.trim().toLowerCase();
@@ -143,8 +170,8 @@ export default function EntityExplorer({
     itemHeight: ITEM_HEIGHT,
     listHeight,
   });
-  const airportList = useVirtualList(filteredAirports, {
-    itemHeight: ITEM_HEIGHT,
+  const airportList = useVirtualList(displayedAirports, {
+    itemHeight: AIRPORT_ITEM_HEIGHT,
     listHeight,
   });
   const shipmentList = useVirtualList(filteredShipments, {
@@ -160,7 +187,7 @@ export default function EntityExplorer({
 
   const handleAirportKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
-    const target = filteredAirports[0];
+    const target = displayedAirports[0];
     if (target) onSelectAirport(target.codigoOaci);
   };
 
@@ -361,23 +388,47 @@ export default function EntityExplorer({
             className="flight-list-items"
             style={{ transform: `translateY(${airportList.offsetY}px)` }}
           >
-            {airportList.visibleItems.map((airport) => (
+            {airportList.visibleItems.map((airport) => {
+              const hasOccupancy = airport.ocupacion !== undefined && airport.capacidad !== undefined
+              const occupancyLabel = hasOccupancy
+                ? `${formatInteger(airport.ocupacion)} / ${formatInteger(airport.capacidad)}`
+                : airport.capacidad !== undefined
+                  ? `Cap. ${formatInteger(airport.capacidad)}`
+                  : 'Capacidad n/d'
+
+              return (
               <button
                 key={airport.codigoOaci}
-                className={`flight-item ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
+                className={`flight-item entity-airport-item ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
                 onClick={() => onSelectAirport(airport.codigoOaci)}
-                style={{ height: `${ITEM_HEIGHT}px` }}
+                style={{ height: `${AIRPORT_ITEM_HEIGHT}px` }}
               >
-                <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
-                <div className="flight-meta">{airport.pais}</div>
+                <div>
+                  <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
+                  <div className="flight-meta">{`${airport.pais} · ${occupancyLabel}`}</div>
+                </div>
+                {airport.porcentaje !== undefined ? (
+                  <div className="entity-airport-status">
+                    <span>{formatPercent(airport.porcentaje, 0)}</span>
+                    <span
+                      className="warehouse-dot"
+                      style={{ background: airport.color }}
+                    />
+                  </div>
+                ) : null}
               </button>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>
       <div className="flight-hint">
         {labels?.airportHint ??
-          `${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "aeropuertos"}`}
+          (
+            airportQueryText
+              ? `${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "almacenes"}`
+              : `Mostrando ${formatInteger(displayedAirports.length)} de ${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "almacenes"}`
+          )}
       </div>
     </>
   );
