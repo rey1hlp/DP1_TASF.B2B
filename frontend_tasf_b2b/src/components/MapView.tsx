@@ -30,6 +30,13 @@ const MAP_PANES = {
   airport: 'tasf-airport-pane',
   plane: 'tasf-plane-pane',
 } as const
+const SELECTED_ROUTE_STYLE = {
+  color: '#0dcaf0',
+  weight: 4,
+  dashArray: '8, 8',
+  opacity: 0.8,
+  pane: MAP_PANES.route,
+} satisfies L.PolylineOptions
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -121,6 +128,24 @@ function resolveSemaphoreColor(percent: number, ranges: { greenMax: number; ambe
     return { stroke: '#d3952a', fill: '#f0be62' }
   }
   return { stroke: '#c4473d', fill: '#e36b60' }
+}
+
+function addSelectedRouteToLayer(latlngs: L.LatLngExpression[], layer: L.LayerGroup) {
+  if (latlngs.length < 2) {
+    return
+  }
+
+  L.polyline(latlngs, SELECTED_ROUTE_STYLE).addTo(layer)
+}
+
+function addFlightRouteToLayer(segment: FlightSegmentDto, layer: L.LayerGroup) {
+  addSelectedRouteToLayer(
+    [
+      [segment.origenLat, segment.origenLon],
+      [segment.destinoLat, segment.destinoLon],
+    ],
+    layer
+  )
 }
 
 export default function MapView({
@@ -421,16 +446,18 @@ export default function MapView({
       }
 
       if (latlngs.length > 1) {
-        L.polyline(latlngs, {
-          color: '#0dcaf0',
-          weight: 4,
-          dashArray: '8, 8',
-          opacity: 0.8,
-          pane: MAP_PANES.route,
-        }).addTo(routeLayerRef.current)
+        addSelectedRouteToLayer(latlngs, routeLayerRef.current)
+      }
+      return
+    }
+
+    if (selectedFlightId !== null) {
+      const selectedSegment = segments.find((segment) => segment.flightId === selectedFlightId)
+      if (selectedSegment) {
+        addFlightRouteToLayer(selectedSegment, routeLayerRef.current)
       }
     }
-  }, [selectedShipmentRoute, airports])
+  }, [selectedFlightId, selectedShipmentRoute, airports, segments])
 
   return (
     <div className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>

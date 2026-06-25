@@ -114,9 +114,24 @@ export default function useMapSelectionFocus({
         return
       }
 
-      map.flyTo(getSegmentPosition(selectedSegment, currentMinute), Math.max(map.getZoom(), 5), {
-        duration: 0.6,
-      })
+      const latlngs: L.LatLngExpression[] = [
+        [selectedSegment.origenLat, selectedSegment.origenLon],
+        [selectedSegment.destinoLat, selectedSegment.destinoLon],
+      ]
+      const bounds = L.latLngBounds(latlngs)
+
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, {
+          animate: true,
+          maxZoom: 5,
+          padding: [56, 56],
+        })
+      } else {
+        map.flyTo(getSegmentPosition(selectedSegment, currentMinute), Math.max(map.getZoom(), 5), {
+          duration: 0.6,
+        })
+      }
+
       lastFocusKeyRef.current = focusKey
       return
     }

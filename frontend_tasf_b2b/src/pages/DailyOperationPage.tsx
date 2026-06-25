@@ -145,6 +145,8 @@ export default function DailyOperationPage() {
         if (routeData.estado === 'DELIVERED' || routeData.estado === 'CANCELLED') {
           routeData.ruta = []
         }
+        setSelectedFlightId(null)
+        setSelectedAirportCode(null)
         setSelectedShipmentRoute(routeData)
         return
       }
@@ -155,6 +157,8 @@ export default function DailyOperationPage() {
       if (fallbackData.content && fallbackData.content.length > 0) {
         const shipment = fallbackData.content.find((s: any) => s.codigoPedido === codigo)
         if (shipment) {
+          setSelectedFlightId(null)
+          setSelectedAirportCode(null)
           setSelectedShipmentRoute({
             codigoPedido: shipment.codigoPedido,
             estado: shipment.status,
@@ -445,11 +449,23 @@ export default function DailyOperationPage() {
   const lastSyncLabel = formatDateTime(lastSyncAt)
 
   const handleSelectFlight = (flightId: number) => {
-    setSelectedFlightId((prev) => (prev === flightId ? null : flightId))
+    const nextFlightId = selectedFlightId === flightId ? null : flightId
+    setSelectedFlightId(nextFlightId)
+    if (nextFlightId !== null) {
+      setSelectedAirportCode(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   const handleSelectAirport = (codigoOaci: string) => {
-    setSelectedAirportCode((prev) => (prev === codigoOaci ? null : codigoOaci))
+    const nextAirportCode = selectedAirportCode === codigoOaci ? null : codigoOaci
+    setSelectedAirportCode(nextAirportCode)
+    if (nextAirportCode !== null) {
+      setSelectedFlightId(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   return (
