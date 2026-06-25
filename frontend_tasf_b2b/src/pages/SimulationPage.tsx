@@ -3,7 +3,6 @@ import { useOutletContext } from 'react-router'
 import type { AirportDto } from '../types/sim'
 import { fetchAirports, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
-import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
 import type { AppLayoutContext } from '../layouts/AppLayout'
@@ -18,7 +17,9 @@ import { resolveSemaphoreColor } from '../utils/semaphore'
 
 import {
   formatDurationHours,
+  formatClockFromMinute,
   formatCompactDate,
+  formatDateFromDayIndex,
   formatInteger,
   formatBags,
   formatPercent,
@@ -315,6 +316,26 @@ export default function SimulationPage() {
 
   const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
 
+  const mapTimeLabel = (() => {
+    if (!meta) {
+      return 'Esperando simulación...'
+    }
+    if (preparingMessage) {
+      return preparingMessage
+    }
+    if (status === 'PAUSED') {
+      return 'Simulación pausada'
+    }
+    if (status === 'READY' && displayMinute === null) {
+      return `Preparando simulación hasta ${formatCompactDate(meta.inicio)}...`
+    }
+
+    const minute = displayMinute ?? meta.diaMin * 1440
+    const date = formatDateFromDayIndex(Math.floor(minute / 1440))
+    const time = formatClockFromMinute(minute)
+    return `${date} - ${time}`
+  })()
+
   const bannerMessage = (() => {
     if (status === 'COMPLETED' && statusMessage) return statusMessage
     if (status === 'COMPLETED') return 'Simulacion finalizada con exito.'
@@ -555,16 +576,11 @@ export default function SimulationPage() {
 
             <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
             <div className="map-placeholder">
-              <SimulationStatus
-                meta={meta}
-                currentMinute={displayMinute}
-                status={status}
-                preparingMessage={preparingMessage}
-              />
               <MapView
                 airports={mapAirports}
                 segments={mapSegments}
                 currentMinute={displayMinute}
+                timeLabel={mapTimeLabel}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
                 selectedFlightId={selectedFlightId}

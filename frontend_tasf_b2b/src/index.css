@@ -1683,9 +1683,9 @@ body {
   padding: 10px;
 }
 
-.map-fullscreen-btn {
+.map-fullscreen-btn,
+.map-reset-view-btn {
   position: absolute;
-  top: 15px;
   right: 15px;
   z-index: 1001; /* Sobre el mapa de Leaflet */
   width: 34px;
@@ -1698,6 +1698,38 @@ body {
   place-items: center;
   font-size: 18px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  color: #0f172a;
+}
+
+.map-fullscreen-btn {
+  top: 15px;
+}
+
+.map-reset-view-btn {
+  top: 57px;
+}
+
+.map-time-tab {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+  max-width: min(520px, calc(100% - 136px));
+  padding: 8px 16px;
+  border: 1px solid rgba(190, 207, 232, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(18, 36, 68, 0.16);
+  color: #173763;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .map-floating-card {

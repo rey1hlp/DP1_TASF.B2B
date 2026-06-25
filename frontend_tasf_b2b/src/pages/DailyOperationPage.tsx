@@ -539,6 +539,7 @@ export default function DailyOperationPage() {
             airports={mapAirports}
             segments={mapSegments}
             currentMinute={currentMinute}
+            timeLabel={`Hora actual: ${formatDateTime(now)}`}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}
             selectedFlightId={selectedFlightId}

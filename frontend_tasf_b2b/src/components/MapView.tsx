@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
+import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
 import { formatBags, formatInteger, formatMinuteRange, formatPercent } from '../utils/time'
 import {
@@ -25,6 +26,7 @@ export type MapViewProps = {
   selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number | string }> } | null
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
+  timeLabel?: string
   onAirportDetailRequest?: (codigoOaci: string) => void
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
@@ -163,6 +165,7 @@ export default function MapView({
   selectedShipmentRoute,
   isPanelCollapsed,
   isToolbarCollapsed,
+  timeLabel,
   onAirportDetailRequest,
   onAirportPreview,
   onFlightDetailRequest,
@@ -223,6 +226,10 @@ export default function MapView({
       mapRef.current?.invalidateSize({ animate: false })
       resizeTimerRef.current = null
     }, 350)
+  }
+
+  const handleResetView = () => {
+    mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: true })
   }
 
   useEffect(() => {
@@ -595,8 +602,17 @@ export default function MapView({
         onClick={() => setIsFullscreen(!isFullscreen)}
         title={isFullscreen ? "Salir" : "Expandir"}
       >
-        {isFullscreen ? '✕' : '⛶'}
+        {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
       </button>
+      <button
+        className="map-reset-view-btn"
+        onClick={handleResetView}
+        title="Restablecer vista"
+        aria-label="Restablecer zoom y posición del mapa"
+      >
+        <RotateCcw size={17} />
+      </button>
+      {timeLabel ? <div className="map-time-tab">{timeLabel}</div> : null}
       {previewFlight ? (
         <MapFloatingCard
           actionLabel="Ver detalle completo"
