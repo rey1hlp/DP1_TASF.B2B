@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
+import { formatBags, formatInteger, formatPercent } from '../utils/time'
+import {
+  NEUTRAL_SEMAPHORE_COLORS,
+  resolveSemaphoreColor,
+} from '../utils/semaphore'
+import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 
 const AIRPORT_PATH = "M2 21h20M3 7l9-4 9 4v14H3V7zm6 14v-7h6v7"
-
-const NEUTRAL_COLORS = { stroke: '#b8923f', fill: '#e8c97a' }
 
 export type MapViewProps = {
   airports: AirportDto[]
@@ -16,7 +20,7 @@ export type MapViewProps = {
   ranges: { greenMax: number; amberMax: number }
   selectedFlightId: number | null
   selectedAirportCode: string | null
-  selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number }> } | null
+  selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number | string }> } | null
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
 }
@@ -28,6 +32,13 @@ const MAP_PANES = {
   airport: 'tasf-airport-pane',
   plane: 'tasf-plane-pane',
 } as const
+const SELECTED_ROUTE_STYLE = {
+  color: '#0dcaf0',
+  weight: 4,
+  dashArray: '8, 8',
+  opacity: 0.8,
+  pane: MAP_PANES.route,
+} satisfies L.PolylineOptions
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -59,7 +70,7 @@ function buildPlaneIcon(
 
   const colors =
     percent === null
-      ? NEUTRAL_COLORS
+      ? NEUTRAL_SEMAPHORE_COLORS
       : resolveSemaphoreColor(percent, ranges)
 
   const isEmpty = carga === 0
@@ -111,14 +122,22 @@ function buildAirportIcon(
   })
 }
 
-function resolveSemaphoreColor(percent: number, ranges: { greenMax: number; amberMax: number }) {
-  if (percent <= ranges.greenMax) {
-    return { stroke: '#2f8f46', fill: '#54b86c' }
+function addSelectedRouteToLayer(latlngs: L.LatLngExpression[], layer: L.LayerGroup) {
+  if (latlngs.length < 2) {
+    return
   }
-  if (percent <= ranges.amberMax) {
-    return { stroke: '#d3952a', fill: '#f0be62' }
-  }
-  return { stroke: '#c4473d', fill: '#e36b60' }
+
+  L.polyline(latlngs, SELECTED_ROUTE_STYLE).addTo(layer)
+}
+
+function addFlightRouteToLayer(segment: FlightSegmentDto, layer: L.LayerGroup) {
+  addSelectedRouteToLayer(
+    [
+      [segment.origenLat, segment.origenLon],
+      [segment.destinoLat, segment.destinoLon],
+    ],
+    layer
+  )
 }
 
 export default function MapView({
@@ -285,6 +304,16 @@ export default function MapView({
     animatedMinuteRef.current = animatedMinute
   }, [animatedMinute])
 
+  useMapSelectionFocus({
+    mapRef,
+    airports,
+    segments,
+    currentMinute,
+    selectedFlightId,
+    selectedAirportCode,
+    selectedShipmentRoute,
+  })
+
   useEffect(() => {
     if (!airportLayerRef.current) {
       return
@@ -295,7 +324,7 @@ export default function MapView({
       const snapshot = warehouseSnapshot[airport.codigoOaci]
       const percent = snapshot ? snapshot.porcentaje : null
       const colors = percent === null
-        ? { stroke: '#d9a441', fill: '#f7d48a' }
+        ? NEUTRAL_SEMAPHORE_COLORS
         : resolveSemaphoreColor(percent, ranges)
       const isSelected = selectedAirportCode !== null && airport.codigoOaci === selectedAirportCode
 
@@ -306,12 +335,10 @@ export default function MapView({
       })
       const tooltipParts = [
         `${airport.codigoOaci} - ${airport.nombre}`,
-        `Capacidad: ${airport.capacidad}`,
       ]
       if (snapshot) {
-        tooltipParts.push(`Ocupacion: ${snapshot.ocupacion}`)
-        tooltipParts.push(`Libre: ${snapshot.libre}`)
-        tooltipParts.push(`Uso: ${snapshot.porcentaje.toFixed(1)}%`)
+        tooltipParts.push(`Uso: ${formatPercent(snapshot.porcentaje)}`)
+        tooltipParts.push(`Ocupacion: ${formatInteger(snapshot.ocupacion)}/${formatInteger(snapshot.capacidad)}`)
       }
       const tooltip = tooltipParts.join('<br/>')
       marker.bindTooltip(tooltip, {
@@ -352,7 +379,6 @@ export default function MapView({
       const lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
       const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
       const capacity = seg.capacidad
-      const free = capacity !== undefined ? Math.max(0, capacity - seg.carga) : undefined
 
       const isSelectedFlight = selectedFlightId !== null && seg.flightId === selectedFlightId
       const isSelectedShipment = selectedShipmentRoute != null && selectedShipmentRoute.ruta.some(p => p.vueloId === seg.flightId)
@@ -364,11 +390,11 @@ export default function MapView({
       const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, isDimmed)
 
       const tooltipParts = [
+        `Vuelo ${seg.flightId}`,
         `${seg.origen} → ${seg.destino}`,
-        `Vuelo: ${seg.flightId}`,
-        `Carga: ${Math.round(seg.carga)}`,
-        capacity !== undefined ? `Capacidad: ${capacity}` : 'Capacidad: n/d',
-        free !== undefined ? `Libre: ${free}` : 'Libre: n/d',
+        capacity !== undefined
+          ? `Maletas: ${formatBags(seg.carga)} / ${formatBags(capacity)}`
+          : 'Capacidad: n/d',
       ]
       const tooltip = `${tooltipParts.join('<br/>')}`
 
@@ -412,20 +438,18 @@ export default function MapView({
       }
 
       if (latlngs.length > 1) {
-        const polyline = L.polyline(latlngs, {
-          color: '#0dcaf0',
-          weight: 4,
-          dashArray: '8, 8',
-          opacity: 0.8,
-          pane: MAP_PANES.route,
-        }).addTo(routeLayerRef.current)
+        addSelectedRouteToLayer(latlngs, routeLayerRef.current)
+      }
+      return
+    }
 
-        if (mapRef.current) {
-          mapRef.current.fitBounds(polyline.getBounds(), { padding: [50, 50] })
-        }
+    if (selectedFlightId !== null) {
+      const selectedSegment = segments.find((segment) => segment.flightId === selectedFlightId)
+      if (selectedSegment) {
+        addFlightRouteToLayer(selectedSegment, routeLayerRef.current)
       }
     }
-  }, [selectedShipmentRoute, airports])
+  }, [selectedFlightId, selectedShipmentRoute, airports, segments])
 
   return (
     <div className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>

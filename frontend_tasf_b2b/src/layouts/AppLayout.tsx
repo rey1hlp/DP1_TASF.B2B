@@ -8,7 +8,7 @@ export type AppLayoutContext = {
 }
 
 export default function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [topbarMain, setTopbarMain] = useState<ReactNode>(null)
 
   return (

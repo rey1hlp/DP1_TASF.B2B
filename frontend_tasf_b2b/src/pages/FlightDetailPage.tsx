@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FlightCrudDto, ShipmentCrudDto } from '../types/sim'
 import { getFlightById, getShipmentsByFlight } from '../services/api'
+import { formatBags, formatDate, formatDateTime, formatDurationHours, formatPercent } from '../utils/time'
 
 interface FlightDetailPageProps {
   flightId: number
@@ -72,20 +73,20 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
         </div>
 
         <div className="upload-card" style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.05)', padding: '1rem' }}>
-          <h3>Capacidad de Carga</h3>
+          <h3>Capacidad de Maletas</h3>
           <p style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '0.5rem 0 0 0' }}>
-            {totalCargaAsignada} / {flight?.capacidad} kg
+            {formatBags(totalCargaAsignada)} / {formatBags(flight?.capacidad)}
           </p>
           <div style={{ background: '#eee', borderRadius: '4px', height: '8px', marginTop: '0.5rem', overflow: 'hidden' }}>
             <div style={{ background: porcentajeOcupacion > 90 ? '#ef4444' : '#3b82f6', width: `${porcentajeOcupacion}%`, height: '100%' }}></div>
           </div>
-          <small>Ocupación al {porcentajeOcupacion}%</small>
+          <small>Ocupación al {formatPercent(porcentajeOcupacion, 0)}</small>
         </div>
 
         <div className="upload-card" style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.05)', padding: '1rem' }}>
           <h3>Horario Programado</h3>
-          <small><b>Salida:</b> {flight?.salida?.replace('T', ' ')}</small><br />
-          <small><b>Llegada:</b> {flight?.llegada?.replace('T', ' ')}</small>
+          <small><b>Salida:</b> {formatDateTime(flight?.salida)}</small><br />
+          <small><b>Llegada:</b> {formatDateTime(flight?.llegada)}</small>
         </div>
       </div>
 
@@ -118,7 +119,7 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
           <span>Origen</span>
           <span>Destino</span>
           <span>Fecha Asignación</span>
-          <span>Carga (kg)</span>
+          <span>Maletas</span>
           <span>Cliente</span>
           <span>SLA</span>
         </div>
@@ -131,10 +132,10 @@ export default function FlightDetailPage({ flightId, onVolver }: FlightDetailPag
               <span style={{ fontWeight: 'bold' }}>{ship.codigoPedido}</span>
               <span>{ship.origen}-{ship.origenCiudad}</span>
               <span>{ship.destino}-{ship.destinoCiudad}</span>
-              <span>{ship.fecha}</span>
-              <span>{ship.cantidad} kg</span>
+              <span>{formatDate(ship.fecha)}</span>
+              <span>{formatBags(ship.cantidad)}</span>
               <span>{ship.idCliente}</span>
-              <span>{ship.slaHoras}h</span>
+              <span>{formatDurationHours(ship.slaHoras, 0)}</span>
             </div>
           ))
         )}

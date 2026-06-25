@@ -1,12 +1,10 @@
-export const NEUTRAL_COLORS = { stroke: '#b8923f', fill: '#e8c97a' }
+import {
+  NEUTRAL_SEMAPHORE_COLORS,
+  resolveSemaphoreColor,
+  type SemaphoreRanges,
+} from '../../../utils/semaphore'
 
-export type SemaphoreRanges = { greenMax: number; amberMax: number }
-
-export function resolveSemaphoreColor(percent: number, ranges: SemaphoreRanges) {
-  if (percent <= ranges.greenMax) return { stroke: '#2f8f46', fill: '#54b86c' }
-  if (percent <= ranges.amberMax) return { stroke: '#d3952a', fill: '#f0be62' }
-  return { stroke: '#c4473d', fill: '#e36b60' }
-}
+export type { SemaphoreRanges }
 
 export type PlaneColorResult = {
   fill: string
@@ -24,7 +22,9 @@ export function resolvePlaneColors(
       ? (carga / capacidad) * 100
       : null
 
-  const colors = percent === null ? NEUTRAL_COLORS : resolveSemaphoreColor(percent, ranges)
+  const colors = percent === null
+    ? NEUTRAL_SEMAPHORE_COLORS
+    : resolveSemaphoreColor(percent, ranges)
   const isEmpty = carga === 0
 
   return {

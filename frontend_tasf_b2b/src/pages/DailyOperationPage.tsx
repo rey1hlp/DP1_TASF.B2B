@@ -6,6 +6,13 @@ import type { AirportDto } from '../types/sim'
 import { fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
+import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import {
+  filterAirportsByMapFilters,
+  filterFlightSegmentsByMapFilters,
+} from '../utils/mapFilters'
+import { resolveSemaphoreColor } from '../utils/semaphore'
+import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 
 type MapViewProps = ComponentProps<typeof MapView>
 type MapSegment = MapViewProps['segments'][number]
@@ -82,13 +89,6 @@ function getCurrentMinuteOfDay(date: Date) {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
 }
 
-function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat('es-PE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
-
 function getFlightStatusLabel(status?: FlightStatus) {
   if (status === 'PLANNED') return 'Planificado'
   if (status === 'BOARDING') return 'Embarcando'
@@ -124,10 +124,10 @@ export default function DailyOperationPage() {
   const [socketConnected, setSocketConnected] = useState(false)
 
   const [ranges, setRanges] = useState({ greenMax: 30, amberMax: 70 })
+  const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
-  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
@@ -145,6 +145,8 @@ export default function DailyOperationPage() {
         if (routeData.estado === 'DELIVERED' || routeData.estado === 'CANCELLED') {
           routeData.ruta = []
         }
+        setSelectedFlightId(null)
+        setSelectedAirportCode(null)
         setSelectedShipmentRoute(routeData)
         return
       }
@@ -155,6 +157,8 @@ export default function DailyOperationPage() {
       if (fallbackData.content && fallbackData.content.length > 0) {
         const shipment = fallbackData.content.find((s: any) => s.codigoPedido === codigo)
         if (shipment) {
+          setSelectedFlightId(null)
+          setSelectedAirportCode(null)
           setSelectedShipmentRoute({
             codigoPedido: shipment.codigoPedido,
             estado: shipment.status,
@@ -298,16 +302,6 @@ export default function DailyOperationPage() {
       }
     }, [applySnapshot])
 
-  const airportsByCode = useMemo(() => {
-    const map: Record<string, AirportDto> = {}
-
-    airports.forEach((airport) => {
-      map[airport.codigoOaci] = airport
-    })
-
-    return map
-  }, [airports])
-
   const activeSegments = useMemo(() => {
     return segments.filter(
       (segment) => currentMinute >= segment.salidaMin && currentMinute <= segment.llegadaMin
@@ -321,33 +315,39 @@ export default function DailyOperationPage() {
       .slice(0, 10)
   }, [segments, currentMinute])
 
+  const mapSegments = useMemo(() => {
+    return filterFlightSegmentsByMapFilters(segments, mapFilters, ranges)
+  }, [segments, mapFilters, ranges])
+
+  const mapAirports = useMemo(() => {
+    return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
+  }, [airports, warehouseSnapshot, mapFilters, ranges])
+
+  const mapFilterCounts = useMemo(() => ({
+    flights: mapSegments.length,
+    warehouses: mapAirports.length,
+  }), [mapAirports.length, mapSegments.length])
+
+  useEffect(() => {
+    if (
+      selectedFlightId !== null &&
+      !mapSegments.some((segment) => segment.flightId === selectedFlightId)
+    ) {
+      setSelectedFlightId(null)
+    }
+  }, [mapSegments, selectedFlightId])
+
+  useEffect(() => {
+    if (
+      selectedAirportCode !== null &&
+      !mapAirports.some((airport) => airport.codigoOaci === selectedAirportCode)
+    ) {
+      setSelectedAirportCode(null)
+    }
+  }, [mapAirports, selectedAirportCode])
+
   const totalFlights = segments.length;
   const totalActiveFlights = activeSegments.length;
-
-  const warehouseItems = useMemo(() => {
-    const entries = Object.entries(warehouseSnapshot).map(([codigo, data]) => {
-      const airport = airportsByCode[codigo]
-      const percent = data.porcentaje
-
-      let color = '#54b86c'
-
-      if (percent > ranges.amberMax) {
-        color = '#e36b60'
-      } else if (percent > ranges.greenMax) {
-        color = '#f0be62'
-      }
-
-      return {
-        codigoOaci: codigo,
-        nombre: airport?.nombre ?? codigo,
-        pais: airport?.pais ?? '--',
-        porcentaje: percent,
-        color,
-      }
-    })
-
-    return entries.sort((a, b) => b.porcentaje - a.porcentaje)
-  }, [warehouseSnapshot, airportsByCode, ranges])
 
   const stats = useMemo(() => {
     const totalFlights = segments.length
@@ -368,10 +368,10 @@ export default function DailyOperationPage() {
   
     return {
       cards: [
-        { label: 'Vuelos activos', value: `${totalActive}` },
-        { label: 'Vuelos planificados', value: `${totalFlights}` },
-        { label: 'Carga en aire', value: `${Math.round(totalCargo)}` },
-        { label: 'Capacidad usada', value: `${capacityPct.toFixed(1)}%` },
+        { label: 'Vuelos activos', value: formatInteger(totalActive) },
+        { label: 'Vuelos planificados', value: formatInteger(totalFlights) },
+        { label: 'Maletas en aire', value: formatBags(totalCargo) },
+        { label: 'Capacidad usada', value: formatPercent(capacityPct) },
       ],
       bars: [
         { label: 'Actividad de vuelos', value: activePct },
@@ -408,76 +408,73 @@ export default function DailyOperationPage() {
       codigoOaci: airport.codigoOaci,
       nombre: airport.nombre,
       pais: airport.pais,
+      capacidad: warehouseSnapshot[airport.codigoOaci]?.capacidad ?? airport.capacidad,
+      ocupacion: warehouseSnapshot[airport.codigoOaci]?.ocupacion,
+      porcentaje: warehouseSnapshot[airport.codigoOaci]?.porcentaje,
+      color: warehouseSnapshot[airport.codigoOaci]
+        ? resolveSemaphoreColor(warehouseSnapshot[airport.codigoOaci].porcentaje, ranges).fill
+        : undefined,
     }))
-  }, [airports])
+  }, [airports, warehouseSnapshot, ranges])
   
-  const lastSyncLabel = lastSyncAt ? formatDateTime(new Date(lastSyncAt)) : '--'
+  const lastSyncLabel = formatDateTime(lastSyncAt)
 
   const handleSelectFlight = (flightId: number) => {
-    setSelectedFlightId((prev) => (prev === flightId ? null : flightId))
+    const nextFlightId = selectedFlightId === flightId ? null : flightId
+    setSelectedFlightId(nextFlightId)
+    if (nextFlightId !== null) {
+      setSelectedAirportCode(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   const handleSelectAirport = (codigoOaci: string) => {
-    setSelectedAirportCode((prev) => (prev === codigoOaci ? null : codigoOaci))
+    const nextAirportCode = selectedAirportCode === codigoOaci ? null : codigoOaci
+    setSelectedAirportCode(nextAirportCode)
+    if (nextAirportCode !== null) {
+      setSelectedFlightId(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   return (
-    <>
-      <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
-        <button 
-          className="toggle-toolbar-btn" 
-          onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
-          title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
-        >
-          {isToolbarCollapsed ? '▼' : '▲'}
-        </button>
-
-        {isToolbarCollapsed ? (
-          <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
-            Resumen de la Operación
+    <div className="daily-operation-page">
+      <section className={`toolbar`}>
+        <div className="status">
+          <div className="status-item">
+            Hora actual: <strong>{formatDateTime(now)}</strong>
           </div>
-        ) : (
-          <>
-            <div className="tabs">
-              <button className="tab active">Operación diaria</button>
-            </div>
 
-            <div className="status">
-              <div className="status-item">
-                Hora actual: <strong>{formatDateTime(now)}</strong>
-              </div>
+          <div className="status-item">
+            Vuelos activos: <strong>{formatInteger(totalActiveFlights)}</strong>
+          </div>
 
-              <div className="status-item">
-                Vuelos activos: <strong>{totalActiveFlights}</strong>
-              </div>
+          <div className="status-item">
+            Vuelos planificados: <strong>{formatInteger(totalFlights)}</strong>
+          </div>
 
-              <div className="status-item">
-                Vuelos planificados: <strong>{totalFlights}</strong>
-              </div>
-
-              <div className="status-item">
-                Conexión:{" "}
-                <strong>
-                  {socketConnected ? "En vivo" : "Sin conexión"}
-                </strong>
-              </div>
-            </div>
-          </>
-        )}
+          <div className="status-item">
+            Conexión:{" "}
+            <strong>{socketConnected ? "En vivo" : "Sin conexión"}</strong>
+          </div>
+        </div>
       </section>
 
-      <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
+      <section
+        className={`map-area ${isPanelCollapsed ? "panel-collapsed" : ""}`}
+      >
         <div className="map-placeholder">
           <MapView
-            airports={airports}
-            segments={segments}
+            airports={mapAirports}
+            segments={mapSegments}
             currentMinute={currentMinute}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             isPanelCollapsed={isPanelCollapsed}
-            isToolbarCollapsed={isToolbarCollapsed}
           />
 
           {loading ? (
@@ -494,9 +491,11 @@ export default function DailyOperationPage() {
           lastSyncLabel={lastSyncLabel}
           ranges={ranges}
           onRangesChange={setRanges}
+          mapFilters={mapFilters}
+          onMapFiltersChange={setMapFilters}
+          mapFilterCounts={mapFilterCounts}
           stats={stats}
           shipmentSummary={shipmentSummary}
-          warehouseItems={warehouseItems}
           flightItems={activeFlightItems}
           upcomingFlightItems={upcomingFlightItems}
           selectedFlightId={selectedFlightId}
@@ -514,6 +513,6 @@ export default function DailyOperationPage() {
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         />
       </section>
-    </>
+    </div>
   );
 }

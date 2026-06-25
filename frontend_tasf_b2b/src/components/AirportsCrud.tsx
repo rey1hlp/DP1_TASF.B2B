@@ -4,6 +4,7 @@ import { createAirport, deleteAirport, listAirports, updateAirport, uploadAirpor
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
+import { formatFileSize, formatGmtOffset, formatInteger } from '../utils/time'
 
 interface AirportsCrudProps {
   onViewDetail: (codigoOaci: string) => void;
@@ -267,8 +268,8 @@ export default function AirportsCrud({ onViewDetail }: AirportsCrudProps) {
             <span className="airport-code">{item.codigoOaci}</span>
             <span className="airport-name">{item.nombre}</span>
             <span className="airport-country">{item.pais}</span>
-            <span className="airport-gmt">{item.gmt}</span>
-            <span className="airport-capacity">{item.capacidad}</span>
+            <span className="airport-gmt">{formatGmtOffset(item.gmt)}</span>
+            <span className="airport-capacity">{formatInteger(item.capacidad)}</span>
             <div className="airport-actions">
               <button 
                 className="btn-icon btn-view" 
@@ -381,12 +382,12 @@ export default function AirportsCrud({ onViewDetail }: AirportsCrudProps) {
             </div>
             <div className="upload-summary">
               <span>{`Archivo: ${uploadFile ? uploadFile.name : 'Ninguno'}`}</span>
-              <span>{`Tamaño: ${uploadFile ? (uploadFile.size / 1024).toFixed(2) : '0.00'} KB`}</span>
+              <span>{`Tamaño: ${formatFileSize(uploadFile?.size ?? 0)}`}</span>
             </div>
             {uploadError && <div className="upload-error">{uploadError}</div>}
             {uploadResult && (
               <div className={uploadResult.skipped === 0 ? 'upload-success' : 'upload-error'}>
-                <div>{`Total: ${uploadResult.total}. Insertados: ${uploadResult.inserted}. Actualizados: ${uploadResult.updated}. Omitidos: ${uploadResult.skipped}.`}</div>
+                <div>{`Total: ${formatInteger(uploadResult.total)}. Insertados: ${formatInteger(uploadResult.inserted)}. Actualizados: ${formatInteger(uploadResult.updated)}. Omitidos: ${formatInteger(uploadResult.skipped)}.`}</div>
                 {uploadResult.invalidFormatLines.length > 0 && (
                   <div>
                     <div>Los siguientes registros no siguen el formato correcto:</div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { uploadEnvios } from '../services/api'
+import { formatFileSize, formatInteger } from '../utils/time'
 
 export type UploadEnviosProps = {
   onUploaded: (enviosKey: string) => void
@@ -73,8 +74,8 @@ export default function UploadEnvios({ onUploaded }: UploadEnviosProps) {
         </div>
 
         <div className="upload-summary">
-          <span>{`Archivos: ${files.length}`}</span>
-          <span>{`Tamano: ${(totalSize / 1024 / 1024).toFixed(2)} MB`}</span>
+          <span>{`Archivos: ${formatInteger(files.length)}`}</span>
+          <span>{`Tamano: ${formatFileSize(totalSize)}`}</span>
         </div>
 
         {error ? <div className="upload-error">{error}</div> : null}

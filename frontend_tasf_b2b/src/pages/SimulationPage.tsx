@@ -6,9 +6,19 @@ import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
 import { useSimulationContext } from '../contexts/SimulationContext'
+import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import {
+  filterAirportsByMapFilters,
+  filterFlightSegmentsByMapFilters,
+} from '../utils/mapFilters'
+import { resolveSemaphoreColor } from '../utils/semaphore'
 
 import {
+  formatDurationHours,
   formatCompactDate,
+  formatInteger,
+  formatBags,
+  formatPercent,
   getDayIndexFromDateString,
   getInclusiveDaySpan,
 } from '../utils/time'
@@ -61,6 +71,7 @@ export default function SimulationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
   const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>('period')
+  const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
@@ -173,6 +184,8 @@ export default function SimulationPage() {
     try {
       setShipmentSearchError(null)
       const route = await fetchShipmentRoute(simId, codigo)
+      setSelectedFlightId(null)
+      setSelectedAirportCode(null)
       setSelectedShipmentRoute(route)
     } catch (err) {
       setSelectedShipmentRoute(null)
@@ -303,20 +316,47 @@ export default function SimulationPage() {
     return snapshot
   }, [meta, displayMinute])
 
-  const airportsByCode = useMemo(() => {
-    const map: Record<string, AirportDto> = {}
-    airports.forEach((airport: AirportDto) => { // ✅ tipo explícito
-      map[airport.codigoOaci] = airport
-    })
-    return map
-  }, [airports])
-
   const activeSegments = useMemo(() => {
     if (displayMinute === null) return []
     return cappedSegments.filter(
       (seg) => displayMinute >= seg.salidaMin && displayMinute <= seg.llegadaMin
     )
   }, [cappedSegments, displayMinute])
+
+  const mapSegments = useMemo(() => {
+    return filterFlightSegmentsByMapFilters(
+      localCompleted ? [] : cappedSegments,
+      mapFilters,
+      ranges
+    )
+  }, [cappedSegments, localCompleted, mapFilters, ranges])
+
+  const mapAirports = useMemo(() => {
+    return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
+  }, [airports, warehouseSnapshot, mapFilters, ranges])
+
+  const mapFilterCounts = useMemo(() => ({
+    flights: mapSegments.length,
+    warehouses: mapAirports.length,
+  }), [mapAirports.length, mapSegments.length])
+
+  useEffect(() => {
+    if (
+      selectedFlightId !== null &&
+      !mapSegments.some((segment) => segment.flightId === selectedFlightId)
+    ) {
+      setSelectedFlightId(null)
+    }
+  }, [mapSegments, selectedFlightId])
+
+  useEffect(() => {
+    if (
+      selectedAirportCode !== null &&
+      !mapAirports.some((airport) => airport.codigoOaci === selectedAirportCode)
+    ) {
+      setSelectedAirportCode(null)
+    }
+  }, [mapAirports, selectedAirportCode])
 
   const stats = useMemo(() => {
     const totalSegments = cappedSegments.length
@@ -342,10 +382,10 @@ export default function SimulationPage() {
     const activePct = totalSegments > 0 ? (totalActive * 100) / totalSegments : 0
     return {
       cards: [
-        { label: 'Vuelos activos', value: `${totalActive}` },
-        { label: 'Carga en aire', value: `${Math.round(totalCargo)}` },
-        { label: 'Capacidad usada', value: `${capacityPct.toFixed(1)}%` },
-        { label: 'Duracion prom. vuelo', value: `${(avgDurationMin / 60).toFixed(2)}h` },
+        { label: 'Vuelos activos', value: formatInteger(totalActive) },
+        { label: 'Maletas en aire', value: formatBags(totalCargo) },
+        { label: 'Capacidad usada', value: formatPercent(capacityPct) },
+        { label: 'Duración prom. vuelo', value: formatDurationHours(avgDurationMin / 60, 2) },
       ],
       bars: [
         { label: 'Completado', value: progressPct },
@@ -355,30 +395,40 @@ export default function SimulationPage() {
     }
   }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute])
 
-  const warehouseItems = useMemo(() => {
-    const entries = Object.entries(warehouseSnapshot).map(([codigo, data]) => {
-      const airport = airportsByCode[codigo]
-      const percent = data.porcentaje
-      let color = '#54b86c'
-      if (percent > ranges.amberMax) color = '#e36b60'
-      else if (percent > ranges.greenMax) color = '#f0be62'
+  const airportItems = useMemo(() => {
+    return airports.map((airport) => {
+      const snapshot = warehouseSnapshot[airport.codigoOaci]
+      const percent = snapshot?.porcentaje
       return {
-        codigoOaci: codigo,
-        nombre: airport?.nombre ?? codigo,
-        pais: airport?.pais ?? '--',
+        codigoOaci: airport.codigoOaci,
+        nombre: airport.nombre,
+        pais: airport.pais,
+        capacidad: snapshot?.capacidad ?? airport.capacidad,
+        ocupacion: snapshot?.ocupacion,
         porcentaje: percent,
-        color,
+        color: percent !== undefined ? resolveSemaphoreColor(percent, ranges).fill : undefined,
       }
     })
-    return entries.sort((a, b) => b.porcentaje - a.porcentaje)
-  }, [warehouseSnapshot, airportsByCode, ranges])
+  }, [airports, warehouseSnapshot, ranges])
 
   const handleSelectFlight = (flightId: number) => {
-    setSelectedFlightId((prev: number | null) => (prev === flightId ? null : flightId)) // ✅ tipo explícito
+    const nextFlightId = selectedFlightId === flightId ? null : flightId
+    setSelectedFlightId(nextFlightId)
+    if (nextFlightId !== null) {
+      setSelectedAirportCode(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   const handleSelectAirport = (codigoOaci: string) => {
-    setSelectedAirportCode((prev: string | null) => (prev === codigoOaci ? null : codigoOaci)) // ✅ tipo explícito
+    const nextAirportCode = selectedAirportCode === codigoOaci ? null : codigoOaci
+    setSelectedAirportCode(nextAirportCode)
+    if (nextAirportCode !== null) {
+      setSelectedFlightId(null)
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError(null)
+    }
   }
 
   const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
@@ -428,10 +478,10 @@ export default function SimulationPage() {
                       Duracion: <strong>{typeof duration === 'number' ? `${duration} dias` : duration}</strong>
                     </div>
                     <div className="status-item">
-                      Vuelos activos: <strong>{cappedSegments.length}</strong>
+                      Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
                     </div>
                     <div className="status-item">
-                      Maletas: <strong>{meta?.totalMaletas ?? '--'}</strong>
+                      Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
                     </div>
                   </div>
                 </>
@@ -447,8 +497,8 @@ export default function SimulationPage() {
                 preparingMessage={preparingMessage}
               />
               <MapView
-                airports={airports}
-                segments={localCompleted ? [] : cappedSegments}
+                airports={mapAirports}
+                segments={mapSegments}
                 currentMinute={displayMinute}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
@@ -470,16 +520,14 @@ export default function SimulationPage() {
               isPaused={status === 'PAUSED'}
               ranges={ranges}
               onRangesChange={handleRangesChange}
+              mapFilters={mapFilters}
+              onMapFiltersChange={setMapFilters}
+              mapFilterCounts={mapFilterCounts}
               stats={stats}
-              warehouseItems={warehouseItems}
               flightItems={activeSegments}
               selectedFlightId={selectedFlightId}
               onSelectFlight={handleSelectFlight}
-              airportItems={airports.map((airport: AirportDto) => ({ // ✅ tipo explícito
-                codigoOaci: airport.codigoOaci,
-                nombre: airport.nombre,
-                pais: airport.pais,
-              }))}
+              airportItems={airportItems}
               selectedAirportCode={selectedAirportCode}
               onSelectAirport={handleSelectAirport}
                 isCollapsed={isPanelCollapsed}
