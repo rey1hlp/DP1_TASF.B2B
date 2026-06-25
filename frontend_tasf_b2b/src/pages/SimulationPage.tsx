@@ -6,6 +6,11 @@ import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
 import { useSimulationContext } from '../contexts/SimulationContext'
+import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import {
+  filterAirportsByMapFilters,
+  filterFlightSegmentsByMapFilters,
+} from '../utils/mapFilters'
 
 import {
   formatDurationHours,
@@ -65,6 +70,7 @@ export default function SimulationPage() {
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
   const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>('period')
+  const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
@@ -324,6 +330,41 @@ export default function SimulationPage() {
     )
   }, [cappedSegments, displayMinute])
 
+  const mapSegments = useMemo(() => {
+    return filterFlightSegmentsByMapFilters(
+      localCompleted ? [] : cappedSegments,
+      mapFilters,
+      ranges
+    )
+  }, [cappedSegments, localCompleted, mapFilters, ranges])
+
+  const mapAirports = useMemo(() => {
+    return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
+  }, [airports, warehouseSnapshot, mapFilters, ranges])
+
+  const mapFilterCounts = useMemo(() => ({
+    flights: mapSegments.length,
+    warehouses: mapAirports.length,
+  }), [mapAirports.length, mapSegments.length])
+
+  useEffect(() => {
+    if (
+      selectedFlightId !== null &&
+      !mapSegments.some((segment) => segment.flightId === selectedFlightId)
+    ) {
+      setSelectedFlightId(null)
+    }
+  }, [mapSegments, selectedFlightId])
+
+  useEffect(() => {
+    if (
+      selectedAirportCode !== null &&
+      !mapAirports.some((airport) => airport.codigoOaci === selectedAirportCode)
+    ) {
+      setSelectedAirportCode(null)
+    }
+  }, [mapAirports, selectedAirportCode])
+
   const stats = useMemo(() => {
     const totalSegments = cappedSegments.length
     const totalActive = activeSegments.length
@@ -465,8 +506,8 @@ export default function SimulationPage() {
                 preparingMessage={preparingMessage}
               />
               <MapView
-                airports={airports}
-                segments={localCompleted ? [] : cappedSegments}
+                airports={mapAirports}
+                segments={mapSegments}
                 currentMinute={displayMinute}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
@@ -488,6 +529,9 @@ export default function SimulationPage() {
               isPaused={status === 'PAUSED'}
               ranges={ranges}
               onRangesChange={handleRangesChange}
+              mapFilters={mapFilters}
+              onMapFiltersChange={setMapFilters}
+              mapFilterCounts={mapFilterCounts}
               stats={stats}
               warehouseItems={warehouseItems}
               flightItems={activeSegments}

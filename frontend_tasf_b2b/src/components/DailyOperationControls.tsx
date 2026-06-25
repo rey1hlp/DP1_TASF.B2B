@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import EntityExplorer from './EntityExplorer'
+import MapFiltersPanel from './MapFiltersPanel'
 import {
   formatInteger,
   formatPercent,
 } from '../utils/time'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
+import type { MapSemaphoreFilters } from '../types/mapFilters'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -31,6 +33,9 @@ export type DailyOperationControlsProps = {
 
   ranges: { greenMax: number; amberMax: number }
   onRangesChange: (ranges: { greenMax: number; amberMax: number }) => void
+  mapFilters: MapSemaphoreFilters
+  onMapFiltersChange: (filters: MapSemaphoreFilters) => void
+  mapFilterCounts: { flights: number; warehouses: number }
 
   stats: {
     cards: Array<{ label: string; value: string }>
@@ -107,6 +112,9 @@ export default function DailyOperationControls({
   lastSyncLabel,
   ranges,
   onRangesChange,
+  mapFilters,
+  onMapFiltersChange,
+  mapFilterCounts,
   stats,
   shipmentSummary,
   warehouseItems,
@@ -199,6 +207,11 @@ export default function DailyOperationControls({
           </div>
 
           <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
+          <MapFiltersPanel
+            filters={mapFilters}
+            onChange={onMapFiltersChange}
+            visibleCounts={mapFilterCounts}
+          />
 
           <div className="buttons">
             <button className="btn primary" onClick={onRefresh} disabled={loading}>

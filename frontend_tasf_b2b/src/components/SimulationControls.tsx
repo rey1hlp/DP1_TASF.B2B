@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import EntityExplorer from './EntityExplorer'
+import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
+import type { MapSemaphoreFilters } from '../types/mapFilters'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -26,6 +28,9 @@ export type SimulationControlsProps = {
   isPaused: boolean
   ranges: { greenMax: number; amberMax: number }
   onRangesChange: (ranges: { greenMax: number; amberMax: number }) => void
+  mapFilters: MapSemaphoreFilters
+  onMapFiltersChange: (filters: MapSemaphoreFilters) => void
+  mapFilterCounts: { flights: number; warehouses: number }
   stats: {
     cards: Array<{ label: string; value: string }>
     bars: Array<{ label: string; value: number }>
@@ -61,6 +66,9 @@ export default function SimulationControls({
   isPaused,
   ranges,
   onRangesChange,
+  mapFilters,
+  onMapFiltersChange,
+  mapFilterCounts,
   stats,
   warehouseItems,
   flightItems,
@@ -146,6 +154,11 @@ export default function SimulationControls({
               </label>
 
               <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
+              <MapFiltersPanel
+                filters={mapFilters}
+                onChange={onMapFiltersChange}
+                visibleCounts={mapFilterCounts}
+              />
 
               <div className="buttons">
                 <button className="btn primary" onClick={() => onStart({ inicio, dias })} disabled={isRunning}>

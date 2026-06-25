@@ -6,6 +6,11 @@ import type { AirportDto } from '../types/sim'
 import { fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
+import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import {
+  filterAirportsByMapFilters,
+  filterFlightSegmentsByMapFilters,
+} from '../utils/mapFilters'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 
 type MapViewProps = ComponentProps<typeof MapView>
@@ -118,6 +123,7 @@ export default function DailyOperationPage() {
   const [socketConnected, setSocketConnected] = useState(false)
 
   const [ranges, setRanges] = useState({ greenMax: 30, amberMax: 70 })
+  const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
   const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
@@ -315,6 +321,37 @@ export default function DailyOperationPage() {
       .slice(0, 10)
   }, [segments, currentMinute])
 
+  const mapSegments = useMemo(() => {
+    return filterFlightSegmentsByMapFilters(segments, mapFilters, ranges)
+  }, [segments, mapFilters, ranges])
+
+  const mapAirports = useMemo(() => {
+    return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
+  }, [airports, warehouseSnapshot, mapFilters, ranges])
+
+  const mapFilterCounts = useMemo(() => ({
+    flights: mapSegments.length,
+    warehouses: mapAirports.length,
+  }), [mapAirports.length, mapSegments.length])
+
+  useEffect(() => {
+    if (
+      selectedFlightId !== null &&
+      !mapSegments.some((segment) => segment.flightId === selectedFlightId)
+    ) {
+      setSelectedFlightId(null)
+    }
+  }, [mapSegments, selectedFlightId])
+
+  useEffect(() => {
+    if (
+      selectedAirportCode !== null &&
+      !mapAirports.some((airport) => airport.codigoOaci === selectedAirportCode)
+    ) {
+      setSelectedAirportCode(null)
+    }
+  }, [mapAirports, selectedAirportCode])
+
   const totalFlights = segments.length;
   const totalActiveFlights = activeSegments.length;
 
@@ -463,8 +500,8 @@ export default function DailyOperationPage() {
       <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
         <div className="map-placeholder">
           <MapView
-            airports={airports}
-            segments={segments}
+            airports={mapAirports}
+            segments={mapSegments}
             currentMinute={currentMinute}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}
@@ -488,6 +525,9 @@ export default function DailyOperationPage() {
           lastSyncLabel={lastSyncLabel}
           ranges={ranges}
           onRangesChange={setRanges}
+          mapFilters={mapFilters}
+          onMapFiltersChange={setMapFilters}
+          mapFilterCounts={mapFilterCounts}
           stats={stats}
           shipmentSummary={shipmentSummary}
           warehouseItems={warehouseItems}
