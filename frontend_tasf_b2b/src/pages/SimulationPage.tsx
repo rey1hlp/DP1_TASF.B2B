@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react' // ✅ useState importado
+import { useOutletContext } from 'react-router'
 import type { AirportDto } from '../types/sim'
 import { fetchAirports, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
 import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
+import type { AppLayoutContext } from '../layouts/AppLayout'
 import { useSimulationContext } from '../contexts/SimulationContext'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
@@ -74,8 +76,8 @@ export default function SimulationPage() {
   const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>('period')
   const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
 
-  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
+  const { setTopbarMain } = useOutletContext<AppLayoutContext>()
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
@@ -106,6 +108,29 @@ export default function SimulationPage() {
     localCompleted,
     ranges,
   } = simulation
+
+  useEffect(() => {
+    setTopbarMain(
+      <div className="topbar-simulation-mode" role="group" aria-label="Modo de simulación">
+        <button
+          type="button"
+          className={`topbar-simulation-option ${simulationMode === 'period' ? 'active' : ''}`}
+          onClick={() => setSimulationMode('period')}
+        >
+          Simulación del periodo
+        </button>
+        <button
+          type="button"
+          className={`topbar-simulation-option ${simulationMode === 'collapse' ? 'active' : ''}`}
+          onClick={() => setSimulationMode('collapse')}
+        >
+          Hasta colapso
+        </button>
+      </div>
+    )
+
+    return () => setTopbarMain(null)
+  }, [setTopbarMain, simulationMode])
 
   // Cargar aeropuertos una sola vez
   useEffect(() => {
@@ -510,52 +535,22 @@ export default function SimulationPage() {
       {!enviosKey ? (
         <UploadEnvios onUploaded={handleEnviosUploaded} />
       ) : (
-        <>
-            <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
-              <button 
-                className="toggle-toolbar-btn" 
-                onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
-                title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
-              >
-                {isToolbarCollapsed ? '▼' : '▲'}
-              </button>
-              
-              {isToolbarCollapsed ? (
-                <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
-                  Resumen de la Simulación
+    <div className="simulation-page">
+            <section className="toolbar simulation-summary-toolbar">
+              <div className="status">
+                <div className="status-item">
+                  Fecha: <strong>{displayStartDate}</strong>
                 </div>
-              ) : (
-                <>
-                  <div className="tabs">
-                    <button
-                      className={`tab ${simulationMode === 'period' ? 'active' : ''}`}
-                      onClick={() => setSimulationMode('period')}
-                    >
-                      Simulacion del periodo
-                    </button>
-                    <button
-                      className={`tab ${simulationMode === 'collapse' ? 'active' : ''}`}
-                      onClick={() => setSimulationMode('collapse')}
-                    >
-                      Simulacion hasta el colapso
-                    </button>
-                  </div>
-                  <div className="status">
-                    <div className="status-item">
-                      Fecha: <strong>{displayStartDate}</strong>
-                    </div>
-                    <div className="status-item">
-                      Duracion: <strong>{typeof duration === 'number' ? `${duration} dias` : duration}</strong>
-                    </div>
-                    <div className="status-item">
-                      Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
-                    </div>
-                    <div className="status-item">
-                      Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
-                    </div>
-                  </div>
-                </>
-              )}
+                <div className="status-item">
+                  Duración: <strong>{typeof duration === 'number' ? `${duration} días` : duration}</strong>
+                </div>
+                <div className="status-item">
+                  Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
+                </div>
+                <div className="status-item">
+                  Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
+                </div>
+              </div>
             </section>
 
             <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
@@ -614,7 +609,7 @@ export default function SimulationPage() {
                 entityFocusRequest={entityFocusRequest}
             />
           </section>
-        </>
+        </div>
       )}
     </>
   )

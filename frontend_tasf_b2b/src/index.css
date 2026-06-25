@@ -104,6 +104,42 @@ body {
   font-weight: 700;
 }
 
+.topbar-simulation-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(226, 236, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(15, 35, 66, 0.24);
+  max-width: 100%;
+}
+
+.topbar-simulation-option {
+  min-height: 34px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: transparent;
+  color: #dce8fb;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.topbar-simulation-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.topbar-simulation-option.active {
+  background: #f8fafc;
+  color: #214a7e;
+  box-shadow: 0 4px 12px rgba(8, 22, 48, 0.16);
+}
+
 .topbar-left {
   display: flex;
   align-items: center;
@@ -202,6 +238,13 @@ body {
 }
 
 .daily-operation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.simulation-page {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -369,6 +412,13 @@ body {
   flex-wrap: wrap;
   font-size: 13px;
   color: #40577a;
+}
+
+.simulation-summary-toolbar {
+  min-height: 56px;
+  align-items: center;
+  justify-content: start;
+  padding: 16px 20px;
 }
 
 /* ─── Map area ──────────────────────────────────────────────────── */
