@@ -1,7 +1,7 @@
 // src/components/DailyOperationControls.tsx
 
 import { useMemo, useState } from 'react'
-import EntityExplorer, { type EntityAirportItem } from './EntityExplorer'
+import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import {
   formatInteger,
@@ -49,23 +49,9 @@ export type DailyOperationControlsProps = {
     delivered: number
   } | null
 
-  flightItems: Array<{
-    flightId: number
-    origen: string
-    destino: string
-    salidaMin: number
-    llegadaMin: number
-    estado?: string
-  }>
+  flightItems: EntityFlightItem[]
 
-  upcomingFlightItems: Array<{
-    flightId: number
-    origen: string
-    destino: string
-    salidaMin: number
-    llegadaMin: number
-    estado?: string
-  }>
+  upcomingFlightItems: EntityFlightItem[]
 
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void

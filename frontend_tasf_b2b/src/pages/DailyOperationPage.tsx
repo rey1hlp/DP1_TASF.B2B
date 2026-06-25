@@ -389,8 +389,18 @@ export default function DailyOperationPage() {
       salidaMin: segment.salidaMin,
       llegadaMin: segment.llegadaMin,
       estado: getFlightStatusLabel(getSegmentStatus(segment, currentMinute)),
+      carga: segment.carga,
+      capacidad: segment.capacidad,
+      porcentaje:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? (segment.carga * 100) / segment.capacidad
+          : undefined,
+      color:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? resolveSemaphoreColor((segment.carga * 100) / segment.capacidad, ranges).fill
+          : undefined,
     }))
-  }, [activeSegments, currentMinute])
+  }, [activeSegments, currentMinute, ranges])
   
   const upcomingFlightItems = useMemo(() => {
     return upcomingSegments.map((segment) => ({
@@ -400,8 +410,18 @@ export default function DailyOperationPage() {
       salidaMin: segment.salidaMin,
       llegadaMin: segment.llegadaMin,
       estado: getFlightStatusLabel(getSegmentStatus(segment, currentMinute)),
+      carga: segment.carga,
+      capacidad: segment.capacidad,
+      porcentaje:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? (segment.carga * 100) / segment.capacidad
+          : undefined,
+      color:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? resolveSemaphoreColor((segment.carga * 100) / segment.capacidad, ranges).fill
+          : undefined,
     }))
-  }, [upcomingSegments, currentMinute])
+  }, [upcomingSegments, currentMinute, ranges])
   
   const airportItems = useMemo(() => {
     return airports.map((airport) => ({

@@ -2,6 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import {
   formatDurationHours,
+  formatBags,
   formatInteger,
   formatMinuteRange,
   formatPercent,
@@ -16,6 +17,10 @@ export type EntityFlightItem = {
   salidaMin: number
   llegadaMin: number
   estado?: string
+  carga?: number
+  capacidad?: number
+  porcentaje?: number
+  color?: string
 }
 
 export type EntityAirportItem = {
@@ -76,6 +81,7 @@ export type EntityExplorerProps = {
 }
 
 const ITEM_HEIGHT = 44
+const FLIGHT_ITEM_HEIGHT = 56
 const AIRPORT_ITEM_HEIGHT = 56
 const AIRPORT_PREVIEW_LIMIT = 30
 
@@ -127,7 +133,7 @@ export default function EntityExplorer({
     if (!query) return flights;
     return flights.filter((flight) => {
       const label =
-        `${flight.flightId} ${flight.origen} ${flight.destino} ${flight.estado ?? ""}`.toLowerCase();
+        `${flight.flightId} ${flight.origen} ${flight.destino} ${flight.estado ?? ""} ${flight.carga ?? ""} ${flight.capacidad ?? ""}`.toLowerCase();
       return label.includes(query);
     });
   }, [flights, flightQuery]);
@@ -167,7 +173,7 @@ export default function EntityExplorer({
   }, [shipments, shipmentQuery]);
 
   const flightList = useVirtualList(filteredFlights, {
-    itemHeight: ITEM_HEIGHT,
+    itemHeight: FLIGHT_ITEM_HEIGHT,
     listHeight,
   });
   const airportList = useVirtualList(displayedAirports, {
@@ -220,19 +226,42 @@ export default function EntityExplorer({
             className="flight-list-items"
             style={{ transform: `translateY(${flightList.offsetY}px)` }}
           >
-            {flightList.visibleItems.map((flight) => (
+            {flightList.visibleItems.map((flight) => {
+              const hasCargo = flight.carga !== undefined && flight.capacidad !== undefined
+              const cargoLabel = hasCargo
+                ? `${formatBags(flight.carga)} / ${formatBags(flight.capacidad)}`
+                : flight.capacidad !== undefined
+                  ? `Cap. ${formatBags(flight.capacidad)}`
+                  : null
+
+              return (
               <button
                 key={flight.flightId}
-                className={`flight-item ${selectedFlightId === flight.flightId ? "active" : ""}`}
+                className={`flight-item entity-flight-item ${selectedFlightId === flight.flightId ? "active" : ""}`}
                 onClick={() => onSelectFlight(flight.flightId)}
-                style={{ height: `${ITEM_HEIGHT}px` }}
+                style={{ height: `${FLIGHT_ITEM_HEIGHT}px` }}
               >
-                <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
-                <div className="flight-meta">
-                  {`${flight.estado ? `${flight.estado} · ` : ""}Salida ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}
+                <div>
+                  <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
+                  <div className="flight-meta">
+                    {`${flight.estado ? `${flight.estado} · ` : ""} ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}
+                  </div>
+                  <div className="flight-meta">
+                    {cargoLabel ? cargoLabel : ""}
+                  </div>
                 </div>
+                {flight.porcentaje !== undefined ? (
+                  <div className="entity-airport-status">
+                    <span>{formatPercent(flight.porcentaje, 0)}</span>
+                    <span
+                      className="warehouse-dot"
+                      style={{ background: flight.color }}
+                    />
+                  </div>
+                ) : null}
               </button>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>

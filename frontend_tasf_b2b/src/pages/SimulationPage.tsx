@@ -395,6 +395,27 @@ export default function SimulationPage() {
     }
   }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute])
 
+  const flightItems = useMemo(() => {
+    return activeSegments.map((segment) => {
+      const percent =
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? (segment.carga * 100) / segment.capacidad
+          : undefined
+
+      return {
+        flightId: segment.flightId,
+        origen: segment.origen,
+        destino: segment.destino,
+        salidaMin: segment.salidaMin,
+        llegadaMin: segment.llegadaMin,
+        carga: segment.carga,
+        capacidad: segment.capacidad,
+        porcentaje: percent,
+        color: percent !== undefined ? resolveSemaphoreColor(percent, ranges).fill : undefined,
+      }
+    })
+  }, [activeSegments, ranges])
+
   const airportItems = useMemo(() => {
     return airports.map((airport) => {
       const snapshot = warehouseSnapshot[airport.codigoOaci]
@@ -524,7 +545,7 @@ export default function SimulationPage() {
               onMapFiltersChange={setMapFilters}
               mapFilterCounts={mapFilterCounts}
               stats={stats}
-              flightItems={activeSegments}
+              flightItems={flightItems}
               selectedFlightId={selectedFlightId}
               onSelectFlight={handleSelectFlight}
               airportItems={airportItems}

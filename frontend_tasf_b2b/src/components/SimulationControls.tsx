@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import EntityExplorer, { type EntityAirportItem } from './EntityExplorer'
+import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { MapSemaphoreFilters } from '../types/mapFilters'
@@ -35,13 +35,7 @@ export type SimulationControlsProps = {
     cards: Array<{ label: string; value: string }>
     bars: Array<{ label: string; value: number }>
   }
-  flightItems: Array<{
-    flightId: number
-    origen: string
-    destino: string
-    salidaMin: number
-    llegadaMin: number
-  }>
+  flightItems: EntityFlightItem[]
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void
   airportItems: EntityAirportItem[]

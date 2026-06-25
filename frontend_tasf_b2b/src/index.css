@@ -882,6 +882,7 @@ body {
   background: rgba(47, 98, 181, 0.12);
 }
 
+.entity-flight-item,
 .entity-airport-item {
   display: flex;
   align-items: center;
