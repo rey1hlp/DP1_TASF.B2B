@@ -104,6 +104,42 @@ body {
   font-weight: 700;
 }
 
+.topbar-simulation-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(226, 236, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(15, 35, 66, 0.24);
+  max-width: 100%;
+}
+
+.topbar-simulation-option {
+  min-height: 34px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: transparent;
+  color: #dce8fb;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.topbar-simulation-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.topbar-simulation-option.active {
+  background: #f8fafc;
+  color: #214a7e;
+  box-shadow: 0 4px 12px rgba(8, 22, 48, 0.16);
+}
+
 .topbar-left {
   display: flex;
   align-items: center;
@@ -358,6 +394,13 @@ body {
   height: 100%;
 }
 
+.simulation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
 .logo {
   width: 44px;
   height: 44px;
@@ -521,6 +564,13 @@ body {
   color: #40577a;
 }
 
+.simulation-summary-toolbar {
+  min-height: 56px;
+  align-items: center;
+  justify-content: start;
+  padding: 16px 20px;
+}
+
 /* ─── Map area ──────────────────────────────────────────────────── */
 /*
   Added min-height on the placeholder and an explicit px height on the map div for Leaflet.
@@ -617,11 +667,19 @@ body {
 
 .plane-marker {
   background: transparent;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   filter: drop-shadow(0 4px 10px rgba(19, 49, 90, 0.4));
+  cursor: pointer;
+}
+
+.plane-marker-hitbox {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
 }
 
 .airport-marker {
@@ -1032,6 +1090,7 @@ body {
   background: rgba(47, 98, 181, 0.12);
 }
 
+.entity-flight-item,
 .entity-airport-item {
   display: flex;
   align-items: center;
@@ -1774,9 +1833,9 @@ body {
   padding: 10px;
 }
 
-.map-fullscreen-btn {
+.map-fullscreen-btn,
+.map-reset-view-btn {
   position: absolute;
-  top: 15px;
   right: 15px;
   z-index: 1001; /* Sobre el mapa de Leaflet */
   width: 34px;
@@ -1789,6 +1848,165 @@ body {
   place-items: center;
   font-size: 18px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  color: #0f172a;
+}
+
+.map-fullscreen-btn {
+  top: 15px;
+}
+
+.map-reset-view-btn {
+  top: 57px;
+}
+
+.map-time-tab {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+  max-width: min(520px, calc(100% - 136px));
+  padding: 8px 16px;
+  border: 1px solid rgba(190, 207, 232, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(18, 36, 68, 0.16);
+  color: #173763;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.map-floating-card {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 1002;
+  width: min(340px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  background: #ffffff;
+  border: 1px solid #d9deea;
+  border-radius: 14px;
+  box-shadow: 0 18px 38px rgba(18, 36, 68, 0.18);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.map-floating-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2e7f0;
+}
+
+.map-floating-card-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  font-size: 18px;
+  color: #111827;
+}
+
+.map-floating-card-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-floating-card-badge {
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #d7e5fb;
+  color: #2f62b5;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.map-floating-card-close {
+  border: none;
+  background: transparent;
+  color: #687383;
+  cursor: pointer;
+  font-size: 28px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.map-floating-card-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  overflow: auto;
+}
+
+.map-floating-card-subtitle {
+  font-size: 15px;
+  color: #374151;
+}
+
+.map-floating-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.map-floating-card-metric {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 74px;
+  border-radius: 12px;
+  background: #f1f2ee;
+  color: #111827;
+}
+
+.map-floating-card-metric strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.map-floating-card-metric span {
+  font-size: 13px;
+  color: #3f4651;
+}
+
+.map-floating-card-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  color: #3f4651;
+}
+
+.map-floating-card-status span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.map-floating-card-action {
+  min-height: 46px;
+  border: none;
+  border-radius: 12px;
+  background: #d7e5fb;
+  color: #2f62b5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.map-floating-card-action:hover {
+  background: #c8daf6;
 }
 
 .entity-subtabs {

@@ -7,6 +7,7 @@ import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports } from '..
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
@@ -127,6 +128,8 @@ export default function DailyOperationPage() {
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
+  const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
+  const entityFocusRequestIdRef = useRef(0)
 
   const handleSearchShipment = async (codigo: string) => {
     setShipmentSearchError(null)
@@ -383,8 +386,18 @@ export default function DailyOperationPage() {
       salidaMin: segment.salidaMin,
       llegadaMin: segment.llegadaMin,
       estado: getFlightStatusLabel(getSegmentStatus(segment, currentMinute)),
+      carga: segment.carga,
+      capacidad: segment.capacidad,
+      porcentaje:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? (segment.carga * 100) / segment.capacidad
+          : undefined,
+      color:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? resolveSemaphoreColor((segment.carga * 100) / segment.capacidad, ranges).fill
+          : undefined,
     }))
-  }, [activeSegments, currentMinute])
+  }, [activeSegments, currentMinute, ranges])
   
   const upcomingFlightItems = useMemo(() => {
     return upcomingSegments.map((segment) => ({
@@ -394,8 +407,18 @@ export default function DailyOperationPage() {
       salidaMin: segment.salidaMin,
       llegadaMin: segment.llegadaMin,
       estado: getFlightStatusLabel(getSegmentStatus(segment, currentMinute)),
+      carga: segment.carga,
+      capacidad: segment.capacidad,
+      porcentaje:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? (segment.carga * 100) / segment.capacidad
+          : undefined,
+      color:
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? resolveSemaphoreColor((segment.carga * 100) / segment.capacidad, ranges).fill
+          : undefined,
     }))
-  }, [upcomingSegments, currentMinute])
+  }, [upcomingSegments, currentMinute, ranges])
   
   const airportItems = useMemo(() => {
     return airports.map((airport) => ({
@@ -433,6 +456,52 @@ export default function DailyOperationPage() {
     }
   }
 
+  const handleMapAirportPreview = useCallback((codigoOaci: string | null) => {
+    if (codigoOaci === null) {
+      setSelectedAirportCode(null)
+      return
+    }
+
+    setSelectedAirportCode(codigoOaci)
+    setSelectedFlightId(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapAirportPreview(codigoOaci)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'airport',
+      id: codigoOaci,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapAirportPreview])
+
+  const handleMapFlightPreview = useCallback((flightId: number | null) => {
+    if (flightId === null) {
+      setSelectedFlightId(null)
+      return
+    }
+
+    setSelectedFlightId(flightId)
+    setSelectedAirportCode(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapFlightDetailRequest = useCallback((flightId: number) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapFlightPreview(flightId)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'flight',
+      id: flightId,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapFlightPreview])
+
   return (
     <div className="daily-operation-page">
       <section className={`toolbar`}>
@@ -464,11 +533,16 @@ export default function DailyOperationPage() {
             airports={mapAirports}
             segments={mapSegments}
             currentMinute={currentMinute}
+            timeLabel={`Hora actual: ${formatDateTime(now)}`}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             isPanelCollapsed={isPanelCollapsed}
+            onAirportPreview={handleMapAirportPreview}
+            onAirportDetailRequest={handleMapAirportDetailRequest}
+            onFlightPreview={handleMapFlightPreview}
+            onFlightDetailRequest={handleMapFlightDetailRequest}
           />
 
           {loading ? (
@@ -505,6 +579,7 @@ export default function DailyOperationPage() {
           alerts={alerts}
           isCollapsed={isPanelCollapsed}
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+          entityFocusRequest={entityFocusRequest}
         />
       </section>
     </div>
