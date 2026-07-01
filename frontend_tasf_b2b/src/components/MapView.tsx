@@ -51,6 +51,13 @@ const SELECTED_AIRPORT_COLORS = {
   stroke: '#2f62b5',
   fill: '#d7e5fb',
 }
+
+const LANDED_ROUTE_STYLE = {
+  ...SELECTED_ROUTE_STYLE,
+  color: '#9ca3af', // tailwind gray-400
+  dashArray: '4, 6',
+} satisfies L.PolylineOptions
+
 function toRad(value: number) {
   return (value * Math.PI) / 180
 }
@@ -590,10 +597,17 @@ export default function MapView({
     if (selectedFlightId !== null) {
       const selectedSegment = segments.find((segment) => segment.flightId === selectedFlightId)
       if (selectedSegment) {
-        addFlightRouteToLayer(selectedSegment, routeLayerRef.current)
+        const isLanded = currentMinute !== null && currentMinute > selectedSegment.llegadaMin
+        const style = isLanded ? LANDED_ROUTE_STYLE : SELECTED_ROUTE_STYLE
+        const latlngs: L.LatLngExpression[] = [
+          [selectedSegment.origenLat, selectedSegment.origenLon],
+          [selectedSegment.destinoLat, selectedSegment.destinoLon],
+        ]
+        // Se usa L.polyline directamente para no modificar funciones compartidas
+        L.polyline(latlngs, style).addTo(routeLayerRef.current)
       }
     }
-  }, [selectedFlightId, selectedShipmentRoute, airports, segments])
+  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute])
 
   return (
     <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>

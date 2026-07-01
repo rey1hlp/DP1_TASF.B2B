@@ -48,6 +48,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     cancelado: false,
   })
   const [capacidadText, setCapacidadText] = useState('150')
+  const [flightCodeSuffix, setFlightCodeSuffix] = useState('')
 
   const hasActiveFilters = filterOrigen || filterDestino
 
@@ -89,6 +90,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       cancelado: false,
     })
     setCapacidadText('150')
+    setFlightCodeSuffix('')
   }
 
   const handleSubmit = async () => {
@@ -117,6 +119,8 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
   const handleEdit = (item: FlightCrudDto) => {
     setForm({ ...item })
     setCapacidadText(String(item.capacidad ?? 0))
+    const suffix = item.codigo && item.codigo.length > 8 ? item.codigo.substring(8) : ''
+    setFlightCodeSuffix(suffix)
     setIsModalOpen(true)
     void ensureAirports()
   }
@@ -281,11 +285,20 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
   }
 
   const handleSelectAirport = (kind: 'origen' | 'destino', codigo: string) => {
-    if (kind === 'origen') {
-      setForm({ ...form, origenOaci: codigo })
-    } else {
-      setForm({ ...form, destinoOaci: codigo })
-    }
+    setForm((current) => {
+      const isOrigen = kind === 'origen'
+      const newValues = {
+        ...current,
+        [isOrigen ? 'origenOaci' : 'destinoOaci']: codigo,
+      }
+
+      const origen = (isOrigen ? codigo : newValues.origenOaci) || '----'
+      const destino = (!isOrigen ? codigo : newValues.destinoOaci) || '----'
+
+      const prefix = `${origen.substring(0, 4)}${destino.substring(0, 4)}`
+      newValues.codigo = `${prefix}${flightCodeSuffix}`
+      return newValues
+    })
     setActiveOaciList(null)
   }
 
@@ -394,7 +407,32 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
             <div className="modal-body">
               <label className="field">
                 Código
-                <input type="text" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
+                <div style={{ display: 'flex' }}>
+                  <input
+                    value={`${(form.origenOaci || '----').substring(0, 4)}${(form.destinoOaci || '----').substring(0, 4)}`}
+                    readOnly
+                    style={{
+                      backgroundColor: '#e9ecef',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                      borderRight: 0,
+                      width: '110px',
+                      flexShrink: 0,
+                    }}
+                    title="Prefijo autogenerado (Origen-Destino)"
+                  />
+                  <input
+                    value={flightCodeSuffix}
+                    onChange={(e) => {
+                      const newSuffix = e.target.value
+                      setFlightCodeSuffix(newSuffix)
+                      const prefix = `${(form.origenOaci || '----').substring(0, 4)}${(form.destinoOaci || '----').substring(0, 4)}`
+                      setForm(current => ({ ...current, codigo: `${prefix}${newSuffix}` }))
+                    }}
+                    placeholder="-****-****"
+                    style={{ flexGrow: 1 }}
+                  />
+                </div>
               </label>
               <label className="field">
                 Origen (OACI)
@@ -541,4 +579,3 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     </div>
   )
 }
-

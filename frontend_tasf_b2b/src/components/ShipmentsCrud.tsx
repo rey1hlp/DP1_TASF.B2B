@@ -217,10 +217,26 @@ export default function ShipmentsCrud() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
-  const handleNew = () => {
-    resetForm()
+  const handleNew = async () => {
     setIsModalOpen(true)
     void ensureAirports()
+    setForm({ ...EMPTY_FORM, codigoPedido: 'Calculando...' })
+
+    try {
+      const result = await listShipments(0, 1, '')
+      let nextCodigoPedido = '000000001'
+      if (result.content.length > 0) {
+        const lastCodigo = result.content[0].codigoPedido
+        const lastCodigoNum = parseInt(lastCodigo, 10)
+        if (!isNaN(lastCodigoNum)) {
+          nextCodigoPedido = String(lastCodigoNum + 1).padStart(9, '0')
+        }
+      }
+      setForm({ ...EMPTY_FORM, codigoPedido: nextCodigoPedido })
+    } catch (e) {
+      console.error('Failed to fetch latest shipment for new code', e)
+      setForm({ ...EMPTY_FORM, codigoPedido: '000000001' })
+    }
   }
 
   const getFilteredAirports = (value: string) => {
