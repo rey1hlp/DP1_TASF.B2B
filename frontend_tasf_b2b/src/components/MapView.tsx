@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
+import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
-import { formatBags, formatInteger, formatPercent } from '../utils/time'
+import { formatBags, formatInteger, formatMinuteRange, formatPercent } from '../utils/time'
 import {
   NEUTRAL_SEMAPHORE_COLORS,
   resolveSemaphoreColor,
+  resolveSemaphoreLevel,
 } from '../utils/semaphore'
+import MapFloatingCard from './MapFloatingCard'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
@@ -23,6 +26,11 @@ export type MapViewProps = {
   selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number | string }> } | null
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
+  timeLabel?: string
+  onAirportDetailRequest?: (codigoOaci: string) => void
+  onAirportPreview?: (codigoOaci: string | null) => void
+  onFlightDetailRequest?: (flightId: number) => void
+  onFlightPreview?: (flightId: number | null) => void
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -39,6 +47,10 @@ const SELECTED_ROUTE_STYLE = {
   opacity: 0.8,
   pane: MAP_PANES.route,
 } satisfies L.PolylineOptions
+const SELECTED_AIRPORT_COLORS = {
+  stroke: '#2f62b5',
+  fill: '#d7e5fb',
+}
 
 const LANDED_ROUTE_STYLE = {
   ...SELECTED_ROUTE_STYLE,
@@ -66,6 +78,7 @@ function buildPlaneIcon(
   capacidad: number | undefined,
   ranges: { greenMax: number; amberMax: number },
   dimmed = false,
+  isSelected = false,
 ) {
   const rotation = heading - 45
 
@@ -74,15 +87,16 @@ function buildPlaneIcon(
       ? (carga / capacidad) * 100
       : null
 
-  const colors =
-    percent === null
+  const colors = isSelected
+    ? SELECTED_AIRPORT_COLORS
+    : percent === null
       ? NEUTRAL_SEMAPHORE_COLORS
       : resolveSemaphoreColor(percent, ranges)
 
   const isEmpty = carga === 0
-  const fill = isEmpty ? 'none' : colors.fill
+  const fill = isEmpty && !isSelected ? 'none' : colors.fill
   const stroke = colors.stroke
-  const strokeWidth = isEmpty ? 1.8 : 1.5
+  const strokeWidth = isSelected ? 2.1 : isEmpty ? 1.8 : 1.5
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
     fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"
@@ -92,9 +106,9 @@ function buildPlaneIcon(
 
   return L.divIcon({
     className: 'plane-marker',
-    html: `<div style="transform:rotate(${rotation}deg);width:28px;height:28px;opacity:${dimmed ? 0.4 : 1}">${svg}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    html: `<div class="plane-marker-hitbox"><div style="transform:rotate(${rotation}deg);width:28px;height:28px;opacity:${dimmed ? 0.4 : 1}">${svg}</div></div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
   })
 }
 
@@ -104,9 +118,10 @@ function buildAirportIcon(
 ) {
   const markerSize = isSelected ? 42 : 34
   const iconSize = isSelected ? 30 : 24
+  const displayColors = isSelected ? SELECTED_AIRPORT_COLORS : colors
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
-    fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="2"
+    fill="${displayColors.fill}" stroke="${displayColors.stroke}" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
     <path d="${AIRPORT_PATH}"/>
   </svg>`
@@ -157,11 +172,19 @@ export default function MapView({
   selectedShipmentRoute,
   isPanelCollapsed,
   isToolbarCollapsed,
+  timeLabel,
+  onAirportDetailRequest,
+  onAirportPreview,
+  onFlightDetailRequest,
+  onFlightPreview,
 }: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [animatedMinute, setAnimatedMinute] = useState<number | null>(currentMinute)
+  const [previewAirportCode, setPreviewAirportCode] = useState<string | null>(null)
+  const [previewFlightId, setPreviewFlightId] = useState<number | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -172,6 +195,22 @@ export default function MapView({
   const animationFromRef = useRef<number | null>(null)
   const animationToRef = useRef<number | null>(null)
   const animatedMinuteRef = useRef<number | null>(currentMinute)
+  const closedPreviewAirportCodeRef = useRef<string | null>(null)
+  const closedPreviewFlightIdRef = useRef<number | null>(null)
+
+  const previewAirport = useMemo(() => {
+    if (previewAirportCode === null) {
+      return null
+    }
+    return airports.find((airport) => airport.codigoOaci === previewAirportCode) ?? null
+  }, [airports, previewAirportCode])
+
+  const previewFlight = useMemo(() => {
+    if (previewFlightId === null) {
+      return null
+    }
+    return segments.find((segment) => segment.flightId === previewFlightId) ?? null
+  }, [segments, previewFlightId])
 
   const invalidateMapSize = () => {
     if (!mapRef.current) {
@@ -194,6 +233,10 @@ export default function MapView({
       mapRef.current?.invalidateSize({ animate: false })
       resizeTimerRef.current = null
     }, 350)
+  }
+
+  const handleResetView = () => {
+    mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: true })
   }
 
   useEffect(() => {
@@ -227,6 +270,26 @@ export default function MapView({
     mapRef.current = map
   }, [])
 
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) {
+      return
+    }
+
+    const handleMapClick = () => {
+      setPreviewAirportCode(null)
+      setPreviewFlightId(null)
+      onAirportPreview?.(null)
+      onFlightPreview?.(null)
+    }
+
+    map.on('click', handleMapClick)
+
+    return () => {
+      map.off('click', handleMapClick)
+    }
+  }, [onAirportPreview, onFlightPreview])
+
   // Leaflet no detecta cambios de tamaño provocados por CSS grid/flex, como el colapso del sidebar.
   useEffect(() => {
     const container = containerRef.current
@@ -252,6 +315,60 @@ export default function MapView({
   useEffect(() => {
     invalidateMapSize()
   }, [isFullscreen, isPanelCollapsed, isToolbarCollapsed])
+
+  useEffect(() => {
+    if (previewAirportCode !== null && !airports.some((airport) => airport.codigoOaci === previewAirportCode)) {
+      setPreviewAirportCode(null)
+    }
+  }, [airports, previewAirportCode])
+
+  useEffect(() => {
+    if (previewFlightId !== null && !segments.some((segment) => segment.flightId === previewFlightId)) {
+      setPreviewFlightId(null)
+    }
+  }, [segments, previewFlightId])
+
+  useEffect(() => {
+    if (selectedAirportCode === null) {
+      closedPreviewAirportCodeRef.current = null
+      if (previewAirportCode !== null) {
+        setPreviewAirportCode(null)
+      }
+      return
+    }
+
+    if (closedPreviewAirportCodeRef.current !== selectedAirportCode) {
+      closedPreviewAirportCodeRef.current = null
+    }
+
+    if (
+      selectedAirportCode !== previewAirportCode &&
+      closedPreviewAirportCodeRef.current !== selectedAirportCode
+    ) {
+      setPreviewAirportCode(selectedAirportCode)
+    }
+  }, [previewAirportCode, selectedAirportCode])
+
+  useEffect(() => {
+    if (selectedFlightId === null) {
+      closedPreviewFlightIdRef.current = null
+      if (previewFlightId !== null) {
+        setPreviewFlightId(null)
+      }
+      return
+    }
+
+    if (closedPreviewFlightIdRef.current !== selectedFlightId) {
+      closedPreviewFlightIdRef.current = null
+    }
+
+    if (
+      selectedFlightId !== previewFlightId &&
+      closedPreviewFlightIdRef.current !== selectedFlightId
+    ) {
+      setPreviewFlightId(selectedFlightId)
+    }
+  }, [previewFlightId, selectedFlightId])
 
   useEffect(() => {
     if (animationFrameRef.current !== null) {
@@ -349,16 +466,28 @@ export default function MapView({
       const tooltip = tooltipParts.join('<br/>')
       marker.bindTooltip(tooltip, {
         direction: 'top',
-        permanent: isSelected,
+        permanent: false,
         opacity: 0.95,
       })
       if (isSelected) {
         marker.setZIndexOffset(1000)
-        marker.openTooltip()
       }
+      marker.on('click', (event) => {
+        L.DomEvent.stopPropagation(event.originalEvent)
+        if (previewAirportCode === airport.codigoOaci) {
+          closedPreviewAirportCodeRef.current = null
+          setPreviewAirportCode(null)
+          onAirportPreview?.(null)
+          return
+        }
+
+        closedPreviewAirportCodeRef.current = null
+        setPreviewAirportCode(airport.codigoOaci)
+        onAirportPreview?.(airport.codigoOaci)
+      })
       marker.addTo(airportLayerRef.current as L.LayerGroup)
     })
-  }, [airports, warehouseSnapshot, ranges, selectedAirportCode])
+  }, [airports, warehouseSnapshot, ranges, selectedAirportCode, onAirportPreview, previewAirportCode])
 
   useEffect(() => {
     if (!planeLayerRef.current) {
@@ -393,7 +522,7 @@ export default function MapView({
       const anySelectionActive = selectedFlightId !== null || selectedShipmentRoute != null
       const isDimmed = anySelectionActive && !isSelected
 
-      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, isDimmed)
+      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, isDimmed, isSelectedFlight)
 
       const tooltipParts = [
         `Vuelo ${seg.flightId}`,
@@ -407,19 +536,35 @@ export default function MapView({
       const marker = L.marker([lat, lon], {
         icon,
         pane: MAP_PANES.plane,
+        bubblingMouseEvents: false,
       })
       marker.bindTooltip(tooltip, {
         direction: 'top',
-        permanent: isSelected,
+        permanent: isSelectedShipment,
         opacity: 0.95,
       })
       if (isSelected) {
         marker.setZIndexOffset(500)
+      }
+      if (isSelectedShipment) {
         marker.openTooltip()
       }
+      marker.on('click', (event) => {
+        L.DomEvent.stop(event.originalEvent)
+        if (previewFlightId === seg.flightId) {
+          closedPreviewFlightIdRef.current = null
+          setPreviewFlightId(null)
+          onFlightPreview?.(null)
+          return
+        }
+
+        closedPreviewFlightIdRef.current = null
+        setPreviewFlightId(seg.flightId)
+        onFlightPreview?.(seg.flightId)
+      })
       marker.addTo(planeLayerRef.current as L.LayerGroup)
     })
-  }, [segments, animatedMinute, currentMinute, selectedFlightId, selectedShipmentRoute, ranges])
+  }, [segments, animatedMinute, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId])
 
   useEffect(() => {
     if (!routeLayerRef.current) {
@@ -465,15 +610,113 @@ export default function MapView({
   }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute])
 
   return (
-    <div className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>
+    <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>
       <button
         className="map-fullscreen-btn"
         onClick={() => setIsFullscreen(!isFullscreen)}
         title={isFullscreen ? "Salir" : "Expandir"}
       >
-        {isFullscreen ? '✕' : '⛶'}
+        {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
       </button>
+      <button
+        className="map-reset-view-btn"
+        onClick={handleResetView}
+        title="Restablecer vista"
+        aria-label="Restablecer zoom y posición del mapa"
+      >
+        <RotateCcw size={17} />
+      </button>
+      {timeLabel ? <div className="map-time-tab">{timeLabel}</div> : null}
+      {previewFlight ? (
+        <MapFloatingCard
+          actionLabel="Ver detalle completo"
+          badge={`Vuelo ${previewFlight.flightId}`}
+          metrics={[
+            {
+              label: 'Uso',
+              value: formatPercent(getFlightLoadPercent(previewFlight), 1),
+            },
+            {
+              label: 'Maletas',
+              value: previewFlight.capacidad !== undefined
+                ? `${formatBags(previewFlight.carga)}/${formatBags(previewFlight.capacidad)}`
+                : `${formatBags(previewFlight.carga)}/--`,
+            },
+          ]}
+          onAction={() => onFlightDetailRequest?.(previewFlight.flightId)}
+          onClose={() => {
+            closedPreviewFlightIdRef.current = previewFlight.flightId
+            setPreviewFlightId(null)
+          }}
+          statusColor={resolveSemaphoreColor(
+            getFlightLoadPercent(previewFlight),
+            ranges
+          ).fill}
+          statusLabel={getSemaphoreLabel(
+            getFlightLoadPercent(previewFlight),
+            ranges
+          )}
+          subtitle={formatMinuteRange(previewFlight.salidaMin, previewFlight.llegadaMin)}
+          title={`${previewFlight.origen} → ${previewFlight.destino}`}
+        />
+      ) : previewAirport ? (
+        <MapFloatingCard
+          actionLabel="Ver detalle completo"
+          badge={previewAirport.codigoOaci}
+          metrics={[
+            {
+              label: 'Uso',
+              value: formatPercent(warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje, 1),
+            },
+            {
+              label: 'Ocupación',
+              value: warehouseSnapshot[previewAirport.codigoOaci]
+                ? `${formatInteger(warehouseSnapshot[previewAirport.codigoOaci].ocupacion)}/${formatInteger(warehouseSnapshot[previewAirport.codigoOaci].capacidad)}`
+                : `0/${formatInteger(previewAirport.capacidad)}`,
+            },
+          ]}
+          onAction={() => onAirportDetailRequest?.(previewAirport.codigoOaci)}
+          onClose={() => {
+            closedPreviewAirportCodeRef.current = previewAirport.codigoOaci
+            setPreviewAirportCode(null)
+          }}
+          statusColor={resolveSemaphoreColor(
+            warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
+            ranges
+          ).fill}
+          statusLabel={getSemaphoreLabel(
+            warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
+            ranges
+          )}
+          subtitle={previewAirport.pais}
+          title={previewAirport.nombre}
+        />
+      ) : null}
       <div ref={containerRef} className="map"></div>
     </div>
   )
+}
+
+function getFlightLoadPercent(segment: FlightSegmentDto) {
+  if (segment.capacidad === undefined || segment.capacidad <= 0) {
+    return undefined
+  }
+  return (segment.carga / segment.capacidad) * 100
+}
+
+function getSemaphoreLabel(
+  percent: number | null | undefined,
+  ranges: { greenMax: number; amberMax: number }
+) {
+  const level = resolveSemaphoreLevel(percent, ranges)
+  if (level === 'green') {
+    return `Semáforo: verde (0% - ${ranges.greenMax}%)`
+  }
+  if (level === 'amber') {
+    return `Semáforo: ámbar (${ranges.greenMax + 1}% - ${ranges.amberMax}%)`
+  }
+  if (level === 'red') {
+    return `Semáforo: rojo (${ranges.amberMax + 1}% - 100%)`
+  }
+  return 'Semáforo: sin datos'
 }

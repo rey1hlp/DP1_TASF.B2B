@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react' // ✅ useState importado
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react' // ✅ useState importado
+import { useOutletContext } from 'react-router'
 import type { AirportDto } from '../types/sim'
 import { fetchAirports, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
-import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
+import type { AppLayoutContext } from '../layouts/AppLayout'
 import { useSimulationContext } from '../contexts/SimulationContext'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
@@ -15,7 +17,9 @@ import { resolveSemaphoreColor } from '../utils/semaphore'
 
 import {
   formatDurationHours,
+  formatClockFromMinute,
   formatCompactDate,
+  formatDateFromDayIndex,
   formatInteger,
   formatBags,
   formatPercent,
@@ -73,12 +77,14 @@ export default function SimulationPage() {
   const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>('period')
   const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
 
-  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
+  const { setTopbarMain } = useOutletContext<AppLayoutContext>()
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
+  const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
+  const entityFocusRequestIdRef = useRef(0)
 
   const {
     enviosKey,
@@ -103,6 +109,29 @@ export default function SimulationPage() {
     localCompleted,
     ranges,
   } = simulation
+
+  useEffect(() => {
+    setTopbarMain(
+      <div className="topbar-simulation-mode" role="group" aria-label="Modo de simulación">
+        <button
+          type="button"
+          className={`topbar-simulation-option ${simulationMode === 'period' ? 'active' : ''}`}
+          onClick={() => setSimulationMode('period')}
+        >
+          Simulación del periodo
+        </button>
+        <button
+          type="button"
+          className={`topbar-simulation-option ${simulationMode === 'collapse' ? 'active' : ''}`}
+          onClick={() => setSimulationMode('collapse')}
+        >
+          Hasta colapso
+        </button>
+      </div>
+    )
+
+    return () => setTopbarMain(null)
+  }, [setTopbarMain, simulationMode])
 
   // Cargar aeropuertos una sola vez
   useEffect(() => {
@@ -287,6 +316,26 @@ export default function SimulationPage() {
 
   const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
 
+  const mapTimeLabel = (() => {
+    if (!meta) {
+      return 'Esperando simulación...'
+    }
+    if (preparingMessage) {
+      return preparingMessage
+    }
+    if (status === 'PAUSED') {
+      return 'Simulación pausada'
+    }
+    if (status === 'READY' && displayMinute === null) {
+      return `Preparando simulación hasta ${formatCompactDate(meta.inicio)}...`
+    }
+
+    const minute = displayMinute ?? meta.diaMin * 1440
+    const date = formatDateFromDayIndex(Math.floor(minute / 1440))
+    const time = formatClockFromMinute(minute)
+    return `${date} - ${time}`
+  })()
+
   const bannerMessage = (() => {
     if (status === 'COMPLETED' && statusMessage) return statusMessage
     if (status === 'COMPLETED') return 'Simulacion finalizada con exito.'
@@ -395,6 +444,27 @@ export default function SimulationPage() {
     }
   }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute])
 
+  const flightItems = useMemo(() => {
+    return activeSegments.map((segment) => {
+      const percent =
+        segment.capacidad !== undefined && segment.capacidad > 0
+          ? (segment.carga * 100) / segment.capacidad
+          : undefined
+
+      return {
+        flightId: segment.flightId,
+        origen: segment.origen,
+        destino: segment.destino,
+        salidaMin: segment.salidaMin,
+        llegadaMin: segment.llegadaMin,
+        carga: segment.carga,
+        capacidad: segment.capacidad,
+        porcentaje: percent,
+        color: percent !== undefined ? resolveSemaphoreColor(percent, ranges).fill : undefined,
+      }
+    })
+  }, [activeSegments, ranges])
+
   const airportItems = useMemo(() => {
     return airports.map((airport) => {
       const snapshot = warehouseSnapshot[airport.codigoOaci]
@@ -431,6 +501,52 @@ export default function SimulationPage() {
     }
   }
 
+  const handleMapAirportPreview = useCallback((codigoOaci: string | null) => {
+    if (codigoOaci === null) {
+      setSelectedAirportCode(null)
+      return
+    }
+
+    setSelectedAirportCode(codigoOaci)
+    setSelectedFlightId(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapAirportPreview(codigoOaci)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'airport',
+      id: codigoOaci,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapAirportPreview])
+
+  const handleMapFlightPreview = useCallback((flightId: number | null) => {
+    if (flightId === null) {
+      setSelectedFlightId(null)
+      return
+    }
+
+    setSelectedFlightId(flightId)
+    setSelectedAirportCode(null)
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
+
+  const handleMapFlightDetailRequest = useCallback((flightId: number) => {
+    entityFocusRequestIdRef.current += 1
+    handleMapFlightPreview(flightId)
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'flight',
+      id: flightId,
+      requestId: entityFocusRequestIdRef.current,
+    })
+  }, [handleMapFlightPreview])
+
   const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
     setSimulation((prev) => ({ ...prev, ranges: newRanges }))
   }
@@ -440,71 +556,40 @@ export default function SimulationPage() {
       {!enviosKey ? (
         <UploadEnvios onUploaded={handleEnviosUploaded} />
       ) : (
-        <>
-            <section className={`toolbar ${isToolbarCollapsed ? 'collapsed' : ''}`}>
-              <button 
-                className="toggle-toolbar-btn" 
-                onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
-                title={isToolbarCollapsed ? "Expandir resumen" : "Colapsar resumen"}
-              >
-                {isToolbarCollapsed ? '▼' : '▲'}
-              </button>
-              
-              {isToolbarCollapsed ? (
-                <div style={{ fontWeight: '600', fontSize: '14px', color: '#1b3d6b' }}>
-                  Resumen de la Simulación
+    <div className="simulation-page">
+            <section className="toolbar simulation-summary-toolbar">
+              <div className="status">
+                <div className="status-item">
+                  Fecha: <strong>{displayStartDate}</strong>
                 </div>
-              ) : (
-                <>
-                  <div className="tabs">
-                    <button
-                      className={`tab ${simulationMode === 'period' ? 'active' : ''}`}
-                      onClick={() => setSimulationMode('period')}
-                    >
-                      Simulacion del periodo
-                    </button>
-                    <button
-                      className={`tab ${simulationMode === 'collapse' ? 'active' : ''}`}
-                      onClick={() => setSimulationMode('collapse')}
-                    >
-                      Simulacion hasta el colapso
-                    </button>
-                  </div>
-                  <div className="status">
-                    <div className="status-item">
-                      Fecha: <strong>{displayStartDate}</strong>
-                    </div>
-                    <div className="status-item">
-                      Duracion: <strong>{typeof duration === 'number' ? `${duration} dias` : duration}</strong>
-                    </div>
-                    <div className="status-item">
-                      Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
-                    </div>
-                    <div className="status-item">
-                      Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
-                    </div>
-                  </div>
-                </>
-              )}
+                <div className="status-item">
+                  Duración: <strong>{typeof duration === 'number' ? `${duration} días` : duration}</strong>
+                </div>
+                <div className="status-item">
+                  Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
+                </div>
+                <div className="status-item">
+                  Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
+                </div>
+              </div>
             </section>
 
             <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
             <div className="map-placeholder">
-              <SimulationStatus
-                meta={meta}
-                currentMinute={displayMinute}
-                status={status}
-                preparingMessage={preparingMessage}
-              />
               <MapView
                 airports={mapAirports}
                 segments={mapSegments}
                 currentMinute={displayMinute}
+                timeLabel={mapTimeLabel}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
                 selectedShipmentRoute={selectedShipmentRoute}
+                onAirportPreview={handleMapAirportPreview}
+                onAirportDetailRequest={handleMapAirportDetailRequest}
+                onFlightPreview={handleMapFlightPreview}
+                onFlightDetailRequest={handleMapFlightDetailRequest}
               />
               {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
@@ -524,7 +609,7 @@ export default function SimulationPage() {
               onMapFiltersChange={setMapFilters}
               mapFilterCounts={mapFilterCounts}
               stats={stats}
-              flightItems={activeSegments}
+              flightItems={flightItems}
               selectedFlightId={selectedFlightId}
               onSelectFlight={handleSelectFlight}
               airportItems={airportItems}
@@ -537,9 +622,10 @@ export default function SimulationPage() {
                 shipmentSearchError={shipmentSearchError}
                 sampleShipments={sampleShipments}
                 currentMinute={displayMinute}
+                entityFocusRequest={entityFocusRequest}
             />
           </section>
-        </>
+        </div>
       )}
     </>
   )

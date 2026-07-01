@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import EntityExplorer, { type EntityAirportItem } from './EntityExplorer'
+import { useEffect, useState } from 'react'
+import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { MapSemaphoreFilters } from '../types/mapFilters'
+import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -35,13 +36,7 @@ export type SimulationControlsProps = {
     cards: Array<{ label: string; value: string }>
     bars: Array<{ label: string; value: number }>
   }
-  flightItems: Array<{
-    flightId: number
-    origen: string
-    destino: string
-    salidaMin: number
-    llegadaMin: number
-  }>
+  flightItems: EntityFlightItem[]
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void
   airportItems: EntityAirportItem[]
@@ -54,6 +49,7 @@ export type SimulationControlsProps = {
   shipmentSearchError: string | null
   sampleShipments: string[]
   currentMinute: number | null
+  entityFocusRequest?: EntityFocusRequest | null
 }
 
 export default function SimulationControls({
@@ -82,10 +78,17 @@ export default function SimulationControls({
   shipmentSearchError,
   sampleShipments,
   currentMinute,
+  entityFocusRequest,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15T00:00')
   const [dias, setDias] = useState(3)
+
+  useEffect(() => {
+    if (entityFocusRequest) {
+      setActiveTab('entities')
+    }
+  }, [entityFocusRequest])
 
   return (
     <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
@@ -104,13 +107,13 @@ export default function SimulationControls({
               className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
               onClick={() => setActiveTab('config')}
             >
-              Configuracion
+              Configuración
             </button>
             <button
               className={`panel-tab ${activeTab === 'stats' ? 'active' : ''}`}
               onClick={() => setActiveTab('stats')}
             >
-              Estadisticas
+              Estadísticas
             </button>
             <button
               className={`panel-tab ${activeTab === 'entities' ? 'active' : ''}`}
@@ -122,7 +125,7 @@ export default function SimulationControls({
 
           {activeTab === 'config' ? (
             <>
-              <h3>Configuracion de simulacion</h3>
+              <h3>Configuración de simulación</h3>
               {mode === 'period' ? (
                 <div className="chip-row">
                   <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
@@ -137,7 +140,7 @@ export default function SimulationControls({
                 </div>
               ) : (
                 <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
-                  La simulacion hasta el colapso se ejecuta desde la fecha seleccionada y sigue
+                  La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
                   hasta que no haya mas capacidad o datos disponibles.
                 </div>
               )}
@@ -174,7 +177,7 @@ export default function SimulationControls({
 
           {activeTab === 'stats' ? (
             <>
-              <h3>Estadisticas de la simulacion</h3>
+              <h3>Estadísticas de la simulación</h3>
               <div className="metric-grid">
                 {stats.cards.map((card) => (
                   <div className="metric" key={card.label}>
@@ -185,7 +188,7 @@ export default function SimulationControls({
               </div>
 
               <div className="progress-block">
-                <div className="progress-title">Progreso de simulacion</div>
+                <div className="progress-title">Progreso de simulación</div>
                 {stats.bars.map((bar) => (
                   <div className="progress-item" key={bar.label}>
                     <span>{bar.label}</span>
@@ -211,6 +214,7 @@ export default function SimulationControls({
               onSearchShipment={onSearchShipment}
               shipmentSearchError={shipmentSearchError}
               currentMinute={currentMinute}
+              focusRequest={entityFocusRequest}
               labels={{
                 flightHintNoun: 'vuelos activos',
                 shipmentEmpty: 'No hay muestras (inicia simulación)',
