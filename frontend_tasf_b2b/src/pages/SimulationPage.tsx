@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react' // ✅ useState importado
 import type { AirportDto } from '../types/sim'
-import { fetchAirports, startSimulation } from '../services/api'
+import { API_BASE, authFetch, fetchAirports, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
 import SimulationStatus from '../components/SimulationStatus'
 import SimulationControls from '../components/SimulationControls'
@@ -38,14 +38,12 @@ export type RespuestaRutaEnvioDto = {
   ruta: PasoRutaDto[]
 }
 
-const SIMULATION_API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
-
 async function fetchShipmentRoute(
   simId: string,
   codigo: string
 ): Promise<RespuestaRutaEnvioDto> {
-  const res = await fetch(
-    `${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/${encodeURIComponent(codigo)}/route`
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/${encodeURIComponent(codigo)}/route`
   )
   if (!res.ok) {
     throw new Error('No se pudo obtener la ruta del envío')
@@ -54,11 +52,11 @@ async function fetchShipmentRoute(
 }
 
 async function fetchSimulationShipments(simId: string, minute: number | null): Promise<string[]> {
-  let url = `${SIMULATION_API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments`
+  let url = `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments`
   if (minute !== null) {
     url += `?minute=${minute}`
   }
-  const res = await fetch(url)
+  const res = await authFetch(url)
   if (!res.ok) {
     return []
   }

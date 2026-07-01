@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Menu, UserCircle } from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 type AppTopbarProps = {
     topbarMain: ReactNode
@@ -10,6 +11,8 @@ export default function AppTopbar({
     topbarMain,
     onToggleSidebar,
 }: AppTopbarProps) {
+  const { logout, user } = useAuth()
+
   return (
     <header className="app-topbar">
       <div className="topbar-left">
@@ -37,12 +40,18 @@ export default function AppTopbar({
       </div>
 
       <div className="topbar-actions">
+        <div className="topbar-user-meta">
+          <span>{user?.fullName ?? 'Usuario'}</span>
+          <small>{user?.role === 'ADMIN' ? 'ADMIN' : user?.airportCode}</small>
+        </div>
         <button
           type="button"
           className="topbar-user-button"
-          aria-label="Perfil"
+          onClick={logout}
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
         >
-          <UserCircle size={24} />
+          <LogOut size={20} />
         </button>
       </div>
     </header>

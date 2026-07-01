@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { ComponentProps } from 'react'
 import type { AirportDto } from '../types/sim'
-import { fetchAirports } from '../services/api'
+import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls from '../components/DailyOperationControls'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
@@ -79,12 +79,6 @@ type DailyOperationEvent =
       payload: OperationAlert
     }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
-
-function toWsUrl(httpUrl: string) {
-  return httpUrl.replace(/^http/, 'ws')
-}
-
 function getCurrentMinuteOfDay(date: Date) {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
 }
@@ -138,7 +132,7 @@ export default function DailyOperationPage() {
     setShipmentSearchError(null)
     try {
       // Intentar primero obtener la ruta real del endpoint de operación diaria
-      const routeRes = await fetch(`${API_BASE_URL}/api/operation/daily/shipments/${encodeURIComponent(codigo)}/route`)
+      const routeRes = await authFetch(`${API_BASE}/api/operation/daily/shipments/${encodeURIComponent(codigo)}/route`)
       if (routeRes.ok) {
         const routeData = await routeRes.json()
         // Asegurar que no se dibuje la línea si ya se entregó o canceló
@@ -152,7 +146,7 @@ export default function DailyOperationPage() {
       }
 
       // Fallback si la maleta aún no tiene ruta planificada o el endpoint falla
-      const fallbackRes = await fetch(`${API_BASE_URL}/api/db/shipments?query=${encodeURIComponent(codigo)}`)
+      const fallbackRes = await authFetch(`${API_BASE}/api/db/shipments?query=${encodeURIComponent(codigo)}`)
       const fallbackData = await fallbackRes.json()
       if (fallbackData.content && fallbackData.content.length > 0) {
         const shipment = fallbackData.content.find((s: any) => s.codigoPedido === codigo)
@@ -214,7 +208,7 @@ export default function DailyOperationPage() {
     console.debug('[DailyOperationPage] fetch snapshot')
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/operation/daily`)
+      const response = await authFetch(`${API_BASE}/api/operation/daily`)
 
       if (!response.ok) {
         throw new Error('No se pudo obtener la operación diaria.')
@@ -259,7 +253,7 @@ export default function DailyOperationPage() {
         return
       }
 
-      const socketUrl = `${toWsUrl(API_BASE_URL)}/api/operation/daily/stream`
+      const socketUrl = buildDailyOperationWsUrl()
       console.log('[WS] Connecting to:', socketUrl)
       const socket = new WebSocket(socketUrl)
       socketRef.current = socket

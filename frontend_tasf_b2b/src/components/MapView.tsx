@@ -136,16 +136,6 @@ function addSelectedRouteToLayer(latlngs: L.LatLngExpression[], layer: L.LayerGr
   L.polyline(latlngs, SELECTED_ROUTE_STYLE).addTo(layer)
 }
 
-function addFlightRouteToLayer(segment: FlightSegmentDto, layer: L.LayerGroup) {
-  addSelectedRouteToLayer(
-    [
-      [segment.origenLat, segment.origenLon],
-      [segment.destinoLat, segment.destinoLon],
-    ],
-    layer
-  )
-}
-
 export default function MapView({
   airports,
   segments,

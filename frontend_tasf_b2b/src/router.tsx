@@ -1,10 +1,12 @@
-import { createBrowserRouter, Navigate, useNavigate, useParams } from 'react-router'
+import type { ReactNode } from 'react'
+import { createBrowserRouter, Navigate, useLocation, useNavigate, useParams } from 'react-router'
 
 import AppLayout from './layouts/AppLayout'
 import SimulationPage from './pages/SimulationPage'
 import DailyOperationPage from './pages/DailyOperationPage'
 import FlightDetailPage from './pages/FlightDetailPage'
 import WarehouseDetailPage from './pages/WarehouseDetailPage'
+import LoginPage from './pages/LoginPage'
 
 import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
@@ -12,6 +14,37 @@ import ShipmentsCrud from './components/ShipmentsCrud'
 import OccupancyReport from './components/OccupancyReport'
 
 import { PlaneIconDebug } from './debug/PlaneIconDebug'
+import { useAuth } from './contexts/AuthContext'
+
+function RequireAuth() {
+  const location = useLocation()
+  const { isAuthenticated, status } = useAuth()
+
+  if (status === 'loading') {
+    return <div className="route-loading">Cargando sesión...</div>
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />
+  }
+
+  return <AppLayout />
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth()
+
+  if (!isAdmin) {
+    return <Navigate to="/operacion-diaria" replace />
+  }
+
+  return children
+}
+
+function HomeRedirect() {
+  const { isAdmin } = useAuth()
+  return <Navigate to={isAdmin ? '/simulacion' : '/operacion-diaria'} replace />
+}
 
 function FlightsRoute() {
   const navigate = useNavigate()
@@ -77,12 +110,16 @@ function SimulationRoute() {
 
 export const router = createBrowserRouter([
   {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
     path: '/',
-    element: <AppLayout />,
+    element: <RequireAuth />,
     children: [
       {
         index: true,
-        element: <Navigate to="/simulacion" replace />,
+        element: <HomeRedirect />,
       },
       {
         path: 'operacion-diaria',
@@ -94,35 +131,35 @@ export const router = createBrowserRouter([
       },
       {
         path: 'vuelos',
-        element: <FlightsRoute />,
+        element: <RequireAdmin><FlightsRoute /></RequireAdmin>,
       },
       {
         path: 'vuelos/:flightId',
-        element: <FlightDetailRoute />,
+        element: <RequireAdmin><FlightDetailRoute /></RequireAdmin>,
       },
       {
         path: 'aeropuertos',
-        element: <AirportsRoute />,
+        element: <RequireAdmin><AirportsRoute /></RequireAdmin>,
       },
       {
         path: 'aeropuertos/:airportCode/almacen',
-        element: <AirportWarehouseRoute />,
+        element: <RequireAdmin><AirportWarehouseRoute /></RequireAdmin>,
       },
       {
         path: 'simulacion',
-        element: <SimulationRoute />,
+        element: <RequireAdmin><SimulationRoute /></RequireAdmin>,
       },
       {
         path: 'debug',
-        element: <PlaneIconDebug />,
+        element: <RequireAdmin><PlaneIconDebug /></RequireAdmin>,
       },
       {
         path: 'reportes',
-        element: <OccupancyReport />,
+        element: <RequireAdmin><OccupancyReport /></RequireAdmin>,
       },
       {
         path: 'configuracion',
-        element: <div>Configuración</div>,
+        element: <RequireAdmin><div>Configuración</div></RequireAdmin>,
       },
     ],
   },
