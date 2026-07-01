@@ -17,9 +17,45 @@ CREATE TABLE airport (
   latitud DOUBLE NOT NULL,
   longitud DOUBLE NOT NULL,
   audit_date_ins DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  audit_date_upd DATETIME NULL,
+  created_by_user_id BIGINT NULL,
+  updated_by_user_id BIGINT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_airport_oaci (codigo_oaci)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE app_user (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  email VARCHAR(160) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  full_name VARCHAR(120) NOT NULL,
+  role VARCHAR(20) NOT NULL,
+  airport_id BIGINT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_app_user_email (email),
+  INDEX idx_app_user_role (role),
+  INDEX idx_app_user_airport (airport_id),
+  CONSTRAINT fk_app_user_airport FOREIGN KEY (airport_id)
+    REFERENCES airport(id) ON DELETE RESTRICT,
+  CONSTRAINT chk_app_user_role CHECK (role IN ('ADMIN', 'LOGISTICS')),
+  CONSTRAINT chk_app_user_airport_scope CHECK (
+    (role = 'ADMIN' AND airport_id IS NULL)
+    OR
+    (role = 'LOGISTICS' AND airport_id IS NOT NULL)
+  )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE airport
+  ADD INDEX idx_airport_created_by (created_by_user_id),
+  ADD INDEX idx_airport_updated_by (updated_by_user_id),
+  ADD CONSTRAINT fk_airport_created_by FOREIGN KEY (created_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_airport_updated_by FOREIGN KEY (updated_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL;
 
 CREATE TABLE flight (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -31,12 +67,21 @@ CREATE TABLE flight (
   capacidad INT NOT NULL,
   cancelado TINYINT(1) NOT NULL DEFAULT 0,
   audit_date_ins DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  audit_date_upd DATETIME NULL,
+  created_by_user_id BIGINT NULL,
+  updated_by_user_id BIGINT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_flight_codigo (codigo),
+  INDEX idx_flight_created_by (created_by_user_id),
+  INDEX idx_flight_updated_by (updated_by_user_id),
   CONSTRAINT fk_flight_origen FOREIGN KEY (origen_id)
     REFERENCES airport(id) ON DELETE RESTRICT,
   CONSTRAINT fk_flight_destino FOREIGN KEY (destino_id)
-    REFERENCES airport(id) ON DELETE RESTRICT
+    REFERENCES airport(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_flight_created_by FOREIGN KEY (created_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL,
+  CONSTRAINT fk_flight_updated_by FOREIGN KEY (updated_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE shipment (
@@ -58,16 +103,25 @@ CREATE TABLE shipment (
   -- Estado del envío: PENDING, IN_TRANSIT, DELIVERED, CANCELLED
   status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   audit_date_ins  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  audit_date_upd  DATETIME NULL,
+  created_by_user_id BIGINT NULL,
+  updated_by_user_id BIGINT NULL,
 
   PRIMARY KEY (id),
   UNIQUE KEY uk_shipment_codigo_pedido (codigo_pedido),
   INDEX idx_shipment_ingreso_utc (hora_ingreso_utc),
   INDEX idx_shipment_origen_fecha (origen_id, hora_ingreso_utc),
   INDEX idx_shipment_status (status),
+  INDEX idx_shipment_created_by (created_by_user_id),
+  INDEX idx_shipment_updated_by (updated_by_user_id),
   CONSTRAINT fk_shipment_origen FOREIGN KEY (origen_id)
     REFERENCES airport(id) ON DELETE RESTRICT,
   CONSTRAINT fk_shipment_destino FOREIGN KEY (destino_id)
-    REFERENCES airport(id) ON DELETE RESTRICT
+    REFERENCES airport(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_shipment_created_by FOREIGN KEY (created_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL,
+  CONSTRAINT fk_shipment_updated_by FOREIGN KEY (updated_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE simulation_run (
@@ -83,8 +137,12 @@ CREATE TABLE simulation_run (
   speed_min_per_sec DOUBLE NULL,
   creado_en DATETIME NOT NULL,
   finalizado_en DATETIME NULL,
+  created_by_user_id BIGINT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_simulation_run (simulation_id)
+  UNIQUE KEY uk_simulation_run (simulation_id),
+  INDEX idx_simulation_run_created_by (created_by_user_id),
+  CONSTRAINT fk_simulation_run_created_by FOREIGN KEY (created_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE flight_day_cancellation (
@@ -92,8 +150,14 @@ CREATE TABLE flight_day_cancellation (
   flight_id BIGINT NOT NULL,
   fecha_cancelacion DATE NOT NULL,
   audit_date_ins DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by_user_id BIGINT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_flight_day_cancellation (flight_id, fecha_cancelacion)
+  UNIQUE KEY uk_flight_day_cancellation (flight_id, fecha_cancelacion),
+  INDEX idx_flight_day_cancellation_created_by (created_by_user_id),
+  CONSTRAINT fk_flight_day_cancellation_flight FOREIGN KEY (flight_id)
+    REFERENCES flight(id) ON DELETE CASCADE,
+  CONSTRAINT fk_flight_day_cancellation_created_by FOREIGN KEY (created_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE daily_plan_run (
@@ -106,9 +170,13 @@ CREATE TABLE daily_plan_run (
   total_envios INT NOT NULL,
   total_maletas BIGINT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by_user_id BIGINT NULL,
   PRIMARY KEY (id),
   INDEX idx_daily_plan_run_date_window (plan_date, window_start_min, created_at),
-  INDEX idx_daily_plan_run_date_created (plan_date, created_at)
+  INDEX idx_daily_plan_run_date_created (plan_date, created_at),
+  INDEX idx_daily_plan_run_created_by (created_by_user_id),
+  CONSTRAINT fk_daily_plan_run_created_by FOREIGN KEY (created_by_user_id)
+    REFERENCES app_user(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE daily_plan_segment (
