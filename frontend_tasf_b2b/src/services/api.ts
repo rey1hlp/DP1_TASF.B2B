@@ -12,7 +12,7 @@ import type {
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
 const AUTH_TOKEN_KEY = 'tasf.auth.token'
 
-export type AuthRole = 'ADMIN' | 'LOGISTICS'
+export type AuthRole = 'ADMIN' | 'LOGISTICS' | 'REGISTER'
 
 export type AuthUser = {
   id: number
@@ -21,6 +21,21 @@ export type AuthUser = {
   role: AuthRole
   airportId?: number | null
   airportCode?: string | null
+}
+
+export type AppUserCrudDto = {
+  id?: number
+  email: string
+  password?: string
+  fullName: string
+  role: AuthRole
+  airportId?: number | null
+  airportCode?: string | null
+  airportName?: string | null
+  enabled: boolean
+  lastLoginAt?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
 }
 
 export type LoginResponse = {
@@ -132,6 +147,50 @@ export async function fetchAirports(): Promise<AirportDto[]> {
     throw new Error('No se pudo cargar aeropuertos')
   }
   return res.json()
+}
+
+export async function listUsers(): Promise<AppUserCrudDto[]> {
+  const res = await authFetch(`${API_BASE}/api/admin/users`)
+  if (!res.ok) {
+    throw new Error('No se pudo cargar empleados')
+  }
+  return res.json()
+}
+
+export async function createUser(payload: AppUserCrudDto): Promise<AppUserCrudDto> {
+  const res = await authFetch(`${API_BASE}/api/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const message = await res.text().catch(() => '')
+    throw new Error(message || 'No se pudo crear empleado')
+  }
+  return res.json()
+}
+
+export async function updateUser(id: number, payload: AppUserCrudDto): Promise<AppUserCrudDto> {
+  const res = await authFetch(`${API_BASE}/api/admin/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const message = await res.text().catch(() => '')
+    throw new Error(message || 'No se pudo actualizar empleado')
+  }
+  return res.json()
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/admin/users/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const message = await res.text().catch(() => '')
+    throw new Error(message || 'No se pudo eliminar empleado')
+  }
 }
 
 export async function startSimulation(

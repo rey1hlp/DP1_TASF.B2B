@@ -41,11 +41,11 @@ CREATE TABLE app_user (
   INDEX idx_app_user_airport (airport_id),
   CONSTRAINT fk_app_user_airport FOREIGN KEY (airport_id)
     REFERENCES airport(id) ON DELETE RESTRICT,
-  CONSTRAINT chk_app_user_role CHECK (role IN ('ADMIN', 'LOGISTICS')),
+  CONSTRAINT chk_app_user_role CHECK (role IN ('ADMIN', 'LOGISTICS', 'REGISTER')),
   CONSTRAINT chk_app_user_airport_scope CHECK (
     (role = 'ADMIN' AND airport_id IS NULL)
     OR
-    (role = 'LOGISTICS' AND airport_id IS NOT NULL)
+    (role IN ('LOGISTICS', 'REGISTER') AND airport_id IS NOT NULL)
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

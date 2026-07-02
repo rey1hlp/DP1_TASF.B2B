@@ -7,6 +7,7 @@ import DailyOperationPage from './pages/DailyOperationPage'
 import FlightDetailPage from './pages/FlightDetailPage'
 import WarehouseDetailPage from './pages/WarehouseDetailPage'
 import LoginPage from './pages/LoginPage'
+import EmployeesCrud from './components/EmployeesCrud'
 
 import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
@@ -16,12 +17,14 @@ import OccupancyReport from './components/OccupancyReport'
 import { PlaneIconDebug } from './debug/PlaneIconDebug'
 import { useAuth } from './contexts/AuthContext'
 
+type AllowedRole = 'ADMIN' | 'LOGISTICS' | 'REGISTER'
+
 function RequireAuth() {
   const location = useLocation()
   const { isAuthenticated, status } = useAuth()
 
   if (status === 'loading') {
-    return <div className="route-loading">Cargando sesión...</div>
+    return <div className="route-loading">Cargando sesiÃ³n...</div>
   }
 
   if (!isAuthenticated) {
@@ -31,19 +34,32 @@ function RequireAuth() {
   return <AppLayout />
 }
 
-function RequireAdmin({ children }: { children: ReactNode }) {
-  const { isAdmin } = useAuth()
+function getDefaultRoute(role?: AllowedRole | null) {
+  if (role === 'LOGISTICS') return '/operacion-diaria'
+  if (role === 'REGISTER') return '/envios'
+  if (role === 'ADMIN') return '/simulacion'
+  return '/operacion-diaria'
+}
 
-  if (!isAdmin) {
-    return <Navigate to="/operacion-diaria" replace />
+function RequireRoles({
+  allow,
+  children,
+}: {
+  allow: AllowedRole[]
+  children: ReactNode
+}) {
+  const { user } = useAuth()
+
+  if (!user || !allow.includes(user.role as AllowedRole)) {
+    return <Navigate to={getDefaultRoute(user?.role as AllowedRole | undefined)} replace />
   }
 
   return children
 }
 
 function HomeRedirect() {
-  const { isAdmin } = useAuth()
-  return <Navigate to={isAdmin ? '/simulacion' : '/operacion-diaria'} replace />
+  const { user } = useAuth()
+  return <Navigate to={getDefaultRoute(user?.role as AllowedRole | undefined)} replace />
 }
 
 function FlightsRoute() {
@@ -123,43 +139,91 @@ export const router = createBrowserRouter([
       },
       {
         path: 'operacion-diaria',
-        element: <DailyOperationPage />,
+        element: (
+          <RequireRoles allow={['ADMIN', 'LOGISTICS']}>
+            <DailyOperationPage />
+          </RequireRoles>
+        ),
       },
       {
         path: 'envios',
-        element: <ShipmentsCrud />,
+        element: (
+          <RequireRoles allow={['ADMIN', 'REGISTER']}>
+            <ShipmentsCrud />
+          </RequireRoles>
+        ),
       },
       {
         path: 'vuelos',
-        element: <RequireAdmin><FlightsRoute /></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <FlightsRoute />
+          </RequireRoles>
+        ),
       },
       {
         path: 'vuelos/:flightId',
-        element: <RequireAdmin><FlightDetailRoute /></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <FlightDetailRoute />
+          </RequireRoles>
+        ),
       },
       {
         path: 'aeropuertos',
-        element: <RequireAdmin><AirportsRoute /></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <AirportsRoute />
+          </RequireRoles>
+        ),
       },
       {
         path: 'aeropuertos/:airportCode/almacen',
-        element: <RequireAdmin><AirportWarehouseRoute /></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <AirportWarehouseRoute />
+          </RequireRoles>
+        ),
       },
       {
         path: 'simulacion',
-        element: <RequireAdmin><SimulationRoute /></RequireAdmin>,
-      },
-      {
-        path: 'debug',
-        element: <RequireAdmin><PlaneIconDebug /></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <SimulationRoute />
+          </RequireRoles>
+        ),
       },
       {
         path: 'reportes',
-        element: <RequireAdmin><OccupancyReport /></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <OccupancyReport />
+          </RequireRoles>
+        ),
       },
       {
         path: 'configuracion',
-        element: <RequireAdmin><div>Configuración</div></RequireAdmin>,
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <div>ConfiguraciÃ³n</div>
+          </RequireRoles>
+        ),
+      },
+      {
+        path: 'debug',
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <PlaneIconDebug />
+          </RequireRoles>
+        ),
+      },
+      {
+        path: 'usuarios',
+        element: (
+          <RequireRoles allow={['ADMIN']}>
+            <EmployeesCrud />
+          </RequireRoles>
+        ),
       },
     ],
   },

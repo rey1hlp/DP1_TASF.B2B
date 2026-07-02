@@ -8,4 +8,6 @@ public interface AppUserRepository extends JpaRepository<AppUserEntity, Long> {
     Optional<AppUserEntity> findByEmailIgnoreCase(String email);
 
     Optional<AppUserEntity> findByEmailIgnoreCaseAndEnabledTrue(String email);
+
+    java.util.List<AppUserEntity> findAllByOrderByCreatedAtDesc();
 }
