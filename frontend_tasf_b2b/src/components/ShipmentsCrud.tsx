@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AirportCrudDto, ShipmentCrudDto } from '../types/sim'
-import { createShipment, deleteShipment, listAirports, listShipments, updateShipment, uploadShipmentsTxt } from '../services/api'
+import { createShipment, deleteShipment, getAirportByCode, listAirports, listShipments, updateShipment, uploadShipmentsTxt } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
@@ -38,6 +39,7 @@ function getShipmentStatusClass(status?: ShipmentCrudDto['status']) {
 }
 
 export default function ShipmentsCrud() {
+  const { user } = useAuth()
   const [items, setItems] = useState<ShipmentCrudDto[]>([])
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
@@ -62,6 +64,19 @@ export default function ShipmentsCrud() {
     invalidAirportLines: string[]
   } | null>(null)
 
+  const logisticsAirportCode = user?.role === 'LOGISTICS'
+    ? user.airportCode?.trim().toUpperCase() ?? null
+    : null
+
+  const logisticsAirport = useMemo(() => {
+    if (!logisticsAirportCode) {
+      return null
+    }
+    return airports.find((airport) => airport.codigoOaci.toUpperCase() === logisticsAirportCode) ?? null
+  }, [airports, logisticsAirportCode])
+
+  const isOriginLocked = Boolean(logisticsAirportCode)
+
   const load = async () => {
     setLoading(true)
     setError(null)
@@ -84,22 +99,80 @@ export default function ShipmentsCrud() {
     void load()
   }, [page, query])
 
+  const buildEmptyForm = (airport: AirportCrudDto | null = logisticsAirport): ShipmentCrudDto => ({
+    ...EMPTY_FORM,
+    origen: logisticsAirportCode ?? '',
+    gmtOffset: airport?.gmt ?? EMPTY_FORM.gmtOffset,
+  })
+
   const resetForm = () => {
-    setForm({ ...EMPTY_FORM })
+    setForm(buildEmptyForm())
   }
 
-  const ensureAirports = async () => {
+  const ensureAirports = async (): Promise<AirportCrudDto[]> => {
     if (airportsLoaded) {
-      return
+      return airports
     }
     try {
       const result = await listAirports(0, 1000, '')
       setAirports(result.content)
       setAirportsLoaded(true)
+      return result.content
     } catch {
       setAirports([])
+      return []
     }
   }
+
+  const loadLogisticsAirport = async (knownAirports: AirportCrudDto[] = airports): Promise<AirportCrudDto | null> => {
+    if (!logisticsAirportCode) {
+      return null
+    }
+
+    const knownAirport = knownAirports.find((airport) => airport.codigoOaci.toUpperCase() === logisticsAirportCode)
+    if (knownAirport) {
+      return knownAirport
+    }
+
+    try {
+      const airport = await getAirportByCode(logisticsAirportCode)
+      setAirports((current) => {
+        const exists = current.some((item) => item.codigoOaci.toUpperCase() === airport.codigoOaci.toUpperCase())
+        return exists
+          ? current.map((item) => item.codigoOaci.toUpperCase() === airport.codigoOaci.toUpperCase() ? airport : item)
+          : [...current, airport]
+      })
+      return airport
+    } catch {
+      return null
+    }
+  }
+
+  useEffect(() => {
+    if (!isModalOpen || !logisticsAirportCode) {
+      return
+    }
+
+    setActiveOaciList((current) => (current === 'origen' ? null : current))
+    setForm((current) => {
+      const nextGmt = logisticsAirport?.gmt ?? current.gmtOffset
+      if (current.origen === logisticsAirportCode && current.gmtOffset === nextGmt) {
+        return current
+      }
+      return {
+        ...current,
+        origen: logisticsAirportCode,
+        gmtOffset: nextGmt,
+      }
+    })
+  }, [isModalOpen, logisticsAirport?.gmt, logisticsAirportCode])
+
+  useEffect(() => {
+    if (!isModalOpen || !logisticsAirportCode || logisticsAirport) {
+      return
+    }
+    void loadLogisticsAirport()
+  }, [isModalOpen, logisticsAirport, logisticsAirportCode])
 
   const computeIngresoUtc = (ingresoLocal: string, gmtOffset: number) => {
     if (!ingresoLocal) {
@@ -138,8 +211,9 @@ export default function ShipmentsCrud() {
       return
     }
 
-    const ingresoUtc = computeIngresoUtc(form.ingresoLocal, form.gmtOffset)
-    console.debug('[ShipmentsCrud] computed ingresoUtc', { ingresoUtc, ingresoLocal: form.ingresoLocal, gmtOffset: form.gmtOffset })
+    const effectiveGmtOffset = logisticsAirport?.gmt ?? form.gmtOffset
+    const ingresoUtc = computeIngresoUtc(form.ingresoLocal, effectiveGmtOffset)
+    console.debug('[ShipmentsCrud] computed ingresoUtc', { ingresoUtc, ingresoLocal: form.ingresoLocal, gmtOffset: effectiveGmtOffset })
     if (!ingresoUtc) {
       setError('Ingresa una fecha local valida para calcular UTC.')
       return
@@ -147,11 +221,12 @@ export default function ShipmentsCrud() {
 
     const payload: ShipmentCrudDto = {
       ...form,
-      origen: form.origen.trim().toUpperCase(),
+      origen: (logisticsAirportCode ?? form.origen).trim().toUpperCase(),
       destino: form.destino.trim().toUpperCase(),
       codigoPedido: form.codigoPedido.trim(),
       idCliente: form.idCliente.trim(),
       fecha: normalizeFecha(form.fecha, form.ingresoLocal),
+      gmtOffset: effectiveGmtOffset,
       ingresoUtc,
     }
     console.debug('[ShipmentsCrud] payload', payload)
@@ -219,8 +294,9 @@ export default function ShipmentsCrud() {
 
   const handleNew = async () => {
     setIsModalOpen(true)
-    void ensureAirports()
-    setForm({ ...EMPTY_FORM, codigoPedido: 'Calculando...' })
+    const loadedAirports = await ensureAirports()
+    const currentLogisticsAirport = await loadLogisticsAirport(loadedAirports)
+    setForm({ ...buildEmptyForm(currentLogisticsAirport), codigoPedido: 'Calculando...' })
 
     try {
       const result = await listShipments(0, 1, '')
@@ -232,10 +308,10 @@ export default function ShipmentsCrud() {
           nextCodigoPedido = String(lastCodigoNum + 1).padStart(9, '0')
         }
       }
-      setForm({ ...EMPTY_FORM, codigoPedido: nextCodigoPedido })
+      setForm({ ...buildEmptyForm(currentLogisticsAirport), codigoPedido: nextCodigoPedido })
     } catch (e) {
       console.error('Failed to fetch latest shipment for new code', e)
-      setForm({ ...EMPTY_FORM, codigoPedido: '000000001' })
+      setForm({ ...buildEmptyForm(currentLogisticsAirport), codigoPedido: '000000001' })
     }
   }
 
@@ -377,14 +453,19 @@ export default function ShipmentsCrud() {
               <input
                 value={form.origen}
                 placeholder="Buscar OACI"
-                onFocus={() => setActiveOaciList('origen')}
+                disabled={isOriginLocked}
+                title={isOriginLocked ? 'Origen asignado por tu aeropuerto' : undefined}
+                onFocus={() => {
+                  if (!isOriginLocked) setActiveOaciList('origen')
+                }}
                 onChange={(event) => {
+                  if (isOriginLocked) return
                   handleChange('origen', event.target.value.toUpperCase())
                   setActiveOaciList('origen')
                 }}
                 onBlur={() => setTimeout(() => setActiveOaciList((current) => (current === 'origen' ? null : current)), 150)}
               />
-              {activeOaciList === 'origen' ? (
+              {activeOaciList === 'origen' && !isOriginLocked ? (
                 <div className="oaci-list">
                   {getFilteredAirports(form.origen).map((airport) => (
                     <button
@@ -446,6 +527,8 @@ export default function ShipmentsCrud() {
             <input
               type="number"
               value={form.gmtOffset}
+              disabled={isOriginLocked}
+              title={isOriginLocked ? 'GMT asignado por tu aeropuerto' : undefined}
               onChange={(event) => handleChange('gmtOffset', Number(event.target.value))}
             />
           </label>

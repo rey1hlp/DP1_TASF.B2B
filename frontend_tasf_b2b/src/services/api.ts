@@ -9,11 +9,90 @@ import type {
   SimulationResponse,
 } from '../types/sim'
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+const AUTH_TOKEN_KEY = 'tasf.auth.token'
+
+export type AuthRole = 'ADMIN' | 'LOGISTICS'
+
+export type AuthUser = {
+  id: number
+  email: string
+  fullName: string
+  role: AuthRole
+  airportId?: number | null
+  airportCode?: string | null
+}
+
+export type LoginResponse = {
+  accessToken: string
+  tokenType: 'Bearer'
+  expiresInSeconds: number
+  user: AuthUser
+}
+
+export function getAuthToken(): string | null {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY)
+}
+
+export function setAuthToken(token: string) {
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token)
+}
+
+export function clearAuthToken() {
+  window.localStorage.removeItem(AUTH_TOKEN_KEY)
+}
+
+export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const token = getAuthToken()
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const response = await fetch(input, {
+    ...init,
+    headers,
+  })
+
+  if (response.status === 401) {
+    window.dispatchEvent(new Event('tasf:auth:unauthorized'))
+  }
+
+  return response
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) {
+    throw new Error('Credenciales invalidas')
+  }
+  return res.json()
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const res = await authFetch(`${API_BASE}/api/auth/me`)
+  if (!res.ok) {
+    throw new Error('No se pudo cargar la sesion')
+  }
+  return res.json()
+}
+
+function appendAccessToken(url: string): string {
+  const token = getAuthToken()
+  if (!token) return url
+
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}access_token=${encodeURIComponent(token)}`
+}
 
 // Obtener un aeropuerto por su código OACI
 export async function getAirportByCode(code: string): Promise<AirportCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/airports/${encodeURIComponent(code)}`);
+  const res = await authFetch(`${API_BASE}/api/db/airports/${encodeURIComponent(code)}`);
   if (!res.ok) {
     throw new Error('Aeropuerto no encontrado');
   }
@@ -22,7 +101,7 @@ export async function getAirportByCode(code: string): Promise<AirportCrudDto> {
 
 // Envíos físicos en bodega de un aeropuerto
 export async function getWarehouseShipments(airportCode: string): Promise<ShipmentCrudDto[]> {
-  const res = await fetch(`${API_BASE}/api/db/airports/${encodeURIComponent(airportCode)}/warehouse-shipments`);
+  const res = await authFetch(`${API_BASE}/api/db/airports/${encodeURIComponent(airportCode)}/warehouse-shipments`);
   if (!res.ok) {
     throw new Error('Error al obtener envíos de bodega');
   }
@@ -31,7 +110,7 @@ export async function getWarehouseShipments(airportCode: string): Promise<Shipme
 
 // Vuelo por ID
 export async function getFlightById(id: number): Promise<FlightCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/flights/${id}`);
+  const res = await authFetch(`${API_BASE}/api/db/flights/${id}`);
   if (!res.ok) {
     throw new Error('Vuelo no encontrado');
   }
@@ -40,7 +119,7 @@ export async function getFlightById(id: number): Promise<FlightCrudDto> {
 
 // Manifiesto de envíos asignados a un vuelo
 export async function getShipmentsByFlight(flightId: number): Promise<ShipmentCrudDto[]> {
-  const res = await fetch(`${API_BASE}/api/db/flights/${flightId}/shipments`);
+  const res = await authFetch(`${API_BASE}/api/db/flights/${flightId}/shipments`);
   if (!res.ok) {
     throw new Error('Error al obtener envíos del vuelo');
   }
@@ -48,7 +127,7 @@ export async function getShipmentsByFlight(flightId: number): Promise<ShipmentCr
 }
 
 export async function fetchAirports(): Promise<AirportDto[]> {
-  const res = await fetch(`${API_BASE}/api/airports`)
+  const res = await authFetch(`${API_BASE}/api/airports`)
   if (!res.ok) {
     throw new Error('No se pudo cargar aeropuertos')
   }
@@ -58,7 +137,7 @@ export async function fetchAirports(): Promise<AirportDto[]> {
 export async function startSimulation(
   payload: SimulationRequest
 ): Promise<SimulationResponse> {
-  const res = await fetch(`${API_BASE}/api/simulations/ga`, {
+  const res = await authFetch(`${API_BASE}/api/simulations/ga`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -71,13 +150,18 @@ export async function startSimulation(
 
 export function buildWsUrl(simId: string): string {
   const base = API_BASE.replace(/^http/, 'ws')
-  return `${base}/ws/sim?simId=${encodeURIComponent(simId)}`
+  return appendAccessToken(`${base}/ws/sim?simId=${encodeURIComponent(simId)}`)
+}
+
+export function buildDailyOperationWsUrl(): string {
+  const base = API_BASE.replace(/^http/, 'ws')
+  return appendAccessToken(`${base}/api/operation/daily/stream`)
 }
 
 export async function uploadEnvios(files: File[]): Promise<{ enviosKey: string }> {
   const form = new FormData()
   files.forEach((file) => form.append('files', file))
-  const res = await fetch(`${API_BASE}/api/uploads/envios`, {
+  const res = await authFetch(`${API_BASE}/api/uploads/envios`, {
     method: 'POST',
     body: form,
   })
@@ -89,7 +173,7 @@ export async function uploadEnvios(files: File[]): Promise<{ enviosKey: string }
 
 export async function deleteEnvios(enviosKey: string): Promise<void> {
   const params = new URLSearchParams({ key: enviosKey })
-  const res = await fetch(`${API_BASE}/api/uploads/envios?${params.toString()}`, {
+  const res = await authFetch(`${API_BASE}/api/uploads/envios?${params.toString()}`, {
     method: 'DELETE',
   })
   if (!res.ok) {
@@ -102,7 +186,7 @@ export async function listAirports(page = 0, size = 20, query = ''): Promise<Pag
   if (query) {
     params.set('query', query)
   }
-  const res = await fetch(`${API_BASE}/api/db/airports?${params.toString()}`)
+  const res = await authFetch(`${API_BASE}/api/db/airports?${params.toString()}`)
   if (!res.ok) {
     throw new Error('No se pudo cargar aeropuertos (DB)')
   }
@@ -110,7 +194,7 @@ export async function listAirports(page = 0, size = 20, query = ''): Promise<Pag
 }
 
 export async function createAirport(payload: AirportCrudDto): Promise<AirportCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/airports`, {
+  const res = await authFetch(`${API_BASE}/api/db/airports`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -122,7 +206,7 @@ export async function createAirport(payload: AirportCrudDto): Promise<AirportCru
 }
 
 export async function updateAirport(id: number, payload: AirportCrudDto): Promise<AirportCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/airports/${id}`, {
+  const res = await authFetch(`${API_BASE}/api/db/airports/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -134,7 +218,7 @@ export async function updateAirport(id: number, payload: AirportCrudDto): Promis
 }
 
 export async function deleteAirport(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/db/airports/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${API_BASE}/api/db/airports/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     throw new Error('No se pudo eliminar aeropuerto')
   }
@@ -145,7 +229,7 @@ export async function listFlights(page = 0, size = 20, query = ''): Promise<Page
   if (query) {
     params.set('query', query)
   }
-  const res = await fetch(`${API_BASE}/api/db/flights?${params.toString()}`)
+  const res = await authFetch(`${API_BASE}/api/db/flights?${params.toString()}`)
   if (!res.ok) {
     throw new Error('No se pudo cargar vuelos')
   }
@@ -153,7 +237,7 @@ export async function listFlights(page = 0, size = 20, query = ''): Promise<Page
 }
 
 export async function createFlight(payload: FlightCrudDto): Promise<FlightCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/flights`, {
+  const res = await authFetch(`${API_BASE}/api/db/flights`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -165,7 +249,7 @@ export async function createFlight(payload: FlightCrudDto): Promise<FlightCrudDt
 }
 
 export async function updateFlight(id: number, payload: FlightCrudDto): Promise<FlightCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/flights/${id}`, {
+  const res = await authFetch(`${API_BASE}/api/db/flights/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -177,7 +261,7 @@ export async function updateFlight(id: number, payload: FlightCrudDto): Promise<
 }
 
 export async function deleteFlight(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/db/flights/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${API_BASE}/api/db/flights/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     throw new Error('No se pudo eliminar vuelo')
   }
@@ -188,7 +272,7 @@ export async function listShipments(page = 0, size = 20, query = ''): Promise<Pa
   if (query) {
     params.set('query', query)
   }
-  const res = await fetch(`${API_BASE}/api/db/shipments?${params.toString()}`)
+  const res = await authFetch(`${API_BASE}/api/db/shipments?${params.toString()}`)
   if (!res.ok) {
     throw new Error('No se pudo cargar envios')
   }
@@ -196,7 +280,7 @@ export async function listShipments(page = 0, size = 20, query = ''): Promise<Pa
 }
 
 export async function createShipment(payload: ShipmentCrudDto): Promise<ShipmentCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/shipments`, {
+  const res = await authFetch(`${API_BASE}/api/db/shipments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -208,7 +292,7 @@ export async function createShipment(payload: ShipmentCrudDto): Promise<Shipment
 }
 
 export async function updateShipment(id: number, payload: ShipmentCrudDto): Promise<ShipmentCrudDto> {
-  const res = await fetch(`${API_BASE}/api/db/shipments/${id}`, {
+  const res = await authFetch(`${API_BASE}/api/db/shipments/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -220,7 +304,7 @@ export async function updateShipment(id: number, payload: ShipmentCrudDto): Prom
 }
 
 export async function deleteShipment(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/db/shipments/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${API_BASE}/api/db/shipments/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     throw new Error('No se pudo eliminar envio')
   }
@@ -229,7 +313,7 @@ export async function deleteShipment(id: number): Promise<void> {
 export async function uploadShipmentsTxt(file: File): Promise<BulkImportResult> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`${API_BASE}/api/db/shipments/import-txt`, {
+  const res = await authFetch(`${API_BASE}/api/db/shipments/import-txt`, {
     method: 'POST',
     body: form,
   })
@@ -251,7 +335,7 @@ export type BulkImportResult = {
 export async function uploadAirportsCsv(file: File): Promise<BulkImportResult> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`${API_BASE}/api/db/airports/import-csv`, {
+  const res = await authFetch(`${API_BASE}/api/db/airports/import-csv`, {
     method: 'POST',
     body: form,
   })
@@ -264,7 +348,7 @@ export async function uploadAirportsCsv(file: File): Promise<BulkImportResult> {
 export async function uploadFlightsTxt(file: File): Promise<BulkImportResult> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`${API_BASE}/api/db/flights/import-txt`, {
+  const res = await authFetch(`${API_BASE}/api/db/flights/import-txt`, {
     method: 'POST',
     body: form,
   })
@@ -280,7 +364,7 @@ export type FlightDayCancelContext = {
 }
 
 export async function cancelFlightDay(id: number, fecha: string, context?: FlightDayCancelContext): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancel`, {
+  const res = await authFetch(`${API_BASE}/api/db/flights/${id}/day-cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -301,7 +385,7 @@ export async function cancelFlightDay(id: number, fecha: string, context?: Fligh
 
 export async function removeCancelFlightDay(id: number, fecha: string): Promise<void> {
   const params = new URLSearchParams({ fecha })
-  const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancel?${params.toString()}`, {
+  const res = await authFetch(`${API_BASE}/api/db/flights/${id}/day-cancel?${params.toString()}`, {
     method: 'DELETE',
   })
   if (!res.ok) {
@@ -311,7 +395,7 @@ export async function removeCancelFlightDay(id: number, fecha: string): Promise<
 }
 
 export async function getCancelledDays(id: number): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/api/db/flights/${id}/day-cancels`)
+  const res = await authFetch(`${API_BASE}/api/db/flights/${id}/day-cancels`)
   if (!res.ok) {
     throw new Error('No se pudieron cargar los días cancelados')
   }
@@ -320,7 +404,7 @@ export async function getCancelledDays(id: number): Promise<string[]> {
 
 // Reporte de ocupación histórica por vuelo
 export async function fetchOccupancyReport(): Promise<FlightOccupancyData[]> {
-  const res = await fetch(`${API_BASE}/api/reports/occupancy`)
+  const res = await authFetch(`${API_BASE}/api/reports/occupancy`)
   if (!res.ok) {
     throw new Error('No se pudo cargar el reporte de ocupación')
   }
