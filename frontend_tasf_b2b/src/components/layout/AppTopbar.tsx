@@ -12,6 +12,14 @@ export default function AppTopbar({
     onToggleSidebar,
 }: AppTopbarProps) {
   const { logout, user } = useAuth()
+  const roleLabel =
+    user?.role === 'ADMIN'
+      ? 'ADMIN'
+      : user?.role === 'LOGISTICS'
+        ? `LOGISTICS ${user.airportCode ?? ''}`.trim()
+        : user?.role === 'REGISTER'
+          ? 'REGISTER'
+          : user?.airportCode ?? 'Usuario'
 
   return (
     <header className="app-topbar">
@@ -42,7 +50,7 @@ export default function AppTopbar({
       <div className="topbar-actions">
         <div className="topbar-user-meta">
           <span>{user?.fullName ?? 'Usuario'}</span>
-          <small>{user?.role === 'ADMIN' ? 'ADMIN' : user?.airportCode}</small>
+          <small>{roleLabel}</small>
         </div>
         <button
           type="button"

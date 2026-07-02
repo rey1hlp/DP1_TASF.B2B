@@ -64,7 +64,7 @@ export default function ShipmentsCrud() {
     invalidAirportLines: string[]
   } | null>(null)
 
-  const logisticsAirportCode = user?.role === 'LOGISTICS'
+  const logisticsAirportCode = user?.role === 'LOGISTICS' || user?.role === 'REGISTER'
     ? user.airportCode?.trim().toUpperCase() ?? null
     : null
 

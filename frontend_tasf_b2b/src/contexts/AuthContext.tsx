@@ -23,6 +23,8 @@ type AuthContextValue = {
   status: AuthStatus
   isAuthenticated: boolean
   isAdmin: boolean
+  isLogistics: boolean
+  isRegister: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -88,6 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       isAuthenticated: status === 'authenticated',
       isAdmin: user?.role === 'ADMIN',
+      isLogistics: user?.role === 'LOGISTICS',
+      isRegister: user?.role === 'REGISTER',
       login,
       logout,
     }
