@@ -87,9 +87,30 @@ const FLIGHT_ITEM_HEIGHT = 56
 const AIRPORT_ITEM_HEIGHT = 56
 const AIRPORT_PREVIEW_LIMIT = 30
 
+function getShipmentStatusLabel(status?: string | null): string {
+  if (!status) return 'Desconocido'
+  const s = status.toUpperCase().replace('-', '_')
+  switch (s) {
+    case 'PENDING':
+      return 'Pendiente'
+    case 'ASSIGNED':
+      return 'Asignado'
+    case 'IN_TRANSIT':
+      return 'En Tránsito'
+    case 'DELIVERED':
+      return 'Entregado'
+    case 'CANCELLED':
+      return 'Cancelado'
+    case 'CON_RETRASO':
+      return 'Entregado (Con Retraso)'
+    default:
+      return status
+  }
+}
+
 function getDynamicShipmentStatus(route: EntityShipmentRoute, currentMinute: number | null) {
-  if (!route || route.ruta.length === 0) return route?.estado || 'DESCONOCIDO'
-  if (currentMinute === null) return route.estado === 'CON_RETRASO' ? 'ENTREGADO (CON RETRASO)' : route.estado
+  if (!route || route.ruta.length === 0) return getShipmentStatusLabel(route?.estado)
+  if (currentMinute === null) return getShipmentStatusLabel(route.estado)
 
   const first = route.ruta[0]
   const last = route.ruta[route.ruta.length - 1]
@@ -98,7 +119,7 @@ function getDynamicShipmentStatus(route: EntityShipmentRoute, currentMinute: num
     return 'EN ALMACÉN (Origen)'
   }
   if (currentMinute > last.llegadaMin) {
-    return route.estado === 'CON_RETRASO' ? 'ENTREGADO (CON RETRASO)' : 'ENTREGADO'
+    return getShipmentStatusLabel(route.estado)
   }
 
   for (const step of route.ruta) {
