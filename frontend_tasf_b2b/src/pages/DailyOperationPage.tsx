@@ -538,6 +538,7 @@ export default function DailyOperationPage() {
             ranges={ranges}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
+            selectedShipmentRoute={selectedShipmentRoute}
             isPanelCollapsed={isPanelCollapsed}
             onAirportPreview={handleMapAirportPreview}
             onAirportDetailRequest={handleMapAirportDetailRequest}
