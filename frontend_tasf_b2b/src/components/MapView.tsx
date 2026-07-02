@@ -507,7 +507,7 @@ export default function MapView({
 
       const isSelectedFlight = selectedFlightId !== null && seg.flightId === selectedFlightId
       const isSelectedShipment = selectedShipmentRoute != null && selectedShipmentRoute.ruta.some(p => p.vueloId === seg.flightId)
-      
+
       const isSelected = isSelectedFlight || isSelectedShipment
       const anySelectionActive = selectedFlightId !== null || selectedShipmentRoute != null
       const isDimmed = anySelectionActive && !isSelected
@@ -564,14 +564,14 @@ export default function MapView({
     routeLayerRef.current.clearLayers()
     if (selectedShipmentRoute && selectedShipmentRoute.ruta && selectedShipmentRoute.ruta.length > 0) {
       const latlngs: L.LatLngExpression[] = []
-      
+
       selectedShipmentRoute.ruta.forEach((paso) => {
         const orig = airports.find((a) => a.codigoOaci === paso.origen)
         if (orig) {
           latlngs.push([orig.latitud, orig.longitud])
         }
       })
-      
+
       const ultPaso = selectedShipmentRoute.ruta[selectedShipmentRoute.ruta.length - 1]
       const dest = airports.find((a) => a.codigoOaci === ultPaso.destino)
       if (dest) {
@@ -587,17 +587,47 @@ export default function MapView({
     if (selectedFlightId !== null) {
       const selectedSegment = segments.find((segment) => segment.flightId === selectedFlightId)
       if (selectedSegment) {
-        const isLanded = currentMinute !== null && currentMinute > selectedSegment.llegadaMin
-        const style = isLanded ? LANDED_ROUTE_STYLE : SELECTED_ROUTE_STYLE
-        const latlngs: L.LatLngExpression[] = [
-          [selectedSegment.origenLat, selectedSegment.origenLon],
-          [selectedSegment.destinoLat, selectedSegment.destinoLon],
-        ]
-        // Se usa L.polyline directamente para no modificar funciones compartidas
-        L.polyline(latlngs, style).addTo(routeLayerRef.current)
+        const minuteForRender = animatedMinute ?? currentMinute
+        const hasDeparted = minuteForRender !== null && minuteForRender >= selectedSegment.salidaMin
+        const isLanded = minuteForRender !== null && minuteForRender >= selectedSegment.llegadaMin
+
+        // Estilos: Definimos el estilo opaco copiando el original pero bajando la opacidad.
+        // Opcional: le agregué un 'dashArray' para que se vea punteada la parte que ya pasó.
+        const TRAVERSED_STYLE = { ...SELECTED_ROUTE_STYLE, opacity: 0.3, dashArray: '5, 5' }
+        const REMAINING_STYLE = SELECTED_ROUTE_STYLE
+
+        if (hasDeparted && !isLanded) {
+          // 1. El avión está en el aire: calculamos su posición exacta
+          const total = Math.max(1, selectedSegment.llegadaMin - selectedSegment.salidaMin)
+          const progress = Math.min(1, Math.max(0, (minuteForRender - selectedSegment.salidaMin) / total))
+
+          const currentLat = selectedSegment.origenLat + (selectedSegment.destinoLat - selectedSegment.origenLat) * progress
+          const currentLon = selectedSegment.origenLon + (selectedSegment.destinoLon - selectedSegment.origenLon) * progress
+
+          L.polyline(
+            [[selectedSegment.origenLat, selectedSegment.origenLon], [currentLat, currentLon]],
+            TRAVERSED_STYLE
+          ).addTo(routeLayerRef.current)
+
+          L.polyline(
+            [[currentLat, currentLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
+            REMAINING_STYLE
+          ).addTo(routeLayerRef.current)
+
+        } else if (isLanded) {
+          L.polyline(
+            [[selectedSegment.origenLat, selectedSegment.origenLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
+            LANDED_ROUTE_STYLE
+          ).addTo(routeLayerRef.current)
+        } else {
+          L.polyline(
+            [[selectedSegment.origenLat, selectedSegment.origenLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
+            REMAINING_STYLE
+          ).addTo(routeLayerRef.current)
+        }
       }
     }
-  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute])
+  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute, animatedMinute])
 
   return (
     <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>
