@@ -150,6 +150,8 @@ export default function EntityExplorer({
   listHeight = 320,
   shipmentListHeight = 220,
 }: EntityExplorerProps) {
+  void currentMinute
+  void getDynamicShipmentStatus
   const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>("flights");
   const [flightQuery, setFlightQuery] = useState("");
   const [airportQuery, setAirportQuery] = useState("");
@@ -407,7 +409,7 @@ export default function EntityExplorer({
             }}
           >
             <strong>Estado:</strong>{" "}
-            {getDynamicShipmentStatus(selectedShipmentRoute, currentMinute)}{" "}
+            {getShipmentStatusLabel(selectedShipmentRoute.estado)}{" "}
             <br />
             <strong>Tiempo total:</strong>{" "}
             {formatDurationHours(selectedShipmentRoute.tiempoTotalHoras)}
