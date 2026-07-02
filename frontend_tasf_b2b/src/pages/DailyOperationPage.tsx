@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { ComponentProps } from 'react'
-import type { AirportDto } from '../types/sim'
+import type { AirportDto, ShipmentCrudDto } from '../types/sim'
 import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports } from '../services/api'
 import MapView from '../components/MapView'
-import DailyOperationControls from '../components/DailyOperationControls'
+import DailyOperationControls, { type RespuestaRutaEnvioDto } from '../components/DailyOperationControls'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import {
@@ -49,7 +49,7 @@ type DailyOperationSnapshot = {
   warehouseSnapshot?: WarehouseSnapshot
   shipmentSummary?: ShipmentSummary
   alerts?: OperationAlert[]
-  envios?: any[]
+  envios?: ShipmentCrudDto[]
 }
 
 type DailyOperationEvent =
@@ -104,6 +104,40 @@ function getSegmentStatus(segment: MapSegment, currentMinute: number): FlightSta
   return 'LANDED'
 }
 
+function syncSelectedShipmentRoute(
+  currentRoute: RespuestaRutaEnvioDto | null,
+  shipments?: ShipmentCrudDto[]
+) {
+  if (!currentRoute || !shipments?.length) {
+    return currentRoute
+  }
+
+  const selectedShipment = shipments.find(
+    (shipment) => shipment.codigoPedido === currentRoute.codigoPedido
+  )
+
+  if (!selectedShipment?.status) {
+    return currentRoute
+  }
+
+  const shouldHideRoute =
+    selectedShipment.status === 'DELIVERED' || selectedShipment.status === 'CANCELLED'
+  const nextRoute = shouldHideRoute ? [] : currentRoute.ruta
+
+  const statusChanged = currentRoute.estado !== selectedShipment.status
+  const routeChanged = shouldHideRoute && currentRoute.ruta.length > 0
+
+  if (!statusChanged && !routeChanged) {
+    return currentRoute
+  }
+
+  return {
+    ...currentRoute,
+    estado: selectedShipment.status,
+    ruta: nextRoute,
+  }
+}
+
 export default function DailyOperationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [segments, setSegments] = useState<MapSegment[]>([])
@@ -126,7 +160,7 @@ export default function DailyOperationPage() {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
-  const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<any | null>(null)
+  const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
   const entityFocusRequestIdRef = useRef(0)
@@ -196,7 +230,10 @@ export default function DailyOperationPage() {
     }
 
     if (snapshot.envios) {
-      setSampleShipments(snapshot.envios.map((s: any) => s.codigoPedido))
+      setSampleShipments(snapshot.envios.map((shipment) => shipment.codigoPedido))
+      setSelectedShipmentRoute((currentRoute) =>
+        syncSelectedShipmentRoute(currentRoute, snapshot.envios)
+      )
     }
 
     if (snapshot.timestamp) {

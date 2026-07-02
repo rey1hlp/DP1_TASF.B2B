@@ -6,6 +6,7 @@ import {
   formatBags,
   formatInteger,
   formatMinuteRange,
+  formatOperationalMinuteRange,
   formatPercent,
 } from '../utils/time'
 
@@ -119,7 +120,9 @@ function getDynamicShipmentStatus(route: EntityShipmentRoute, currentMinute: num
     return 'EN ALMACÉN (Origen)'
   }
   if (currentMinute > last.llegadaMin) {
-    return getShipmentStatusLabel(route.estado)
+    return route.estado?.toUpperCase() === 'CANCELLED'
+      ? getShipmentStatusLabel(route.estado)
+      : 'Entregado'
   }
 
   for (const step of route.ruta) {
@@ -427,7 +430,7 @@ export default function EntityExplorer({
                 {step.vueloId} | {step.origen} → {step.destino}
               </div>
               <div className="flight-meta">
-                Salida {formatMinuteRange(step.salidaMin, step.llegadaMin)}
+                Salida {formatOperationalMinuteRange(step.salidaMin, step.llegadaMin)}
               </div>
             </div>
           ))}

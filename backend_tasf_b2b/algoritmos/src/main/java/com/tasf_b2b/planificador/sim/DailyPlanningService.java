@@ -547,7 +547,23 @@ public class DailyPlanningService {
     }
 
     public RespuestaRutaEnvioDto getShipmentRoute(String codigoPedido) {
-        return lastRutasPorPaquete.get(codigoPedido);
+        RespuestaRutaEnvioDto route = lastRutasPorPaquete.get(codigoPedido);
+        if (route == null) {
+            return null;
+        }
+
+        RespuestaRutaEnvioDto snapshot = new RespuestaRutaEnvioDto();
+        snapshot.codigoPedido = route.codigoPedido;
+        snapshot.estado = route.estado;
+        snapshot.tiempoTotalHoras = route.tiempoTotalHoras;
+        snapshot.ruta = route.ruta != null ? new ArrayList<>(route.ruta) : new ArrayList<>();
+
+        ShipmentEntity shipment = shipmentRepository.findByCodigoPedido(codigoPedido);
+        if (shipment != null && shipment.status != null) {
+            snapshot.estado = shipment.status.name();
+        }
+
+        return snapshot;
     }
 
     private Map<String, RespuestaRutaEnvioDto> construirRutasPorPaquete(Individuo mejor, List<Envio> envios) {
