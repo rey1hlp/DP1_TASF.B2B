@@ -11,7 +11,7 @@ import type { MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
-  vueloId: number
+  vueloId: number | string
   origen: string
   destino: string
   salidaMin: number

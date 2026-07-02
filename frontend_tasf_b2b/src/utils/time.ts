@@ -151,6 +151,24 @@ export function formatMinuteRange(start?: number | null, end?: number | null): s
   return `${formatSimMinute(start, includeDate)} - ${formatSimMinute(end, false)}`
 }
 
+export function formatOperationalMinuteRange(start?: number | null, end?: number | null): string {
+  if (start === null || start === undefined || end === null || end === undefined) {
+    return '--'
+  }
+
+  const startMinute = Math.floor(start)
+  const endMinute = Math.floor(end)
+  const startLabel = formatClockFromMinute(startMinute)
+  const endLabel = formatClockFromMinute(endMinute)
+  const dayDiff = Math.floor(endMinute / 1440) - Math.floor(startMinute / 1440)
+
+  if (dayDiff <= 0) {
+    return `${startLabel} - ${endLabel}`
+  }
+
+  return `${startLabel} - ${endLabel} (+${dayDiff}d)`
+}
+
 export function formatInteger(value?: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '--'

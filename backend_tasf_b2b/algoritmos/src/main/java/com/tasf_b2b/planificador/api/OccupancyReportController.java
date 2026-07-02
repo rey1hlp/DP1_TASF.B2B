@@ -1,4 +1,4 @@
-package com.tasf_b2b.planificador.api.ws;
+package com.tasf_b2b.planificador.api;
 
 import com.tasf_b2b.planificador.api.dto.FlightOccupancyReportDto;
 import com.tasf_b2b.planificador.sim.ReportService;
@@ -12,11 +12,11 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/reports")
 @CrossOrigin(origins = "*")
-public class ReportController {
+public class OccupancyReportController {
 
     private final ReportService reportService;
 
-    public ReportController(ReportService reportService) {
+    public OccupancyReportController(ReportService reportService) {
         this.reportService = reportService;
     }
 
