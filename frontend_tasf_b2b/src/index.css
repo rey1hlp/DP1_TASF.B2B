@@ -673,6 +673,8 @@ body {
   place-items: center;
   filter: drop-shadow(0 4px 10px rgba(19, 49, 90, 0.4));
   cursor: pointer;
+  transition: transform 0.45s linear;
+  will-change: transform;
 }
 
 .plane-marker-hitbox {

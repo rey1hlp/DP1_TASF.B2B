@@ -172,19 +172,14 @@ export default function MapView({
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [animatedMinute, setAnimatedMinute] = useState<number | null>(currentMinute)
   const [previewAirportCode, setPreviewAirportCode] = useState<string | null>(null)
   const [previewFlightId, setPreviewFlightId] = useState<number | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
+  const planeMarkersRef = useRef<Map<number, L.Marker>>(new Map())
   const resizeFrameRef = useRef<number | null>(null)
   const resizeTimerRef = useRef<number | null>(null)
-  const animationFrameRef = useRef<number | null>(null)
-  const animationStartRef = useRef<number | null>(null)
-  const animationFromRef = useRef<number | null>(null)
-  const animationToRef = useRef<number | null>(null)
-  const animatedMinuteRef = useRef<number | null>(currentMinute)
   const closedPreviewAirportCodeRef = useRef<string | null>(null)
   const closedPreviewFlightIdRef = useRef<number | null>(null)
 
@@ -360,63 +355,6 @@ export default function MapView({
     }
   }, [previewFlightId, selectedFlightId])
 
-  useEffect(() => {
-    if (animationFrameRef.current !== null) {
-      window.cancelAnimationFrame(animationFrameRef.current)
-      animationFrameRef.current = null
-    }
-
-    if (currentMinute === null) {
-      setAnimatedMinute(null)
-      return
-    }
-
-    const from = animatedMinuteRef.current ?? currentMinute
-    const to = currentMinute
-
-    if (from === to) {
-      setAnimatedMinute(currentMinute)
-      return
-    }
-
-    const durationMs = 450
-    animationStartRef.current = performance.now()
-    animationFromRef.current = from
-    animationToRef.current = to
-
-    const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2)
-
-    const step = (now: number) => {
-      const start = animationStartRef.current ?? now
-      const elapsed = now - start
-      const progress = Math.min(1, Math.max(0, elapsed / durationMs))
-      const eased = easeInOut(progress)
-      const source = animationFromRef.current ?? from
-      const target = animationToRef.current ?? to
-      setAnimatedMinute(source + (target - source) * eased)
-
-      if (progress < 1) {
-        animationFrameRef.current = window.requestAnimationFrame(step)
-      } else {
-        animationFrameRef.current = null
-        setAnimatedMinute(target)
-      }
-    }
-
-    animationFrameRef.current = window.requestAnimationFrame(step)
-
-    return () => {
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current)
-        animationFrameRef.current = null
-      }
-    }
-  }, [currentMinute])
-
-  useEffect(() => {
-    animatedMinuteRef.current = animatedMinute
-  }, [animatedMinute])
-
   useMapSelectionFocus({
     mapRef,
     airports,
@@ -484,22 +422,25 @@ export default function MapView({
       return
     }
 
-    planeLayerRef.current.clearLayers()
+    const layer = planeLayerRef.current
+    const nextActiveIds = new Set<number>()
+
     if (currentMinute === null) {
+      planeMarkersRef.current.forEach((marker) => {
+        layer.removeLayer(marker)
+      })
+      planeMarkersRef.current.clear()
       return
     }
 
-    const minuteForRender = animatedMinute ?? currentMinute
-
     const activeSegments = segments.filter(
-      (seg) => minuteForRender !== null && minuteForRender >= seg.salidaMin && minuteForRender <= seg.llegadaMin
+      (seg) => currentMinute >= seg.salidaMin && currentMinute <= seg.llegadaMin
     )
 
     activeSegments.forEach((seg) => {
+      nextActiveIds.add(seg.flightId)
       const total = Math.max(1, seg.llegadaMin - seg.salidaMin)
-      const progress = minuteForRender !== null
-        ? Math.min(1, Math.max(0, (minuteForRender - seg.salidaMin) / total))
-        : 0
+      const progress = Math.min(1, Math.max(0, (currentMinute - seg.salidaMin) / total))
       const lat = seg.origenLat + (seg.destinoLat - seg.origenLat) * progress
       const lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
       const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
@@ -523,38 +464,57 @@ export default function MapView({
       ]
       const tooltip = `${tooltipParts.join('<br/>')}`
 
-      const marker = L.marker([lat, lon], {
-        icon,
-        pane: MAP_PANES.plane,
-        bubblingMouseEvents: false,
-      })
-      marker.bindTooltip(tooltip, {
-        direction: 'top',
-        permanent: isSelectedShipment,
-        opacity: 0.95,
-      })
-      if (isSelected) {
-        marker.setZIndexOffset(500)
-      }
-      if (isSelectedShipment) {
-        marker.openTooltip()
-      }
-      marker.on('click', (event) => {
-        L.DomEvent.stop(event.originalEvent)
-        if (previewFlightId === seg.flightId) {
-          closedPreviewFlightIdRef.current = null
-          setPreviewFlightId(null)
-          onFlightPreview?.(null)
-          return
-        }
+      let marker = planeMarkersRef.current.get(seg.flightId)
+      if (!marker) {
+        marker = L.marker([lat, lon], {
+          icon,
+          pane: MAP_PANES.plane,
+          bubblingMouseEvents: false,
+        })
+        marker.bindTooltip(tooltip, {
+          direction: 'top',
+          permanent: isSelectedShipment,
+          opacity: 0.95,
+        })
+        marker.on('click', (event) => {
+          L.DomEvent.stop(event.originalEvent)
+          if (previewFlightId === seg.flightId) {
+            closedPreviewFlightIdRef.current = null
+            setPreviewFlightId(null)
+            onFlightPreview?.(null)
+            return
+          }
 
-        closedPreviewFlightIdRef.current = null
-        setPreviewFlightId(seg.flightId)
-        onFlightPreview?.(seg.flightId)
-      })
-      marker.addTo(planeLayerRef.current as L.LayerGroup)
+          closedPreviewFlightIdRef.current = null
+          setPreviewFlightId(seg.flightId)
+          onFlightPreview?.(seg.flightId)
+        })
+        marker.addTo(layer)
+        planeMarkersRef.current.set(seg.flightId, marker)
+      } else {
+        marker.setLatLng([lat, lon])
+        marker.setIcon(icon)
+        const tooltipInstance = marker.getTooltip()
+        if (tooltipInstance) {
+          tooltipInstance.setContent(tooltip)
+          if (isSelectedShipment) {
+            marker.openTooltip()
+          } else if (!isSelectedShipment && tooltipInstance.isOpen()) {
+            marker.closeTooltip()
+          }
+        }
+      }
+
+      marker.setZIndexOffset(isSelected ? 500 : 0)
     })
-  }, [segments, animatedMinute, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId])
+
+    planeMarkersRef.current.forEach((marker, flightId) => {
+      if (!nextActiveIds.has(flightId)) {
+        layer.removeLayer(marker)
+        planeMarkersRef.current.delete(flightId)
+      }
+    })
+  }, [segments, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId])
 
   useEffect(() => {
     if (!routeLayerRef.current) {
@@ -587,7 +547,7 @@ export default function MapView({
     if (selectedFlightId !== null) {
       const selectedSegment = segments.find((segment) => segment.flightId === selectedFlightId)
       if (selectedSegment) {
-        const minuteForRender = animatedMinute ?? currentMinute
+        const minuteForRender = currentMinute
         const hasDeparted = minuteForRender !== null && minuteForRender >= selectedSegment.salidaMin
         const isLanded = minuteForRender !== null && minuteForRender >= selectedSegment.llegadaMin
 
@@ -627,7 +587,7 @@ export default function MapView({
         }
       }
     }
-  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute, animatedMinute])
+  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute])
 
   return (
     <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>
