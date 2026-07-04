@@ -62,6 +62,7 @@ public class SimulationService {
     private final AirportRepository airportRepository;
     private final FlightRepository flightRepository;
     private final FlightDayCancellationRepository cancellationRepository;
+    private final com.tasf_b2b.planificador.persistence.ShipmentRepository shipmentRepository;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
     public SimulationService(
@@ -69,14 +70,70 @@ public class SimulationService {
         SimulationRunRepository simulationRunRepository,
         AirportRepository airportRepository,
         FlightRepository flightRepository,
-        FlightDayCancellationRepository cancellationRepository
+        FlightDayCancellationRepository cancellationRepository,
+        com.tasf_b2b.planificador.persistence.ShipmentRepository shipmentRepository
     ) {
         this.registry = registry;
         this.simulationRunRepository = simulationRunRepository;
         this.airportRepository = airportRepository;
         this.flightRepository = flightRepository;
         this.cancellationRepository = cancellationRepository;
+        this.shipmentRepository = shipmentRepository;
     }
+
+    public java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> getShipmentsByFlight(
+        String simId, Long flightId) {
+
+        SimulationState state = registry.get(simId);  // usa 'registry', no 'simulationRegistry'
+        if (state == null || state.data == null || state.data.rutasPorPaquete == null) {
+            return null;
+        }
+
+        // 1. Filtrar en memoria los codigoPedido que pasan por este flightId
+        java.util.List<String> codes = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<String, RespuestaRutaEnvioDto> entry
+                : state.data.rutasPorPaquete.entrySet()) {
+            RespuestaRutaEnvioDto ruta = entry.getValue();
+            if (ruta == null || ruta.ruta == null) continue;
+            boolean perteneceAlVuelo = ruta.ruta.stream()
+                    .anyMatch(paso -> paso.vueloId == flightId.intValue());
+            if (perteneceAlVuelo) {
+                codes.add(entry.getKey());
+            }
+        }
+
+        if (codes.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        // 2. Cruzar contra la BD para obtener todos los campos del ShipmentEntity
+        return shipmentRepository.findByCodigoPedidoIn(codes).stream()
+                .map(this::toShipmentDto)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    private com.tasf_b2b.planificador.api.dto.ShipmentCrudDto toShipmentDto(
+            com.tasf_b2b.planificador.persistence.ShipmentEntity entity) {
+        com.tasf_b2b.planificador.api.dto.ShipmentCrudDto dto =
+                new com.tasf_b2b.planificador.api.dto.ShipmentCrudDto();
+        dto.id           = entity.id;
+        dto.codigoPedido = entity.codigoPedido;
+        dto.origen       = entity.origen != null ? entity.origen.codigoOaci : null;
+        dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
+        dto.destino      = entity.destino != null ? entity.destino.codigoOaci : null;
+        dto.destinoCiudad= entity.destino != null ? entity.destino.ciudad : null;
+        dto.fecha        = entity.fecha;
+        dto.ingresoUtc   = entity.ingresoUtc;
+        dto.ingresoLocal = entity.ingresoLocal;
+        dto.gmtOffset    = entity.gmtOffset;
+        dto.cantidad     = entity.cantidad;
+        dto.idCliente    = entity.idCliente;
+        dto.slaHoras     = entity.slaHoras;
+        dto.status       = entity.status;
+        dto.auditDateIns = entity.auditDateIns;
+        return dto;
+    }
+
 
     public SimulationResponse startSimulation(SimulationRequest request) {
         String simulationId = UUID.randomUUID().toString();

@@ -106,16 +106,30 @@ function AirportsRoute() {
 
 function AirportWarehouseRoute() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { airportCode } = useParams()
 
   if (!airportCode) {
     return <Navigate to="/aeropuertos" replace />
   }
 
+  const state = location.state as any
+
   return (
     <WarehouseDetailPage
       airportCode={airportCode}
-      onVolver={() => navigate('/aeropuertos')}
+      onVolver={() => {
+        if (state?.from === 'simulation') {
+          navigate('/simulacion')
+        } else {
+          navigate('/aeropuertos')
+        }
+      }}
+      simulationData={state?.from === 'simulation' ? {
+        simId: state.simId,
+        currentMinute: state.currentMinute,
+        warehouseSnapshot: state.warehouseSnapshot,
+      } : undefined}
     />
   )
 }

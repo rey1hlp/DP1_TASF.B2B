@@ -18,6 +18,8 @@ export type UseMapSelectionFocusParams = {
   selectedFlightId: number | null
   selectedAirportCode: string | null
   selectedShipmentRoute?: ShipmentRoute
+  defaultCenter: L.LatLngExpression
+  defaultZoom: number
 }
 
 function getSegmentPosition(segment: FlightSegmentDto, minute: number | null): L.LatLngExpression {
@@ -45,6 +47,8 @@ export default function useMapSelectionFocus({
   selectedFlightId,
   selectedAirportCode,
   selectedShipmentRoute,
+  defaultCenter,
+  defaultZoom,
 }: UseMapSelectionFocusParams) {
   const lastFocusKeyRef = useRef<string | null>(null)
 
@@ -67,7 +71,12 @@ export default function useMapSelectionFocus({
   useEffect(() => {
     const map = mapRef.current
     if (!focusKey) {
+      const hadFocus = lastFocusKeyRef.current !== null
       lastFocusKeyRef.current = null
+
+      if (hadFocus && map) {
+        map.flyTo(defaultCenter, defaultZoom, { duration: 0.6 })
+      }
       return
     }
     if (!map) {
@@ -156,5 +165,7 @@ export default function useMapSelectionFocus({
     selectedAirportCode,
     selectedFlightId,
     selectedShipmentRoute,
+    defaultCenter,
+    defaultZoom,
   ])
 }

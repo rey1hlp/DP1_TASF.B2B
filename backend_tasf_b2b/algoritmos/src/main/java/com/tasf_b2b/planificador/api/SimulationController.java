@@ -73,4 +73,16 @@ public class SimulationController {
         java.util.List<String> codigos = stream.limit(100).toList();
         return ResponseEntity.ok(codigos);
     }
+
+    @GetMapping("/{simId}/flights/{flightId}/shipments")
+    public ResponseEntity<java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> listarEnviosPorVuelo(
+            @PathVariable String simId,
+            @PathVariable Long flightId) {
+        java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> result =
+                simulationService.getShipmentsByFlight(simId, flightId);
+        if (result == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(result);
+    }
 }
