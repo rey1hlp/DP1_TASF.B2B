@@ -469,3 +469,19 @@ export async function fetchOccupancyReport(): Promise<FlightOccupancyData[]> {
   }
   return res.json()
 }
+
+export async function getSimulationShipmentsByFlight(
+  simId: string,
+  flightId: number
+): Promise<ShipmentCrudDto[]> {
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/flights/${flightId}/shipments`
+  );
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error('No se encontró el vuelo o la simulación.');
+    }
+    throw new Error('No se pudo obtener el manifiesto de envíos de la simulación.');
+  }
+  return res.json();
+}

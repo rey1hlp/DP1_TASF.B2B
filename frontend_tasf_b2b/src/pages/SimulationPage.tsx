@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react' // ✅ useState importado
-import { useOutletContext } from 'react-router'
+import { useNavigate, useOutletContext } from 'react-router'
 import type { AirportDto } from '../types/sim'
 import { API_BASE, authFetch, fetchAirports, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
@@ -14,6 +14,7 @@ import {
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
 import { resolveSemaphoreColor } from '../utils/semaphore'
+import FlightDetailPage from './FlightDetailPage'
 
 import {
   formatDurationHours,
@@ -70,13 +71,32 @@ async function fetchSimulationShipments(simId: string, minute: number | null): P
 export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([]) // ✅ useState con tipo
   const [error, setError] = useState<string | null>(null)
-  const [selectedFlightId, setSelectedFlightId] = useState<number | null>(null)
-  const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
-  const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>('period')
-  const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
 
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
+  // 💾 UI States inicializados desde sessionStorage para recordar "dónde te quedaste"
+  const [selectedFlightId, setSelectedFlightId] = useState<number | null>(() => {
+    const saved = sessionStorage.getItem('sim_selected_flight')
+    return saved ? Number(saved) : null
+  })
+  const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(() => {
+    return sessionStorage.getItem('sim_selected_airport') || null
+  })
+  const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>(() => {
+    return (sessionStorage.getItem('sim_mode') as 'period' | 'collapse') || 'period'
+  })
+  const [mapFilters, setMapFilters] = useState(() => {
+    const saved = sessionStorage.getItem('sim_map_filters')
+    return saved ? JSON.parse(saved) : DEFAULT_MAP_SEMAPHORE_FILTERS
+  })
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState<boolean>(() => {
+    const saved = sessionStorage.getItem('sim_panel_collapsed')
+    // Si ya existe un registro lo usamos; de lo contrario por defecto empieza en true (cerrado)
+    return saved ? saved === 'true' : true
+  })
+
+  const [fullDetailFlightId, setFullDetailFlightId] = useState<number | null>(null)
+
   const { setTopbarMain } = useOutletContext<AppLayoutContext>()
+  const navigate = useNavigate()
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
@@ -107,6 +127,36 @@ export default function SimulationPage() {
     localCompleted,
     ranges,
   } = simulation
+
+  // 💾 Efectos para guardar de forma reactiva el estado UI de la pantalla en la sesión activa
+  useEffect(() => {
+    sessionStorage.setItem('sim_mode', simulationMode)
+  }, [simulationMode])
+
+  useEffect(() => {
+    sessionStorage.setItem('sim_map_filters', JSON.stringify(mapFilters))
+  }, [mapFilters])
+
+  useEffect(() => {
+    if (selectedFlightId !== null) {
+      sessionStorage.setItem('sim_selected_flight', String(selectedFlightId))
+    } else {
+      sessionStorage.removeItem('sim_selected_flight')
+    }
+  }, [selectedFlightId])
+
+  useEffect(() => {
+    if (selectedAirportCode !== null) {
+      sessionStorage.setItem('sim_selected_airport', selectedAirportCode)
+    } else {
+      sessionStorage.removeItem('sim_selected_airport')
+    }
+  }, [selectedAirportCode])
+
+  useEffect(() => {
+    sessionStorage.setItem('sim_panel_collapsed', String(isPanelCollapsed))
+  }, [isPanelCollapsed])
+
 
   useEffect(() => {
     setTopbarMain(
@@ -164,33 +214,33 @@ export default function SimulationPage() {
       const payload: Parameters<typeof startSimulation>[0] =
         simulationMode === 'collapse'
           ? {
-              envios: enviosKey,
-              inicio: dateOnly,
-              colapsoIncremental: true,
-              bloqueDias: 5,
-              intervaloPlanMs: 600000,
-              maxEnvios: 5000000,
-              poblacion: 50,
-              generaciones: 10,
-              reporte: false,
-              paralelo: true,
-              hilos: 6,
-              estancamiento: 3,
-              speedMinPerSec: 4,
-            }
+            envios: enviosKey,
+            inicio: dateOnly,
+            colapsoIncremental: true,
+            bloqueDias: 5,
+            intervaloPlanMs: 600000,
+            maxEnvios: 5000000,
+            poblacion: 50,
+            generaciones: 10,
+            reporte: false,
+            paralelo: true,
+            hilos: 6,
+            estancamiento: 3,
+            speedMinPerSec: 4,
+          }
           : {
-              envios: enviosKey,
-              inicio: dateOnly,
-              dias,
-              maxEnvios: 5000000,
-              poblacion: 50,
-              generaciones: 10,
-              reporte: false,
-              paralelo: true,
-              hilos: 6,
-              estancamiento: 3,
-              speedMinPerSec: 4,
-            }
+            envios: enviosKey,
+            inicio: dateOnly,
+            dias,
+            maxEnvios: 5000000,
+            poblacion: 50,
+            generaciones: 10,
+            reporte: false,
+            paralelo: true,
+            hilos: 6,
+            estancamiento: 3,
+            speedMinPerSec: 4,
+          }
 
       console.debug('[SimulationPage] startSimulation payload', {
         mode: simulationMode,
@@ -278,8 +328,8 @@ export default function SimulationPage() {
     displayMinuteRaw === null
       ? 0
       : cappedSegments.filter(
-          (seg) => displayMinuteRaw >= seg.salidaMin && displayMinuteRaw <= seg.llegadaMin
-        ).length
+        (seg) => displayMinuteRaw >= seg.salidaMin && displayMinuteRaw <= seg.llegadaMin
+      ).length
 
   // Detectar fin de simulación (local)
   useEffect(() => {
@@ -413,18 +463,18 @@ export default function SimulationPage() {
     const capacityPct = totalCapacity > 0 ? (totalCargo * 100) / totalCapacity : 0
     const avgDurationMin = activeSegments.length
       ? activeSegments.reduce((acc, seg) => acc + Math.max(0, seg.llegadaMin - seg.salidaMin), 0) /
-        activeSegments.length
+      activeSegments.length
       : 0
     const progressPct =
       requestedStartMinute !== null && requestedEndMinute !== null && displayMinute !== null
         ? Math.min(
-            100,
-            Math.max(
-              0,
-              ((displayMinute - requestedStartMinute) * 100) /
-                (requestedEndMinute - requestedStartMinute)
-            )
+          100,
+          Math.max(
+            0,
+            ((displayMinute - requestedStartMinute) * 100) /
+            (requestedEndMinute - requestedStartMinute)
           )
+        )
         : 0
     const activePct = totalSegments > 0 ? (totalActive * 100) / totalSegments : 0
     return {
@@ -512,15 +562,15 @@ export default function SimulationPage() {
   }, [])
 
   const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
-    entityFocusRequestIdRef.current += 1
-    handleMapAirportPreview(codigoOaci)
-    setIsPanelCollapsed(false)
-    setEntityFocusRequest({
-      type: 'airport',
-      id: codigoOaci,
-      requestId: entityFocusRequestIdRef.current,
+    navigate(`/aeropuertos/${codigoOaci}/almacen`, {
+      state: {
+        from: 'simulation',
+        simId,
+        currentMinute: displayMinute,
+        warehouseSnapshot,
+      },
     })
-  }, [handleMapAirportPreview])
+  }, [navigate, simId, displayMinute, warehouseSnapshot])
 
   const handleMapFlightPreview = useCallback((flightId: number | null) => {
     if (flightId === null) {
@@ -543,6 +593,8 @@ export default function SimulationPage() {
       id: flightId,
       requestId: entityFocusRequestIdRef.current,
     })
+
+    setFullDetailFlightId(flightId)
   }, [handleMapFlightPreview])
 
   const handleRangesChange = (newRanges: { greenMax: number; amberMax: number }) => {
@@ -553,26 +605,48 @@ export default function SimulationPage() {
     <>
       {!enviosKey ? (
         <UploadEnvios onUploaded={handleEnviosUploaded} />
+      ) : fullDetailFlightId !== null ? (
+        <FlightDetailPage
+          flightId={fullDetailFlightId}
+          isSimulation={true}
+          simId={simId ?? undefined}
+          simulationData={simulation} // ✅ Corregido: Se usa 'simulation' que es el estado real del archivo
+          simulationFlight={(() => {
+            // Busca el segmento del vuelo seleccionado en la lista de segments (del contexto)
+            const seg = segments.find(s => s.flightId === fullDetailFlightId);
+            if (!seg) return undefined;
+            return {
+              flightId: seg.flightId,
+              origen: seg.origen,
+              destino: seg.destino,
+              capacidad: seg.capacidad,
+              salidaMin: seg.salidaMin,
+              llegadaMin: seg.llegadaMin,
+              ocupacion: seg.carga, // ✅ Extraemos la carga en tiempo real que ya maneja el mapa
+            };
+          })()}
+          onVolver={() => setFullDetailFlightId(null)}
+        />
       ) : (
-    <div className="simulation-page">
-            <section className="toolbar simulation-summary-toolbar">
-              <div className="status">
-                <div className="status-item">
-                  Fecha: <strong>{displayStartDate}</strong>
-                </div>
-                <div className="status-item">
-                  Duración: <strong>{typeof duration === 'number' ? `${duration} días` : duration}</strong>
-                </div>
-                <div className="status-item">
-                  Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
-                </div>
-                <div className="status-item">
-                  Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
-                </div>
+        <div className="simulation-page">
+          <section className="toolbar simulation-summary-toolbar">
+            <div className="status">
+              <div className="status-item">
+                Fecha: <strong>{displayStartDate}</strong>
               </div>
-            </section>
+              <div className="status-item">
+                Duración: <strong>{typeof duration === 'number' ? `${duration} días` : duration}</strong>
+              </div>
+              <div className="status-item">
+                Vuelos activos: <strong>{formatInteger(cappedSegments.length)}</strong>
+              </div>
+              <div className="status-item">
+                Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
+              </div>
+            </div>
+          </section>
 
-            <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
+          <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
             <div className="map-placeholder">
               <MapView
                 airports={mapAirports}
@@ -613,14 +687,14 @@ export default function SimulationPage() {
               airportItems={airportItems}
               selectedAirportCode={selectedAirportCode}
               onSelectAirport={handleSelectAirport}
-                isCollapsed={isPanelCollapsed}
-                onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
-                selectedShipmentRoute={selectedShipmentRoute}
-                onSearchShipment={handleSearchShipment}
-                shipmentSearchError={shipmentSearchError}
-                sampleShipments={sampleShipments}
-                currentMinute={displayMinute}
-                entityFocusRequest={entityFocusRequest}
+              isCollapsed={isPanelCollapsed}
+              onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+              selectedShipmentRoute={selectedShipmentRoute}
+              onSearchShipment={handleSearchShipment}
+              shipmentSearchError={shipmentSearchError}
+              sampleShipments={sampleShipments}
+              currentMinute={displayMinute}
+              entityFocusRequest={entityFocusRequest}
             />
           </section>
         </div>

@@ -363,6 +363,8 @@ export default function MapView({
     selectedFlightId,
     selectedAirportCode,
     selectedShipmentRoute,
+    defaultCenter: DEFAULT_CENTER,
+    defaultZoom: DEFAULT_ZOOM,
   })
 
   useEffect(() => {

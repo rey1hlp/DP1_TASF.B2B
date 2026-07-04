@@ -28,8 +28,10 @@ body {
 .app {
   display: grid;
   grid-template-columns: 260px 1fr;
-  height: 100vh;        /* lock to viewport height */
-  overflow: hidden;     /* clip at the shell level — scroll happens inside .main */
+  height: 100vh;
+  /* lock to viewport height */
+  overflow: hidden;
+  /* clip at the shell level — scroll happens inside .main */
 }
 
 /* ─── Sidebar ───────────────────────────────────────────────────── */
@@ -182,7 +184,7 @@ body {
 .topbar-brand-title {
   font-weight: 800;
   font-size: 1.15rem;
-  
+
   color: #f8fafc;
 }
 
@@ -490,9 +492,12 @@ body {
   flex-direction: column;
   gap: 20px;
   padding: 20px 24px;
-  height: 100%;       /* fill the grid column */
-  overflow-y: auto;   /* scroll happens here, not on the page */
-  min-width: 0;       /* prevents grid blowout */
+  height: 100%;
+  /* fill the grid column */
+  overflow-y: auto;
+  /* scroll happens here, not on the page */
+  min-width: 0;
+  /* prevents grid blowout */
 }
 
 /* ─── Toolbar ───────────────────────────────────────────────────── */
@@ -584,7 +589,7 @@ body {
   align-items: stretch;
   transition: grid-template-columns 0.3s ease, gap 0.3s ease;
 }
- 
+
 .map-area.panel-collapsed {
   grid-template-columns: 1fr 28px;
   gap: 0;
@@ -602,8 +607,10 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 100%;       /* fill the grid cell */
-  min-height: 0;      /* allow shrinking below content size */
+  height: 100%;
+  /* fill the grid cell */
+  min-height: 0;
+  /* allow shrinking below content size */
 }
 
 /* Leaflet needs a concrete height. Since .map-placeholder is now flex,
@@ -735,8 +742,10 @@ body {
   flex-direction: column;
   gap: 16px;
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.12);
-  height: 100%;       /* fill the grid cell */
-  overflow-y: auto;   /* scroll internally if content is taller */
+  height: 100%;
+  /* fill the grid cell */
+  overflow-y: auto;
+  /* scroll internally if content is taller */
   position: relative;
   transition: all 0.3s ease;
 }
@@ -766,11 +775,11 @@ body {
   display: grid;
   place-items: center;
 }
- 
+
 .control-panel:not(.collapsed) .toggle-panel-btn:hover {
   background: #e6edf7;
 }
- 
+
 .control-panel.collapsed .toggle-panel-btn {
   position: static;
   width: 100%;
@@ -784,7 +793,7 @@ body {
   align-items: center;
   justify-content: center;
 }
- 
+
 .control-panel.collapsed .toggle-panel-btn:hover {
   background: #eaf0fb;
 }
@@ -812,7 +821,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-top: 24px; /* Espacio para que el botón no solape el contenido al expandir */
+  margin-top: 24px;
+  /* Espacio para que el botón no solape el contenido al expandir */
 }
 
 .panel-tabs {
@@ -1370,6 +1380,7 @@ body {
   .crud-table {
     overflow-x: auto !important;
   }
+
   .crud-row.flights {
     min-width: 950px !important;
   }
@@ -1781,7 +1792,8 @@ body {
   }
 
   .metric-grid {
-    grid-template-columns: 1fr 1fr; /* keep 2 cols even on small phones */
+    grid-template-columns: 1fr 1fr;
+    /* keep 2 cols even on small phones */
   }
 
   .buttons {
@@ -1861,6 +1873,7 @@ body {
   .crud-table {
     overflow-x: auto;
   }
+
   .crud-row.flights {
     min-width: 950px;
   }
@@ -1903,6 +1916,7 @@ body {
 .btn-day-cancel:hover {
   background-color: #ffe3a4;
 }
+
 .btn-view:hover {
   background-color: #d0e4ff;
   transform: translateY(-1px);
@@ -1914,6 +1928,7 @@ body {
   color: #1f8b4c;
   border: 1px solid #b8e0c7;
 }
+
 .btn-edit:hover {
   background-color: #c8f0d6;
   transform: translateY(-1px);
@@ -1925,6 +1940,7 @@ body {
   color: #d14545;
   border: 1px solid #fbc4c4;
 }
+
 .btn-delete:hover {
   background-color: #ffd4d4;
   transform: translateY(-1px);
@@ -1942,7 +1958,8 @@ body {
 .map-wrapper.is-fullscreen {
   position: fixed !important;
   inset: 0 !important;
-  z-index: 10000 !important; /* Por encima de todo */
+  z-index: 10000 !important;
+  /* Por encima de todo */
   background: #fff;
   padding: 10px;
 }
@@ -1951,17 +1968,18 @@ body {
 .map-reset-view-btn {
   position: absolute;
   right: 15px;
-  z-index: 1001; /* Sobre el mapa de Leaflet */
+  z-index: 1001;
+  /* Sobre el mapa de Leaflet */
   width: 34px;
   height: 34px;
   background: #ffffff;
-  border: 2px solid rgba(0,0,0,0.2);
+  border: 2px solid rgba(0, 0, 0, 0.2);
   border-radius: 4px;
   cursor: pointer;
   display: grid;
   place-items: center;
   font-size: 18px;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
   color: #0f172a;
 }
 
@@ -2161,9 +2179,17 @@ body {
   transition: width 0.15s ease;
 }
 
-.range-summary-green { background: #5a9c3f; }
-.range-summary-amber { background: #d99a2b; }
-.range-summary-red   { background: #c2483f; }
+.range-summary-green {
+  background: #5a9c3f;
+}
+
+.range-summary-amber {
+  background: #d99a2b;
+}
+
+.range-summary-red {
+  background: #c2483f;
+}
 
 .range-summary-scale {
   display: flex;
@@ -2180,10 +2206,229 @@ body {
   flex-shrink: 0;
 }
 
-.range-dot-green { background: #5a9c3f; }
-.range-dot-amber { background: #d99a2b; }
-.range-dot-red   { background: #c2483f; }
+.range-dot-green {
+  background: #5a9c3f;
+}
+
+.range-dot-amber {
+  background: #d99a2b;
+}
+
+.range-dot-red {
+  background: #c2483f;
+}
 
 /* el accent-color tiñe thumb + track-recorrido en navegadores modernos */
-.range-input-green { accent-color: #5a9c3f; }
-.range-input-amber { accent-color: #d99a2b; }
+.range-input-green {
+  accent-color: #5a9c3f;
+}
+
+.range-input-amber {
+  accent-color: #d99a2b;
+}
+
+/*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/
+.live-simulation-dashboard {
+  background: #1e293b;
+  /* Fondo oscuro elegante */
+  color: #f8fafc;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.live-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+.badge-live-pulse {
+  background: #ef4444;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-weight: bold;
+  font-size: 0.85rem;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  margin-right: 12px;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .5;
+  }
+}
+
+.live-simulation-clock {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.operational-status-tag {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.operational-status-tag.estado-verde {
+  background: #065f46;
+  color: #34d399;
+}
+
+.operational-status-tag.estado-ambar {
+  background: #92400e;
+  color: #fbbf24;
+}
+
+.operational-status-tag.estado-rojo {
+  background: #991b1b;
+  color: #f87171;
+}
+
+/* Grid de KPIs */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-label {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kpi-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
+.kpi-value.estado-verde {
+  color: #10b981;
+}
+
+.kpi-value.estado-ambar {
+  color: #f59e0b;
+}
+
+.kpi-value.estado-rojo {
+  color: #ef4444;
+}
+
+.kpi-value.disponible {
+  color: #38bdf8;
+}
+
+.kpi-value.total {
+  color: #e2e8f0;
+}
+
+.kpi-subtext {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+/* Barra de progreso */
+.progress-section {
+  margin-bottom: 24px;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #cbd5e1;
+}
+
+.progress-bar-bg {
+  background: #334155;
+  height: 12px;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.progress-bar-fill.estado-verde {
+  background: #10b981;
+}
+
+.progress-bar-fill.estado-ambar {
+  background: #f59e0b;
+}
+
+.progress-bar-fill.estado-rojo {
+  background: #ef4444;
+}
+
+/* Telemetría */
+.telemetry-panel {
+  background: #0f172a;
+  border-left: 4px solid #3b82f6;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.telemetry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.telemetry-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #3b82f6;
+}
+
+.telemetry-stream-indicator {
+  font-size: 0.75rem;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.sim-code {
+  background: #1e293b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #f472b6;
+}
+
+.telemetry-notice-box {
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px dashed rgba(59, 130, 246, 0.3);
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 12px;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}

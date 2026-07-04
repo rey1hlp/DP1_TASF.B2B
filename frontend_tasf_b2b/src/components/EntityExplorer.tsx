@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
+import type { ShipmentCrudDto } from '../types/sim'
+// 1. Asegúrate de importar la función de simulación desde tu api
+import { getShipmentsByFlight, getSimulationShipmentsByFlight } from '../services/api'
+
+// 2. Importa el hook del contexto de simulación
+import { useSimulationContext } from '../contexts/SimulationContext'
+
 import {
   formatDurationHours,
   formatBags,
@@ -157,6 +164,48 @@ export default function EntityExplorer({
   const [airportQuery, setAirportQuery] = useState("");
   const [shipmentQuery, setShipmentQuery] = useState("");
 
+  const { simulation } = useSimulationContext();
+  const simId = simulation.simId;
+
+  // --- NUEVO CÓDIGO: ESTADOS PARA MALETAS DEL VUELO ---
+  const [flightShipments, setFlightShipments] = useState<ShipmentCrudDto[] | null>(null);
+  const [loadingShipments, setLoadingShipments] = useState(false);
+  const [errorShipments, setErrorShipments] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedFlightId) {
+      setFlightShipments(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingShipments(true);
+    setErrorShipments(null);
+
+    // 2. BIFURCACIÓN INTELIGENTE: 
+    // Si hay un simId activo en el contexto, llama al nuevo endpoint de simulación.
+    // Si no lo hay, usa el endpoint clásico de la base de datos ordinaria.
+    const fetchShipments = simId
+      ? getSimulationShipmentsByFlight(simId, selectedFlightId)
+      : getShipmentsByFlight(selectedFlightId);
+
+    fetchShipments
+      .then((data) => {
+        if (!cancelled) setFlightShipments(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorShipments(err?.message || 'Error al cargar maletas del vuelo');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingShipments(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFlightId, simId]); // 3. ⚠️ Añadimos 'simId' aquí para que reaccione si cambia la simulación
+  // --- FIN CÓDIGO ACTUALIZADO ---
+
   const filteredFlights = useMemo(() => {
     const query = flightQuery.trim().toLowerCase();
     if (!query) return flights;
@@ -288,31 +337,31 @@ export default function EntityExplorer({
                   : null
 
               return (
-              <button
-                key={flight.flightId}
-                className={`flight-item entity-flight-item ${selectedFlightId === flight.flightId ? "active" : ""}`}
-                onClick={() => onSelectFlight(flight.flightId)}
-                style={{ height: `${FLIGHT_ITEM_HEIGHT}px` }}
-              >
-                <div>
-                  <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
-                  <div className="flight-meta">
-                    {`${flight.estado ? `${flight.estado} · ` : ""} ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}
+                <button
+                  key={flight.flightId}
+                  className={`flight-item entity-flight-item ${selectedFlightId === flight.flightId ? "active" : ""}`}
+                  onClick={() => onSelectFlight(flight.flightId)}
+                  style={{ height: `${FLIGHT_ITEM_HEIGHT}px` }}
+                >
+                  <div>
+                    <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
+                    <div className="flight-meta">
+                      {`${flight.estado ? `${flight.estado} · ` : ""} ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}
+                    </div>
+                    <div className="flight-meta">
+                      {cargoLabel ? cargoLabel : ""}
+                    </div>
                   </div>
-                  <div className="flight-meta">
-                    {cargoLabel ? cargoLabel : ""}
-                  </div>
-                </div>
-                {flight.porcentaje !== undefined ? (
-                  <div className="entity-airport-status">
-                    <span>{formatPercent(flight.porcentaje, 0)}</span>
-                    <span
-                      className="warehouse-dot"
-                      style={{ background: flight.color }}
-                    />
-                  </div>
-                ) : null}
-              </button>
+                  {flight.porcentaje !== undefined ? (
+                    <div className="entity-airport-status">
+                      <span>{formatPercent(flight.porcentaje, 0)}</span>
+                      <span
+                        className="warehouse-dot"
+                        style={{ background: flight.color }}
+                      />
+                    </div>
+                  ) : null}
+                </button>
               )
             })}
           </div>
@@ -322,6 +371,54 @@ export default function EntityExplorer({
         {labels?.flightHint ??
           `${formatInteger(filteredFlights.length)} ${labels?.flightHintNoun ?? "vuelos"}`}
       </div>
+      {/* --- NUEVO CÓDIGO: PANEL DE MALETAS --- */}
+      {selectedFlightId && (
+        <div
+          className="flight-list"
+          style={{ maxHeight: "220px", height: "auto", marginTop: "10px" }}
+        >
+          <div
+            style={{
+              padding: "10px",
+              fontSize: "12px",
+              background: "#eaf0fb",
+              borderBottom: "1px solid #d9e4f4",
+            }}
+          >
+            <strong>📦 Maletas del vuelo {selectedFlightId}</strong>
+          </div>
+
+          {loadingShipments && <div style={{ padding: "10px", fontSize: "12px" }}>Cargando maletas...</div>}
+          {errorShipments && <div style={{ padding: "10px", fontSize: "12px", color: "red" }}>{errorShipments}</div>}
+
+          {!loadingShipments && !errorShipments && flightShipments && (
+            flightShipments.length === 0 ? (
+              <div style={{ padding: "10px", fontSize: "12px" }}>No hay maletas registradas en este vuelo.</div>
+            ) : (
+              flightShipments.map((ship) => (
+                <div
+                  key={ship.id}
+                  className="flight-item"
+                  style={{
+                    borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
+                    cursor: "default",
+                    height: "auto",
+                    padding: "8px 12px"
+                  }}
+                >
+                  <div className="flight-label">
+                    Pedido: {ship.codigoPedido}
+                  </div>
+                  <div className="flight-meta">
+                    {ship.origen} → {ship.destino} | {formatBags(ship.cantidad)} maletas
+                  </div>
+                </div>
+              ))
+            )
+          )}
+        </div>
+      )}
+      {/* --- FIN NUEVO CÓDIGO --- */}
     </>
   );
 
@@ -479,26 +576,26 @@ export default function EntityExplorer({
                   : 'Capacidad n/d'
 
               return (
-              <button
-                key={airport.codigoOaci}
-                className={`flight-item entity-airport-item ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
-                onClick={() => onSelectAirport(airport.codigoOaci)}
-                style={{ height: `${AIRPORT_ITEM_HEIGHT}px` }}
-              >
-                <div>
-                  <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
-                  <div className="flight-meta">{`${airport.pais} · ${occupancyLabel}`}</div>
-                </div>
-                {airport.porcentaje !== undefined ? (
-                  <div className="entity-airport-status">
-                    <span>{formatPercent(airport.porcentaje, 0)}</span>
-                    <span
-                      className="warehouse-dot"
-                      style={{ background: airport.color }}
-                    />
+                <button
+                  key={airport.codigoOaci}
+                  className={`flight-item entity-airport-item ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
+                  onClick={() => onSelectAirport(airport.codigoOaci)}
+                  style={{ height: `${AIRPORT_ITEM_HEIGHT}px` }}
+                >
+                  <div>
+                    <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
+                    <div className="flight-meta">{`${airport.pais} · ${occupancyLabel}`}</div>
                   </div>
-                ) : null}
-              </button>
+                  {airport.porcentaje !== undefined ? (
+                    <div className="entity-airport-status">
+                      <span>{formatPercent(airport.porcentaje, 0)}</span>
+                      <span
+                        className="warehouse-dot"
+                        style={{ background: airport.color }}
+                      />
+                    </div>
+                  ) : null}
+                </button>
               )
             })}
           </div>
