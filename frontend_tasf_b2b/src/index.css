@@ -2179,6 +2179,155 @@ body {
   border-color: #2b5fb0;
 }
 
+.entity-toolbar {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d9e4f4;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.entity-sort-field {
+  gap: 6px;
+}
+
+.entity-filter-panel {
+  margin-bottom: 10px;
+  padding: 12px;
+  border: 1px solid #d9e4f4;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f2f7fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.entity-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.entity-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.entity-filter-grid-airports {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.entity-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #627089;
+}
+
+.entity-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid #c7d6ec;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #1f467c;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 8px 18px rgba(31, 70, 124, 0.08);
+}
+
+.entity-filter-clear:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #9cb6dc;
+  box-shadow: 0 10px 20px rgba(31, 70, 124, 0.12);
+}
+
+.entity-filter-clear:disabled {
+  cursor: not-allowed;
+  color: #8ca0bc;
+  background: #f5f8fc;
+  box-shadow: none;
+}
+
+.entity-toolbar-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #60728d;
+}
+
+.entity-sort-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.entity-sort-direction {
+  min-width: 84px;
+  min-height: 38px;
+  border: 1px solid #c7d6ec;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1f467c;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 12px;
+  box-shadow: 0 8px 18px rgba(31, 70, 124, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.entity-sort-direction:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #9cb6dc;
+  box-shadow: 0 10px 20px rgba(31, 70, 124, 0.12);
+}
+
+.entity-sort-direction:disabled {
+  cursor: not-allowed;
+  color: #8ca0bc;
+  background: #f5f8fc;
+  box-shadow: none;
+}
+
+@media (max-width: 480px) {
+  .entity-filter-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entity-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .entity-filter-grid-airports {
+    grid-template-columns: 1fr;
+  }
+
+  .entity-filter-clear {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .entity-sort-row {
+    grid-template-columns: 1fr;
+  }
+
+  .entity-sort-direction {
+    width: 100%;
+  }
+}
+
 .range-summary-bar {
   display: flex;
   height: 10px;

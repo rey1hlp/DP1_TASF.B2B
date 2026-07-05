@@ -1,6 +1,8 @@
+import { RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
+import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
 import type { ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
 import { getShipmentsByFlight, getSimulationShipmentsByFlight } from '../services/api'
@@ -36,9 +38,12 @@ export type EntityAirportItem = {
   codigoOaci: string
   nombre: string
   pais: string
+  continente?: string
   capacidad?: number
   ocupacion?: number
   porcentaje?: number
+  nextDepartureMin?: number
+  nextArrivalMin?: number
   color?: string
 }
 
@@ -66,6 +71,10 @@ export type EntityExplorerProps = {
   selectedShipmentRoute: EntityShipmentRoute | null
   onSelectFlight: (flightId: number) => void
   onSelectAirport: (codigoOaci: string) => void
+  flightFilters: FlightTextFilters
+  onFlightFiltersChange: (filters: FlightTextFilters) => void
+  airportFilters: AirportTextFilters
+  onAirportFiltersChange: (filters: AirportTextFilters) => void
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   currentMinute: number | null
@@ -90,10 +99,70 @@ export type EntityExplorerProps = {
   shipmentListHeight?: number
 }
 
+type FlightSortKey =
+  | 'default'
+  | 'occupancy'
+  | 'departure'
+  | 'arrival'
+  | 'origin'
+  | 'destination'
+
+type AirportSortKey = 'occupancy' | 'departure' | 'arrival'
+
+type SortDirection = 'asc' | 'desc'
+
 const ITEM_HEIGHT = 44
 const FLIGHT_ITEM_HEIGHT = 56
 const AIRPORT_ITEM_HEIGHT = 56
 const AIRPORT_PREVIEW_LIMIT = 30
+
+const FLIGHT_SORT_DEFAULT_DIRECTION: Record<FlightSortKey, SortDirection> = {
+  default: 'asc',
+  occupancy: 'desc',
+  departure: 'asc',
+  arrival: 'asc',
+  origin: 'asc',
+  destination: 'asc',
+}
+
+const AIRPORT_SORT_DEFAULT_DIRECTION: Record<AirportSortKey, SortDirection> = {
+  occupancy: 'desc',
+  departure: 'asc',
+  arrival: 'asc',
+}
+
+function getFlightOccupancyValue(flight: EntityFlightItem) {
+  if (typeof flight.porcentaje === 'number') return flight.porcentaje
+  if (
+    typeof flight.carga === 'number' &&
+    typeof flight.capacidad === 'number' &&
+    flight.capacidad > 0
+  ) {
+    return (flight.carga * 100) / flight.capacidad
+  }
+
+  return null
+}
+
+function compareNullableNumber(
+  left: number | null | undefined,
+  right: number | null | undefined,
+  direction: SortDirection,
+) {
+  const leftMissing = left === null || left === undefined || Number.isNaN(left)
+  const rightMissing = right === null || right === undefined || Number.isNaN(right)
+
+  if (leftMissing && rightMissing) return 0
+  if (leftMissing) return 1
+  if (rightMissing) return -1
+
+  return direction === 'asc' ? left - right : right - left
+}
+
+function compareText(left: string, right: string, direction: SortDirection) {
+  const result = left.localeCompare(right)
+  return direction === 'asc' ? result : -result
+}
 
 function getShipmentStatusLabel(status?: string | null): string {
   if (!status) return 'Desconocido'
@@ -149,6 +218,10 @@ export default function EntityExplorer({
   selectedShipmentRoute,
   onSelectFlight,
   onSelectAirport,
+  flightFilters,
+  onFlightFiltersChange,
+  airportFilters,
+  onAirportFiltersChange,
   onSearchShipment,
   shipmentSearchError,
   currentMinute,
@@ -160,8 +233,10 @@ export default function EntityExplorer({
   void currentMinute
   void getDynamicShipmentStatus
   const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>("flights");
-  const [flightQuery, setFlightQuery] = useState("");
-  const [airportQuery, setAirportQuery] = useState("");
+  const [flightSortKey, setFlightSortKey] = useState<FlightSortKey>('default')
+  const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
+  const [airportSortKey, setAirportSortKey] = useState<AirportSortKey>('occupancy')
+  const [airportSortDirection, setAirportSortDirection] = useState<SortDirection>('desc')
   const [shipmentQuery, setShipmentQuery] = useState("");
 
   const { simulation } = useSimulationContext();
@@ -207,40 +282,165 @@ export default function EntityExplorer({
   // --- FIN CÓDIGO ACTUALIZADO ---
 
   const filteredFlights = useMemo(() => {
-    const query = flightQuery.trim().toLowerCase();
-    if (!query) return flights;
-    return flights.filter((flight) => {
-      const label =
-        `${flight.flightId} ${flight.origen} ${flight.destino} ${flight.estado ?? ""} ${flight.carga ?? ""} ${flight.capacidad ?? ""}`.toLowerCase();
-      return label.includes(query);
-    });
-  }, [flights, flightQuery]);
+    const codeQuery = flightFilters.codeQuery.trim().toLowerCase()
+    const originQuery = flightFilters.originQuery.trim().toLowerCase()
+    const destinationQuery = flightFilters.destinationQuery.trim().toLowerCase()
 
-  const airportQueryText = airportQuery.trim().toLowerCase()
+    return flights.filter((flight) => {
+      if (codeQuery && !String(flight.flightId).toLowerCase().includes(codeQuery)) {
+        return false
+      }
+
+      if (originQuery && !flight.origen.toLowerCase().includes(originQuery)) {
+        return false
+      }
+
+      if (destinationQuery && !flight.destino.toLowerCase().includes(destinationQuery)) {
+        return false
+      }
+
+      return true
+    })
+  }, [flightFilters.codeQuery, flightFilters.destinationQuery, flightFilters.originQuery, flights]);
+
+  const orderedFlights = useMemo(() => {
+    if (flightSortKey === 'default') {
+      return filteredFlights
+    }
+
+    return [...filteredFlights].sort((left, right) => {
+      switch (flightSortKey) {
+        case 'occupancy': {
+          const result = compareNullableNumber(
+            getFlightOccupancyValue(left),
+            getFlightOccupancyValue(right),
+            flightSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'departure': {
+          const result = compareNullableNumber(
+            left.salidaMin,
+            right.salidaMin,
+            flightSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'arrival': {
+          const result = compareNullableNumber(
+            left.llegadaMin,
+            right.llegadaMin,
+            flightSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'origin': {
+          const result = compareText(left.origen, right.origen, flightSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        case 'destination': {
+          const result = compareText(left.destino, right.destino, flightSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        default:
+          break
+      }
+
+      return left.flightId - right.flightId
+    })
+  }, [filteredFlights, flightSortDirection, flightSortKey]);
+
+  const airportCodeQuery = airportFilters.codeQuery.trim().toLowerCase()
+  const airportContinentQuery = airportFilters.continentQuery.trim().toLowerCase()
 
   const filteredAirports = useMemo(() => {
-    const query = airportQuery.trim().toLowerCase();
-    const matchesQuery = (airport: EntityAirportItem) => {
-      const label =
-        `${airport.codigoOaci} ${airport.nombre} ${airport.pais}`.toLowerCase()
-      return label.includes(query);
-    }
-    const results = query ? airports.filter(matchesQuery) : airports
-
-    return [...results].sort((a, b) => {
-      const aPercent = a.porcentaje ?? -1
-      const bPercent = b.porcentaje ?? -1
-      if (aPercent !== bPercent) {
-        return bPercent - aPercent
+    return airports.filter((airport) => {
+      if (airportCodeQuery && !airport.codigoOaci.toLowerCase().includes(airportCodeQuery)) {
+        return false
       }
-      return a.codigoOaci.localeCompare(b.codigoOaci)
+
+      if (
+        airportContinentQuery &&
+        (airport.continente ?? '').trim().toLowerCase() !== airportContinentQuery
+      ) {
+        return false
+      }
+
+      return true
     })
-  }, [airports, airportQuery]);
+  }, [airportCodeQuery, airportContinentQuery, airports]);
+
+  const orderedAirports = useMemo(() => {
+    return [...filteredAirports].sort((left, right) => {
+      switch (airportSortKey) {
+        case 'occupancy': {
+          const result = compareNullableNumber(
+            left.porcentaje,
+            right.porcentaje,
+            airportSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'departure': {
+          const result = compareNullableNumber(
+            left.nextDepartureMin,
+            right.nextDepartureMin,
+            airportSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'arrival': {
+          const result = compareNullableNumber(
+            left.nextArrivalMin,
+            right.nextArrivalMin,
+            airportSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+      }
+
+      return left.codigoOaci.localeCompare(right.codigoOaci)
+    })
+  }, [airportSortDirection, airportSortKey, filteredAirports])
 
   const displayedAirports = useMemo(() => {
-    if (airportQueryText) return filteredAirports
-    return filteredAirports.slice(0, AIRPORT_PREVIEW_LIMIT)
-  }, [airportQueryText, filteredAirports])
+    if (airportCodeQuery || airportContinentQuery) return orderedAirports
+    return orderedAirports.slice(0, AIRPORT_PREVIEW_LIMIT)
+  }, [airportCodeQuery, airportContinentQuery, orderedAirports])
+
+  const flightFilterAirportOptions = useMemo(() => {
+    return [...airports].sort((left, right) => {
+      const codeCompare = left.codigoOaci.localeCompare(right.codigoOaci)
+      if (codeCompare !== 0) return codeCompare
+      return left.nombre.localeCompare(right.nombre)
+    })
+  }, [airports])
+
+  const airportContinentOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        airports
+          .map((airport) => (airport.continente ?? '').trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right))
+  }, [airports])
+
+  const selectedAirportContinentValue = useMemo(() => {
+    return (
+      airportContinentOptions.find(
+        (continent) => continent.toLowerCase() === airportContinentQuery,
+      ) ?? ''
+    )
+  }, [airportContinentOptions, airportContinentQuery])
 
   const filteredShipments = useMemo(() => {
     const query = shipmentQuery.trim().toLowerCase();
@@ -250,7 +450,7 @@ export default function EntityExplorer({
     );
   }, [shipments, shipmentQuery]);
 
-  const flightList = useVirtualList(filteredFlights, {
+  const flightList = useVirtualList(orderedFlights, {
     itemHeight: FLIGHT_ITEM_HEIGHT,
     listHeight,
   });
@@ -265,9 +465,41 @@ export default function EntityExplorer({
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
-    const target = filteredFlights[0];
+    const target = orderedFlights[0];
     if (target) onSelectFlight(target.flightId);
   };
+
+  const handleFlightFilterChange = (
+    key: keyof FlightTextFilters,
+    value: string,
+  ) => {
+    onFlightFiltersChange({
+      ...flightFilters,
+      [key]: value.toUpperCase(),
+    })
+  }
+
+  const clearFlightFilters = () => {
+    onFlightFiltersChange({
+      codeQuery: '',
+      originQuery: '',
+      destinationQuery: '',
+    })
+    flightList.setScrollTop(0)
+  }
+
+  const handleFlightSortChange = (value: FlightSortKey) => {
+    setFlightSortKey(value)
+    setFlightSortDirection(FLIGHT_SORT_DEFAULT_DIRECTION[value])
+    flightList.setScrollTop(0)
+  }
+
+  const handleFlightSortDirectionToggle = () => {
+    if (flightSortKey === 'default') return
+
+    setFlightSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    flightList.setScrollTop(0)
+  }
 
   const handleAirportKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
@@ -275,19 +507,65 @@ export default function EntityExplorer({
     if (target) onSelectAirport(target.codigoOaci);
   };
 
+  const handleAirportFilterChange = (
+    key: keyof AirportTextFilters,
+    value: string,
+  ) => {
+    onAirportFiltersChange({
+      ...airportFilters,
+      [key]: key === 'codeQuery' ? value.toUpperCase() : value,
+    })
+  }
+
+  const clearAirportFilters = () => {
+    onAirportFiltersChange({
+      codeQuery: '',
+      continentQuery: '',
+    })
+    airportList.setScrollTop(0)
+  }
+
+  const handleAirportSortChange = (value: AirportSortKey) => {
+    setAirportSortKey(value)
+    setAirportSortDirection(AIRPORT_SORT_DEFAULT_DIRECTION[value])
+    airportList.setScrollTop(0)
+  }
+
+  const handleAirportSortDirectionToggle = () => {
+    setAirportSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    airportList.setScrollTop(0)
+  }
+
+  useEffect(() => {
+    flightList.setScrollTop(0)
+  }, [
+    flightFilters.codeQuery,
+    flightFilters.destinationQuery,
+    flightFilters.originQuery,
+    flightSortDirection,
+    flightSortKey,
+  ])
+
+  useEffect(() => {
+    airportList.setScrollTop(0)
+  }, [
+    airportFilters.codeQuery,
+    airportFilters.continentQuery,
+    airportSortDirection,
+    airportSortKey,
+  ])
+
   useEffect(() => {
     if (!focusRequest) return
 
     if (focusRequest.type === 'airport') {
       setActiveEntityTab('airports')
-      setAirportQuery(String(focusRequest.id))
       airportList.setScrollTop(0)
       return
     }
 
     if (focusRequest.type === 'flight') {
       setActiveEntityTab('flights')
-      setFlightQuery(String(focusRequest.id))
       flightList.setScrollTop(0)
       return
     }
@@ -302,17 +580,98 @@ export default function EntityExplorer({
   const renderFlights = () => (
     <>
       <h3>{labels?.flightTitle ?? "Buscar vuelo en la simulación"}</h3>
-      <label className="field">
-        <input
-          type="text"
-          placeholder={
-            labels?.flightPlaceholder ?? "Buscar por ID, origen o destino"
-          }
-          value={flightQuery}
-          onChange={(event) => setFlightQuery(event.target.value)}
-          onKeyDown={handleFlightKeyDown}
-        />
-      </label>
+      <div className="entity-filter-panel">
+        <div className="entity-filter-header">
+          <span className="entity-toolbar-label">Filtros de vuelos</span>
+          <button
+            type="button"
+            className="entity-filter-clear"
+            onClick={clearFlightFilters}
+            disabled={
+              !flightFilters.codeQuery &&
+              !flightFilters.originQuery &&
+              !flightFilters.destinationQuery
+            }
+            title="Limpiar filtros"
+          >
+            <RotateCcw size={15} />
+            <span>Limpiar</span>
+          </button>
+        </div>
+        <div className="entity-filter-grid">
+          <label className="field">
+            <span className="entity-filter-label">Codigo</span>
+            <input
+              type="text"
+              placeholder={labels?.flightPlaceholder ?? "Ej. 1024"}
+              value={flightFilters.codeQuery}
+              onChange={(event) => handleFlightFilterChange('codeQuery', event.target.value)}
+              onKeyDown={handleFlightKeyDown}
+            />
+          </label>
+          <label className="field">
+            <span className="entity-filter-label">Origen</span>
+            <select
+              value={flightFilters.originQuery}
+              onChange={(event) => handleFlightFilterChange('originQuery', event.target.value)}
+            >
+              <option value="">Todos</option>
+              {flightFilterAirportOptions.map((airport) => (
+                <option key={`origin-${airport.codigoOaci}`} value={airport.codigoOaci}>
+                  {`${airport.codigoOaci} · ${airport.nombre}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="entity-filter-label">Destino</span>
+            <select
+              value={flightFilters.destinationQuery}
+              onChange={(event) => handleFlightFilterChange('destinationQuery', event.target.value)}
+            >
+              <option value="">Todos</option>
+              {flightFilterAirportOptions.map((airport) => (
+                <option key={`destination-${airport.codigoOaci}`} value={airport.codigoOaci}>
+                  {`${airport.codigoOaci} · ${airport.nombre}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="entity-toolbar">
+        <label className="field entity-sort-field">
+          <span className="entity-toolbar-label">Ordenar por</span>
+          <div className="entity-sort-row">
+            <select
+              value={flightSortKey}
+              onChange={(event) => handleFlightSortChange(event.target.value as FlightSortKey)}
+            >
+              <option value="default">Orden actual</option>
+              <option value="occupancy">Nivel de ocupacion</option>
+              <option value="departure">Hora de salida</option>
+              <option value="arrival">Hora de llegada</option>
+              <option value="origin">Origen</option>
+              <option value="destination">Destino</option>
+            </select>
+            <button
+              type="button"
+              className="entity-sort-direction"
+              onClick={handleFlightSortDirectionToggle}
+              disabled={flightSortKey === 'default'}
+              title={
+                flightSortKey === 'default'
+                  ? 'Selecciona un criterio para activar el orden'
+                  : flightSortDirection === 'asc'
+                    ? 'Cambiar a descendente'
+                    : 'Cambiar a ascendente'
+              }
+            >
+              {flightSortDirection === 'asc' ? '↑ Asc.' : '↓ Desc.'}
+            </button>
+          </div>
+        </label>
+      </div>
       <div
         className="flight-list"
         onScroll={(event) =>
@@ -369,7 +728,7 @@ export default function EntityExplorer({
       </div>
       <div className="flight-hint">
         {labels?.flightHint ??
-          `${formatInteger(filteredFlights.length)} ${labels?.flightHintNoun ?? "vuelos"}`}
+          `${formatInteger(orderedFlights.length)} ${labels?.flightHintNoun ?? "vuelos"}`}
       </div>
       {/* --- NUEVO CÓDIGO: PANEL DE MALETAS --- */}
       {selectedFlightId && (
@@ -541,17 +900,76 @@ export default function EntityExplorer({
   const renderAirports = () => (
     <>
       <h3>{labels?.airportTitle ?? "Buscar aeropuerto en la simulación"}</h3>
-      <label className="field">
-        <input
-          type="text"
-          placeholder={
-            labels?.airportPlaceholder ?? "Buscar por OACI, nombre o país"
-          }
-          value={airportQuery}
-          onChange={(event) => setAirportQuery(event.target.value)}
-          onKeyDown={handleAirportKeyDown}
-        />
-      </label>
+      <div className="entity-filter-panel">
+        <div className="entity-filter-header">
+          <span className="entity-toolbar-label">Filtros de almacenes</span>
+          <button
+            type="button"
+            className="entity-filter-clear"
+            onClick={clearAirportFilters}
+            disabled={!airportFilters.codeQuery && !airportFilters.continentQuery}
+            title="Limpiar filtros"
+          >
+            <RotateCcw size={15} />
+            <span>Limpiar</span>
+          </button>
+        </div>
+        <div className="entity-filter-grid entity-filter-grid-airports">
+          <label className="field">
+            <span className="entity-filter-label">Codigo</span>
+            <input
+              type="text"
+              placeholder={labels?.airportPlaceholder ?? 'Ej. LIM'}
+              value={airportFilters.codeQuery}
+              onChange={(event) => handleAirportFilterChange('codeQuery', event.target.value)}
+              onKeyDown={handleAirportKeyDown}
+            />
+          </label>
+          <label className="field">
+            <span className="entity-filter-label">Region continental</span>
+            <select
+              value={selectedAirportContinentValue}
+              onChange={(event) =>
+                handleAirportFilterChange('continentQuery', event.target.value)
+              }
+            >
+              <option value="">Todas</option>
+              {airportContinentOptions.map((continent) => (
+                <option key={continent} value={continent}>
+                  {continent}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="entity-toolbar">
+        <label className="field entity-sort-field">
+          <span className="entity-toolbar-label">Ordenar por</span>
+          <div className="entity-sort-row">
+            <select
+              value={airportSortKey}
+              onChange={(event) => handleAirportSortChange(event.target.value as AirportSortKey)}
+            >
+              <option value="occupancy">Nivel de ocupacion</option>
+              <option value="departure">Proxima salida</option>
+              <option value="arrival">Proxima llegada</option>
+            </select>
+            <button
+              type="button"
+              className="entity-sort-direction"
+              onClick={handleAirportSortDirectionToggle}
+              title={
+                airportSortDirection === 'asc'
+                  ? 'Cambiar a descendente'
+                  : 'Cambiar a ascendente'
+              }
+            >
+              {airportSortDirection === 'asc' ? '↑ Asc.' : '↓ Desc.'}
+            </button>
+          </div>
+        </label>
+      </div>
       <div
         className="flight-list"
         onScroll={(event) =>
@@ -604,7 +1022,7 @@ export default function EntityExplorer({
       <div className="flight-hint">
         {labels?.airportHint ??
           (
-            airportQueryText
+            airportCodeQuery || airportContinentQuery
               ? `${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "almacenes"}`
               : `Mostrando ${formatInteger(displayedAirports.length)} de ${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "almacenes"}`
           )}

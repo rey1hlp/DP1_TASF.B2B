@@ -2,6 +2,7 @@ export type AirportDto = {
   codigoOaci: string
   nombre: string
   pais: string
+  continente?: string
   capacidad: number
   gmt: number
   latitud: number

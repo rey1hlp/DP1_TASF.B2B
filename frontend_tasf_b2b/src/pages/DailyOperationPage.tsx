@@ -9,9 +9,11 @@ import DailyOperationControls, { type RespuestaRutaEnvioDto } from '../component
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import {
+  buildAirportFlightTimings,
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
+import { resolveAirportContinent } from '../utils/continents'
 import { resolveSemaphoreColor } from '../utils/semaphore'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
@@ -584,18 +586,27 @@ export default function DailyOperationPage() {
   }, [upcomingSegments, currentMinute, ranges])
   
   const airportItems = useMemo(() => {
+    const airportFlightTimings = buildAirportFlightTimings(segments, currentMinute)
+
     return airports.map((airport) => ({
       codigoOaci: airport.codigoOaci,
       nombre: airport.nombre,
       pais: airport.pais,
+      continente: resolveAirportContinent(
+        airport.continente,
+        airport.latitud,
+        airport.longitud,
+      ),
       capacidad: warehouseSnapshot[airport.codigoOaci]?.capacidad ?? airport.capacidad,
       ocupacion: warehouseSnapshot[airport.codigoOaci]?.ocupacion,
       porcentaje: warehouseSnapshot[airport.codigoOaci]?.porcentaje,
+      nextDepartureMin: airportFlightTimings[airport.codigoOaci]?.nextDepartureMin,
+      nextArrivalMin: airportFlightTimings[airport.codigoOaci]?.nextArrivalMin,
       color: warehouseSnapshot[airport.codigoOaci]
         ? resolveSemaphoreColor(warehouseSnapshot[airport.codigoOaci].porcentaje, ranges).fill
         : undefined,
     }))
-  }, [airports, warehouseSnapshot, ranges])
+  }, [airports, currentMinute, ranges, segments, warehouseSnapshot])
   
   const lastSyncLabel = formatDateTime(lastSyncAt)
 
@@ -740,6 +751,26 @@ export default function DailyOperationPage() {
           onSearchShipment={handleSearchShipment}
           shipmentSearchError={shipmentSearchError}
           sampleShipments={sampleShipments}
+          flightTextFilters={mapFilters.flights.text}
+          onFlightTextFiltersChange={(filters) =>
+            setMapFilters((current) => ({
+              ...current,
+              flights: {
+                ...current.flights,
+                text: filters,
+              },
+            }))
+          }
+          airportTextFilters={mapFilters.warehouses.text}
+          onAirportTextFiltersChange={(filters) =>
+            setMapFilters((current) => ({
+              ...current,
+              warehouses: {
+                ...current.warehouses,
+                text: filters,
+              },
+            }))
+          }
           currentMinute={currentMinute}
           alerts={alerts}
           isCollapsed={isPanelCollapsed}

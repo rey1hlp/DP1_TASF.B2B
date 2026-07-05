@@ -7,7 +7,7 @@ import {
   formatInteger,
 } from '../utils/time'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
-import type { MapSemaphoreFilters } from '../types/mapFilters'
+import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
@@ -76,6 +76,10 @@ export type DailyOperationControlsProps = {
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   sampleShipments: string[]
+  flightTextFilters: FlightTextFilters
+  onFlightTextFiltersChange: (filters: FlightTextFilters) => void
+  airportTextFilters: AirportTextFilters
+  onAirportTextFiltersChange: (filters: AirportTextFilters) => void
   currentMinute: number | null
   entityFocusRequest?: EntityFocusRequest | null
 }
@@ -106,6 +110,10 @@ export default function DailyOperationControls({
   onSearchShipment,
   shipmentSearchError,
   sampleShipments,
+  flightTextFilters,
+  onFlightTextFiltersChange,
+  airportTextFilters,
+  onAirportTextFiltersChange,
   currentMinute,
   entityFocusRequest,
 }: DailyOperationControlsProps) {
@@ -294,6 +302,10 @@ export default function DailyOperationControls({
           selectedShipmentRoute={selectedShipmentRoute}
           onSelectFlight={onSelectFlight}
           onSelectAirport={onSelectAirport}
+          flightFilters={flightTextFilters}
+          onFlightFiltersChange={onFlightTextFiltersChange}
+          airportFilters={airportTextFilters}
+          onAirportFiltersChange={onAirportTextFiltersChange}
           onSearchShipment={onSearchShipment}
           shipmentSearchError={shipmentSearchError}
           currentMinute={currentMinute}
@@ -303,7 +315,7 @@ export default function DailyOperationControls({
           labels={{
             airportTitle: 'Buscar aeropuerto operativo',
             flightHintNoun: 'vuelos encontrados',
-            flightPlaceholder: 'Buscar por ID, origen, destino o estado',
+            flightPlaceholder: 'Ej. 1024 o patron del vuelo',
             flightTitle: 'Buscar vuelo operativo',
             shipmentEmpty: 'No hay muestras (inicia operación)',
             shipmentIcon: '📢',
