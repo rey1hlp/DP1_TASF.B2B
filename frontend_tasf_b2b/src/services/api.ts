@@ -485,3 +485,24 @@ export async function getSimulationShipmentsByFlight(
   }
   return res.json();
 }
+
+export async function getSimulationShipmentCodes(simId: string): Promise<string[]> {
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/all`
+  )
+  if (!res.ok) {
+    throw new Error('No se pudo obtener el listado completo de envíos de la simulación')
+  }
+  return res.json()
+}
+
+export async function getShipmentByCode(code: string): Promise<ShipmentCrudDto | null> {
+  const params = new URLSearchParams({ page: '0', size: '1', query: code })
+  const res = await authFetch(`${API_BASE}/api/db/shipments?${params.toString()}`)
+  if (!res.ok) {
+    return null
+  }
+  const data = await res.json()
+  const content = Array.isArray(data?.content) ? data.content : []
+  return content.find((shipment: ShipmentCrudDto) => shipment.codigoPedido === code) ?? null
+}

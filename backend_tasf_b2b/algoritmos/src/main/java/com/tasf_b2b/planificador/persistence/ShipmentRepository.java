@@ -17,6 +17,19 @@ public interface ShipmentRepository extends JpaRepository<ShipmentEntity, Long> 
 
     @Query("""
         select s from ShipmentEntity s
+        where upper(s.origen.codigoOaci) = upper(:origen)
+          and upper(s.destino.codigoOaci) = upper(:destino)
+          and s.fecha = :fecha
+        order by s.auditDateIns desc
+        """)
+    List<ShipmentEntity> findByRouteAndFecha(
+        @Param("origen") String origen,
+        @Param("destino") String destino,
+        @Param("fecha") String fecha
+    );
+
+    @Query("""
+        select s from ShipmentEntity s
         where lower(s.codigoPedido) like lower(concat('%', :query, '%'))
            or lower(s.origen.codigoOaci) like lower(concat('%', :query, '%'))
            or lower(s.destino.codigoOaci) like lower(concat('%', :query, '%'))

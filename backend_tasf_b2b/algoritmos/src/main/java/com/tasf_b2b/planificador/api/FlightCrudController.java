@@ -83,6 +83,7 @@ public class FlightCrudController {
         String origenOaci = flight.origen.codigoOaci.trim().toUpperCase();
         String destinoOaci = flight.destino.codigoOaci.trim().toUpperCase();
         int salidaMin = flight.salida.getHour() * 60 + flight.salida.getMinute();
+        String fechaVuelo = flight.salida.toLocalDate().format(DateTimeFormatter.BASIC_ISO_DATE);
 
         // Primary: use the in-memory plan to find exactly which shipments are assigned to this flight
         List<String> codes = dailyPlanningService.getShipmentCodesForFlight(origenOaci, destinoOaci, salidaMin);
@@ -100,6 +101,32 @@ public class FlightCrudController {
                 .collect(java.util.stream.Collectors.toList());
             return ResponseEntity.ok(result);
         }
+
+        log.warn(
+            "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} salidaMin={} fecha={} -> trying db route fallback",
+            id,
+            origenOaci,
+            destinoOaci,
+            salidaMin,
+            fechaVuelo
+        );
+
+        List<ShipmentCrudDto> routeFallback = shipmentRepository.findByRouteAndFecha(origenOaci, destinoOaci, fechaVuelo)
+            .stream()
+            .map(this::shipmentToDto)
+            .collect(java.util.stream.Collectors.toList());
+        if (!routeFallback.isEmpty()) {
+            log.info(
+                "[FLIGHT_CRUD] flight shipments resolved from db route fallback flightId={} origen={} destino={} fecha={} count={}",
+                id,
+                origenOaci,
+                destinoOaci,
+                fechaVuelo,
+                routeFallback.size()
+            );
+            return ResponseEntity.ok(routeFallback);
+        }
+
         log.warn(
             "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} salidaMin={} -> returning empty list",
             id,

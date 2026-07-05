@@ -1991,13 +1991,22 @@ body {
   top: 57px;
 }
 
-.map-time-tab {
+.map-time-tabs {
   position: absolute;
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1001;
-  max-width: min(520px, calc(100% - 136px));
+  max-width: min(820px, calc(100% - 136px));
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.map-time-tab {
+  max-width: min(400px, calc(50vw - 56px));
   padding: 8px 16px;
   border: 1px solid rgba(190, 207, 232, 0.92);
   border-radius: 999px;
@@ -2011,7 +2020,11 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none;
+}
+
+.map-time-tab--secondary {
+  background: rgba(235, 242, 251, 0.98);
+  color: #21436f;
 }
 
 .map-floating-card {

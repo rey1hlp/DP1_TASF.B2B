@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { ComponentProps } from 'react'
-import type { AirportDto, ShipmentCrudDto } from '../types/sim'
-import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports } from '../services/api'
+import type { AirportDto, FlightCrudDto, ShipmentCrudDto } from '../types/sim'
+import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports, listFlights } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls, { type RespuestaRutaEnvioDto } from '../components/DailyOperationControls'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
@@ -14,6 +14,7 @@ import {
 } from '../utils/mapFilters'
 import { resolveSemaphoreColor } from '../utils/semaphore'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
+import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
 
 type MapViewProps = ComponentProps<typeof MapView>
 type MapSegment = MapViewProps['segments'][number]
@@ -138,6 +139,20 @@ function syncSelectedShipmentRoute(
   }
 }
 
+function getLimaDateKey() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? ''
+  const month = parts.find((part) => part.type === 'month')?.value ?? ''
+  const day = parts.find((part) => part.type === 'day')?.value ?? ''
+  return `${year}-${month}-${day}`
+}
+
 async function fetchShipmentFromDb(codigo: string): Promise<ShipmentCrudDto | null> {
   const response = await authFetch(
     `${API_BASE}/api/db/shipments?query=${encodeURIComponent(codigo)}`
@@ -157,6 +172,8 @@ async function fetchShipmentFromDb(codigo: string): Promise<ShipmentCrudDto | nu
 
 export default function DailyOperationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([])
+  const [flightCatalog, setFlightCatalog] = useState<FlightCrudDto[]>([])
+  const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays())
   const [segments, setSegments] = useState<MapSegment[]>([])
   const [warehouseSnapshot, setWarehouseSnapshot] = useState<WarehouseSnapshot>({})
   const [shipmentSummary, setShipmentSummary] = useState<ShipmentSummary | null>(null)
@@ -227,6 +244,16 @@ export default function DailyOperationPage() {
   }
 
   const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
+  const operationDateKey = getLimaDateKey()
+  const cancelledFlightTraces = useMemo(() => {
+    return buildCancelledFlightTraces(
+      flightCatalog,
+      airports,
+      cancelledDays,
+      operationDateKey,
+      false,
+    )
+  }, [airports, cancelledDays, flightCatalog, operationDateKey])
 
   const applySnapshot = useCallback((snapshot: DailyOperationSnapshot) => {
     console.debug('[DailyOperationPage] applySnapshot', snapshot)
@@ -286,6 +313,43 @@ export default function DailyOperationPage() {
     fetchAirports()
       .then(setAirports)
       .catch((err) => setError(err.message))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    listFlights(0, 1000, '')
+      .then((result) => {
+        if (!cancelled) {
+          setFlightCatalog(result.content)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFlightCatalog([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Las trazas canceladas se resuelven a partir del flag `cancelado` y el catálogo ya cargado.
+
+  useEffect(() => {
+    const syncCancelledDays = () => {
+      setCancelledDays(readCancelledFlightDays())
+    }
+
+    syncCancelledDays()
+    window.addEventListener('tasf:cancelled-flight-days-updated', syncCancelledDays)
+    window.addEventListener('storage', syncCancelledDays)
+
+    return () => {
+      window.removeEventListener('tasf:cancelled-flight-days-updated', syncCancelledDays)
+      window.removeEventListener('storage', syncCancelledDays)
+    }
   }, [])
 
   useEffect(() => {
@@ -633,6 +697,7 @@ export default function DailyOperationPage() {
             segments={mapSegments}
             currentMinute={currentMinute}
             timeLabel={`Hora actual: ${formatDateTime(now)}`}
+            cancelledFlightTraces={cancelledFlightTraces}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}
             selectedFlightId={selectedFlightId}

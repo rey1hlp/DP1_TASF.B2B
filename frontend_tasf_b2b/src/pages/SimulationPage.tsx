@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
-import type { AirportDto } from '../types/sim'
-import { API_BASE, authFetch, fetchAirports, startSimulation } from '../services/api'
+import type { AirportDto, FlightCrudDto } from '../types/sim'
+import { API_BASE, authFetch, fetchAirports, listFlights, startSimulation } from '../services/api'
 import MapView from '../components/MapView'
 import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
@@ -15,12 +15,15 @@ import {
 } from '../utils/mapFilters'
 import { resolveSemaphoreColor } from '../utils/semaphore'
 import FlightDetailPage from './FlightDetailPage'
+import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
 
 import {
   formatDurationHours,
   formatClockFromMinute,
   formatCompactDate,
   formatDateFromDayIndex,
+  formatDateTime,
+  formatIsoDateFromDayIndex,
   formatInteger,
   formatBags,
   formatPercent,
@@ -70,6 +73,8 @@ async function fetchSimulationShipments(simId: string, minute: number | null): P
 
 export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([])
+  const [flightCatalog, setFlightCatalog] = useState<FlightCrudDto[]>([])
+  const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays())
   const [error, setError] = useState<string | null>(null)
 
   // 💾 UI States inicializados desde sessionStorage para recordar "dónde te quedaste"
@@ -106,6 +111,7 @@ export default function SimulationPage() {
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
   const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
   const entityFocusRequestIdRef = useRef(0)
+  const [isStartingSimulation, setIsStartingSimulation] = useState(false)
 
   const {
     enviosKey,
@@ -230,12 +236,48 @@ export default function SimulationPage() {
       .catch((err) => setError(err.message))
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    listFlights(0, 1000, '')
+      .then((result) => {
+        if (!cancelled) {
+          setFlightCatalog(result.content)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFlightCatalog([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const syncCancelledDays = () => {
+      setCancelledDays(readCancelledFlightDays())
+    }
+
+    syncCancelledDays()
+    window.addEventListener('tasf:cancelled-flight-days-updated', syncCancelledDays)
+    window.addEventListener('storage', syncCancelledDays)
+
+    return () => {
+      window.removeEventListener('tasf:cancelled-flight-days-updated', syncCancelledDays)
+      window.removeEventListener('storage', syncCancelledDays)
+    }
+  }, [])
+
   const handleEnviosUploaded = (key: string) => {
     setEnviosKey(key)
   }
 
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
     setError(null)
+    setIsStartingSimulation(true)
     setSimulation((prev) => ({
       ...prev,
       requestedStart: inicio,
@@ -248,6 +290,10 @@ export default function SimulationPage() {
     setSampleShipments([])
 
     try {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve())
+      })
+
       if (!enviosKey) {
         throw new Error('Debes cargar los archivos de envios antes de simular.')
       }
@@ -295,6 +341,7 @@ export default function SimulationPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
       setError(msg)
+      setIsStartingSimulation(false)
     }
   }
 
@@ -332,7 +379,7 @@ export default function SimulationPage() {
       ? requestedStartMinute + requestedDays * 1440
       : null
 
-  const isPreparing = (status === 'READY' || status === 'RUNNING') && currentMinute === null
+  const isPreparing = isStartingSimulation || ((status === 'READY' || status === 'RUNNING') && currentMinute === null)
 
   // Calcular offset entre el minuto solicitado y el real
   useEffect(() => {
@@ -392,6 +439,39 @@ export default function SimulationPage() {
   const displayMinute =
     localCompleted && requestedEndMinute !== null ? null : displayMinuteRaw
 
+  const simulatedDateKey =
+    displayMinute === null ? null : formatIsoDateFromDayIndex(Math.floor(displayMinute / 1440))
+
+  const cancelledFlightTraces = useMemo(() => {
+    return buildCancelledFlightTraces(
+      flightCatalog,
+      airports,
+      cancelledDays,
+      simulatedDateKey,
+      true,
+    )
+  }, [airports, cancelledDays, flightCatalog, simulatedDateKey])
+
+  useEffect(() => {
+    console.log('[SimulationPage] cancelled traces', {
+      flightCatalog: flightCatalog.length,
+      cancelledFlights: cancelledDays.length,
+      cancelledFlightTraces: cancelledFlightTraces.length,
+      simulatedDateKey,
+    })
+  }, [cancelledDays, cancelledFlightTraces.length, flightCatalog.length, simulatedDateKey])
+
+  useEffect(() => {
+    if (status === 'FAILED' || status === 'CLOSED') {
+      setIsStartingSimulation(false)
+      return
+    }
+
+    if (status === 'READY' && currentMinute !== null) {
+      setIsStartingSimulation(false)
+    }
+  }, [status, currentMinute])
+
   const duration = simulationMode === 'collapse'
     ? 'Hasta colapso'
     : requestedDays ?? (meta ? getInclusiveDaySpan(meta.inicio, meta.fin) : null)
@@ -406,7 +486,7 @@ export default function SimulationPage() {
 
   const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
 
-  const mapTimeLabel = (() => {
+  const simulatedMapTimeLabel = (() => {
     if (!meta) {
       return 'Esperando simulación...'
     }
@@ -423,7 +503,15 @@ export default function SimulationPage() {
     const minute = displayMinute ?? meta.diaMin * 1440
     const date = formatDateFromDayIndex(Math.floor(minute / 1440))
     const time = formatClockFromMinute(minute)
-    return `${date} - ${time}`
+    return `Fecha simulada: ${date} - ${time}`
+  })()
+
+  const realMapTimeLabel = (() => {
+    if (!meta || preparingMessage || (status === 'READY' && displayMinute === null)) {
+      return null
+    }
+
+    return `Fecha actual: ${formatDateTime(new Date())}`
   })()
 
   const bannerMessage = (() => {
@@ -696,7 +784,9 @@ export default function SimulationPage() {
                 airports={mapAirports}
                 segments={mapSegments}
                 currentMinute={displayMinute}
-                timeLabel={mapTimeLabel}
+                timeLabel={simulatedMapTimeLabel}
+                secondaryTimeLabel={realMapTimeLabel ?? undefined}
+                cancelledFlightTraces={cancelledFlightTraces}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
                 selectedFlightId={selectedFlightId}
@@ -707,7 +797,7 @@ export default function SimulationPage() {
                 onFlightPreview={handleMapFlightPreview}
                 onFlightDetailRequest={handleMapFlightDetailRequest}
               />
-              {isPreparing && <div className="prep-overlay">{preparingMessage}</div>}
+              {isPreparing && <div className="prep-overlay">{preparingMessage ?? 'Calculando simulación...'}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
               {error && <div className="error">{error}</div>}
             </div>

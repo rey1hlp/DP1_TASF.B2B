@@ -9,6 +9,8 @@ type MapFloatingCardProps = {
   actionLabel: string
   badge: string
   metrics: MapFloatingCardMetric[]
+  secondaryActionLabel?: string
+  onSecondaryAction?: () => void
   onAction: () => void
   onClose: () => void
   statusColor: string
@@ -21,6 +23,8 @@ export default function MapFloatingCard({
   actionLabel,
   badge,
   metrics,
+  secondaryActionLabel,
+  onSecondaryAction,
   onAction,
   onClose,
   statusColor,
@@ -61,6 +65,16 @@ export default function MapFloatingCard({
           <span style={{ background: statusColor }} />
           <div>{statusLabel}</div>
         </div>
+
+        {secondaryActionLabel && onSecondaryAction ? (
+          <button
+            type="button"
+            className="map-floating-card-action"
+            onClick={onSecondaryAction}
+          >
+            {secondaryActionLabel}
+          </button>
+        ) : null}
 
         <button
           type="button"

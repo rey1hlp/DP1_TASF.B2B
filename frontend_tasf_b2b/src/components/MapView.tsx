@@ -2,8 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
 import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
-import type { AirportDto, FlightSegmentDto } from '../types/sim'
-import { formatBags, formatInteger, formatMinuteRange, formatPercent } from '../utils/time'
+import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim'
+import {
+  API_BASE,
+  authFetch,
+  getShipmentByCode,
+  getShipmentsByFlight,
+  getSimulationShipmentsByFlight,
+} from '../services/api'
+import { useSimulationContext } from '../contexts/SimulationContext'
+import { formatBags, formatDurationHours, formatInteger, formatMinuteRange, formatPercent } from '../utils/time'
 import {
   NEUTRAL_SEMAPHORE_COLORS,
   resolveSemaphoreColor,
@@ -11,6 +19,10 @@ import {
 } from '../utils/semaphore'
 import MapFloatingCard from './MapFloatingCard'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
+import type { CancelledFlightTrace } from '../utils/cancelledFlightTraces'
+
+type FlightDetailsStage = 'flight' | 'shipments' | 'shipmentDetails'
+
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 
@@ -32,6 +44,8 @@ export type MapViewProps = {
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
   timeLabel?: string
+  secondaryTimeLabel?: string
+  cancelledFlightTraces?: CancelledFlightTrace[]
   onAirportDetailRequest?: (codigoOaci: string) => void
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
@@ -44,6 +58,7 @@ const YOUR_API_KEY = 'cs78LhJcqA5P4sFbhTaG';
 const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/019f2fff-a937-7733-b3ff-b0ebc2406d84/style.json`
 const MAP_PANES = {
   route: 'tasf-route-pane',
+  cancelledRoute: 'tasf-cancelled-route-pane',
   airport: 'tasf-airport-pane',
   plane: 'tasf-plane-pane',
 } as const
@@ -87,6 +102,16 @@ const ALL_FLIGHTS_ROUTE_BASE_STYLE = {
   dashArray: '3, 4',
   pane: MAP_PANES.route,
 } satisfies Omit<L.PolylineOptions, 'color'>
+
+const CANCELLED_ROUTE_STYLE = {
+  weight: 4.5,
+  color: '#dc2626',
+  opacity: 1,
+  dashArray: '10, 8',
+  lineCap: 'round',
+  lineJoin: 'round',
+  pane: MAP_PANES.cancelledRoute,
+} satisfies L.PolylineOptions
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -197,20 +222,30 @@ export default function MapView({
   isPanelCollapsed,
   isToolbarCollapsed,
   timeLabel,
+  secondaryTimeLabel,
+  cancelledFlightTraces,
   onAirportDetailRequest,
   onAirportPreview,
   onFlightDetailRequest,
   onFlightPreview,
 }: MapViewProps) {
+  const { simulation } = useSimulationContext()
+  const simId = simulation.simId
   const mapRef = useRef<L.Map | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [previewAirportCode, setPreviewAirportCode] = useState<string | null>(null)
   const [previewFlightId, setPreviewFlightId] = useState<number | null>(null)
+  const [detailStage, setDetailStage] = useState<FlightDetailsStage>('flight')
+  const [flightShipments, setFlightShipments] = useState<ShipmentCrudDto[]>([])
+  const [flightShipmentsLoading, setFlightShipmentsLoading] = useState(false)
+  const [flightShipmentsError, setFlightShipmentsError] = useState<string | null>(null)
+  const [selectedShipment, setSelectedShipment] = useState<ShipmentCrudDto | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
+  const cancelledRouteLayerRef = useRef<L.LayerGroup | null>(null)
   const ghostLayerRef = useRef<L.LayerGroup | null>(null)
   const planeMarkersRef = useRef<Map<number, L.Marker>>(new Map())
   // 👻 Memoria temporal de vuelos recién aterrizados (para el efecto "fantasma")
@@ -220,6 +255,10 @@ export default function MapView({
   const resizeTimerRef = useRef<number | null>(null)
   const closedPreviewAirportCodeRef = useRef<string | null>(null)
   const closedPreviewFlightIdRef = useRef<number | null>(null)
+  const cancelledFlightIdSet = useMemo(
+    () => new Set((cancelledFlightTraces ?? []).map((trace) => trace.flightId)),
+    [cancelledFlightTraces],
+  )
 
   const previewAirport = useMemo(() => {
     if (previewAirportCode === null) {
@@ -234,6 +273,233 @@ export default function MapView({
     }
     return segments.find((segment) => segment.flightId === previewFlightId) ?? null
   }, [segments, previewFlightId])
+
+  useEffect(() => {
+    setDetailStage('flight')
+    setFlightShipments([])
+    setFlightShipmentsError(null)
+    setSelectedShipment(null)
+    setFlightShipmentsLoading(false)
+  }, [previewFlightId])
+
+  useEffect(() => {
+    if (detailStage !== 'shipments' || previewFlightId === null) {
+      return
+    }
+
+    let cancelled = false
+    const activeFlightId = previewFlight?.flightId ?? previewFlightId
+    type ShipmentRoute = {
+      codigoPedido: string
+      estado: string
+      tiempoTotalHoras: number
+      ruta: Array<{ vueloId: number | string }>
+    }
+
+    const buildFallbackShipments = async () => {
+      if (!simId || !previewFlight) {
+        return []
+      }
+
+      const startMinute = Math.max(0, Math.floor(previewFlight.salidaMin))
+      const endMinute = Math.max(startMinute, Math.floor(previewFlight.llegadaMin))
+      const step = Math.max(15, Math.ceil((endMinute - startMinute) / 8) || 15)
+      const sampleMinutes: number[] = []
+
+      for (let minute = startMinute; minute <= endMinute; minute += step) {
+        sampleMinutes.push(minute)
+      }
+      if (!sampleMinutes.includes(endMinute)) {
+        sampleMinutes.push(endMinute)
+      }
+
+      console.log('[MapView] fallback minute sweep', {
+        flightId: activeFlightId,
+        simId,
+        startMinute,
+        endMinute,
+        step,
+        sampleMinutes,
+      })
+
+      const codeSets = await Promise.all(
+        sampleMinutes.map(async (minute) => {
+          const response = await authFetch(
+            `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments?minute=${minute}`
+          )
+          if (!response.ok) {
+            console.warn('[MapView] fallback minute query failed', {
+              flightId: activeFlightId,
+              simId,
+              minute,
+              status: response.status,
+            })
+            return []
+          }
+
+          const codes = (await response.json()) as string[]
+          console.log('[MapView] fallback minute query', {
+            flightId: activeFlightId,
+            simId,
+            minute,
+            total: codes.length,
+            sample: codes.slice(0, 10),
+          })
+          return codes
+        })
+      )
+
+      const uniqueCodes = Array.from(new Set(codeSets.flat()))
+
+      console.log('[MapView] fallback unique shipment codes', {
+        flightId: activeFlightId,
+        simId,
+        totalCodes: uniqueCodes.length,
+        sample: uniqueCodes.slice(0, 10),
+      })
+
+      const routeResults = await Promise.all(
+        uniqueCodes.map(async (code) => {
+          try {
+            const response = await authFetch(
+              `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/${encodeURIComponent(code)}/route`
+            )
+            if (!response.ok) {
+              return null
+            }
+            return (await response.json()) as ShipmentRoute
+          } catch (error) {
+            console.warn('[MapView] fallback route fetch failed', {
+              flightId: activeFlightId,
+              simId,
+              code,
+              error: error instanceof Error ? error.message : error,
+            })
+            return null
+          }
+        })
+      )
+
+      const matchingCodes = routeResults
+        .filter((route): route is ShipmentRoute => Boolean(route))
+        .filter((route) => route.ruta?.some((step) => Number(step.vueloId) === activeFlightId))
+        .map((route) => route.codigoPedido)
+
+      console.log('[MapView] fallback matching shipment codes', {
+        flightId: activeFlightId,
+        simId,
+        totalMatches: matchingCodes.length,
+        sample: matchingCodes.slice(0, 10),
+      })
+
+      const detailedShipments = await Promise.all(
+        matchingCodes.map(async (code) => {
+          const shipment = await getShipmentByCode(code)
+          return shipment
+        })
+      )
+
+      return detailedShipments.filter((shipment): shipment is ShipmentCrudDto => Boolean(shipment))
+    }
+
+    const loadShipments = async () => {
+      setFlightShipmentsLoading(true)
+      setFlightShipmentsError(null)
+      console.log('[MapView] loading flight shipments', {
+        flightId: activeFlightId,
+        simId,
+        detailStage,
+        source: simId ? 'simulation' : 'database',
+      })
+
+      try {
+        const result = simId
+          ? await getSimulationShipmentsByFlight(simId, activeFlightId)
+          : await getShipmentsByFlight(activeFlightId)
+
+        if (!cancelled) {
+          console.log('[MapView] flight shipments loaded', {
+            flightId: activeFlightId,
+            simId,
+            total: result.length,
+            codes: result.slice(0, 10).map((shipment) => shipment.codigoPedido),
+            source: simId ? 'simulation' : 'database',
+          })
+          setFlightShipments(result)
+
+          if (result.length === 0 && simId) {
+            try {
+              const flightCrudFallback = await getShipmentsByFlight(activeFlightId)
+              if (!cancelled) {
+                console.warn('[MapView] simulation shipments empty, fallback to flight crud', {
+                  flightId: activeFlightId,
+                  simId,
+                  total: flightCrudFallback.length,
+                  codes: flightCrudFallback.slice(0, 10).map((shipment) => shipment.codigoPedido),
+                })
+                if (flightCrudFallback.length > 0) {
+                  setFlightShipments(flightCrudFallback)
+                  return
+                }
+              }
+            } catch (flightCrudFallbackError) {
+              if (!cancelled) {
+                console.warn('[MapView] flight crud fallback failed', {
+                  flightId: activeFlightId,
+                  simId,
+                  error: flightCrudFallbackError instanceof Error ? flightCrudFallbackError.message : flightCrudFallbackError,
+                })
+              }
+            }
+
+            try {
+              const fallbackResult = await buildFallbackShipments()
+              if (!cancelled) {
+                console.warn('[MapView] simulation shipments empty, fallback to database', {
+                  flightId: activeFlightId,
+                  simId,
+                  total: fallbackResult.length,
+                  codes: fallbackResult.slice(0, 10).map((shipment) => shipment.codigoPedido),
+                })
+                setFlightShipments(fallbackResult)
+              }
+            } catch (fallbackError) {
+              if (!cancelled) {
+                console.warn('[MapView] fallback shipment fetch failed', {
+                  flightId: activeFlightId,
+                  simId,
+                  error: fallbackError instanceof Error ? fallbackError.message : fallbackError,
+                })
+              }
+            }
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[MapView] flight shipments fetch failed', {
+            flightId: activeFlightId,
+            simId,
+            detailStage,
+            error: error instanceof Error ? error.message : error,
+          })
+          setFlightShipments([])
+          setFlightShipmentsError(
+            error instanceof Error ? error.message : 'No se pudo cargar los envíos del vuelo',
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setFlightShipmentsLoading(false)
+        }
+      }
+    }
+
+    void loadShipments()
+
+    return () => {
+      cancelled = true
+    }
+  }, [detailStage, previewFlightId, previewFlight?.flightId, simId])
 
   const invalidateMapSize = () => {
     if (!mapRef.current) {
@@ -262,6 +528,45 @@ export default function MapView({
     mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: true })
   }
 
+  const closePreviewFlight = () => {
+    closedPreviewFlightIdRef.current = previewFlightId
+    setPreviewFlightId(null)
+    setDetailStage('flight')
+    setFlightShipments([])
+    setFlightShipmentsError(null)
+    setSelectedShipment(null)
+    setFlightShipmentsLoading(false)
+    onFlightPreview?.(null)
+  }
+
+  const openShipmentsStage = () => {
+    if (previewFlightId === null) {
+      return
+    }
+
+    console.log('[MapView] open shipments stage', {
+      flightId: previewFlightId,
+      simId,
+    })
+    setDetailStage('shipments')
+  }
+
+  const goBackToFlightCard = () => {
+    setDetailStage('flight')
+    setSelectedShipment(null)
+    setFlightShipmentsError(null)
+  }
+
+  const openShipmentDetails = (shipment: ShipmentCrudDto) => {
+    setSelectedShipment(shipment)
+    setDetailStage('shipmentDetails')
+  }
+
+  const goBackToShipmentsList = () => {
+    setDetailStage('shipments')
+    setSelectedShipment(null)
+  }
+
   useEffect(() => {
     if (mapRef.current || !containerRef.current) {
       return
@@ -273,10 +578,12 @@ export default function MapView({
     }).setView(DEFAULT_CENTER, DEFAULT_ZOOM)
 
     const routePane = map.createPane(MAP_PANES.route)
+    const cancelledRoutePane = map.createPane(MAP_PANES.cancelledRoute)
     const airportPane = map.createPane(MAP_PANES.airport)
     const planePane = map.createPane(MAP_PANES.plane)
 
     routePane.style.zIndex = '420'
+    cancelledRoutePane.style.zIndex = '430'
     airportPane.style.zIndex = '520'
     planePane.style.zIndex = '620'
 
@@ -306,6 +613,7 @@ export default function MapView({
     airportLayerRef.current = L.layerGroup().addTo(map)
     planeLayerRef.current = L.layerGroup().addTo(map)
     routeLayerRef.current = L.layerGroup().addTo(map)
+    cancelledRouteLayerRef.current = L.layerGroup().addTo(map)
     ghostLayerRef.current = L.layerGroup().addTo(map)
 
     mapRef.current = map
@@ -496,6 +804,10 @@ export default function MapView({
     )
 
     activeSegments.forEach((seg) => {
+      if (cancelledFlightIdSet.has(seg.flightId)) {
+        return
+      }
+
       nextActiveIds.add(seg.flightId)
       const total = Math.max(1, seg.llegadaMin - seg.salidaMin)
       const progress = Math.min(1, Math.max(0, (currentMinute - seg.salidaMin) / total))
@@ -572,7 +884,7 @@ export default function MapView({
         planeMarkersRef.current.delete(flightId)
       }
     })
-  }, [segments, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId])
+  }, [segments, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId, cancelledFlightIdSet])
 
   useEffect(() => {
     const layer = routeLayerRef.current
@@ -680,6 +992,37 @@ export default function MapView({
     }
   }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute, ranges])
 
+  useEffect(() => {
+    const layer = cancelledRouteLayerRef.current
+    if (!layer) {
+      return
+    }
+
+    layer.clearLayers()
+
+    if (currentMinute === null || cancelledFlightIdSet.size === 0) {
+      return
+    }
+
+    (cancelledFlightTraces ?? []).forEach((trace) => {
+      if (!cancelledFlightIdSet.has(trace.flightId)) {
+        return
+      }
+
+      if (currentMinute < trace.salidaMin || currentMinute > trace.llegadaMin) {
+        return
+      }
+
+      L.polyline(
+        [
+          [trace.origenLat, trace.origenLon],
+          [trace.destinoLat, trace.destinoLon],
+        ],
+        CANCELLED_ROUTE_STYLE
+      ).addTo(layer)
+    })
+  }, [cancelledFlightTraces, currentMinute, cancelledFlightIdSet])
+
   // 👻 Efecto "fantasma": detecta vuelos que desaparecieron de `segments` porque ya
   // aterrizaron (currentMinute superó su llegadaMin) y los guarda en memoria temporal
   // para poder seguir dibujando su ruta unos segundos más mientras se desvanece.
@@ -763,10 +1106,17 @@ export default function MapView({
       >
         <RotateCcw size={17} />
       </button>
-      {timeLabel ? <div className="map-time-tab">{timeLabel}</div> : null}
-      {previewFlight ? (
+      {timeLabel || secondaryTimeLabel ? (
+        <div className="map-time-tabs" aria-label="Fechas de simulación">
+          {timeLabel ? <div className="map-time-tab">{timeLabel}</div> : null}
+          {secondaryTimeLabel ? <div className="map-time-tab map-time-tab--secondary">{secondaryTimeLabel}</div> : null}
+        </div>
+      ) : null}
+      {previewFlight && detailStage === 'flight' ? (
         <MapFloatingCard
           actionLabel="Ver detalle completo"
+          secondaryActionLabel="Ver envíos"
+          onSecondaryAction={openShipmentsStage}
           badge={`Vuelo ${previewFlight.flightId}`}
           metrics={[
             {
@@ -781,10 +1131,7 @@ export default function MapView({
             },
           ]}
           onAction={() => onFlightDetailRequest?.(previewFlight.flightId)}
-          onClose={() => {
-            closedPreviewFlightIdRef.current = previewFlight.flightId
-            setPreviewFlightId(null)
-          }}
+          onClose={closePreviewFlight}
           statusColor={resolveSemaphoreColor(
             getFlightLoadPercent(previewFlight),
             ranges
@@ -796,6 +1143,175 @@ export default function MapView({
           subtitle={formatMinuteRange(previewFlight.salidaMin, previewFlight.llegadaMin)}
           title={`${previewFlight.origen} → ${previewFlight.destino}`}
         />
+      ) : previewFlight && detailStage === 'shipments' ? (
+        <div className="map-floating-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
+          <div className="map-floating-card-header">
+            <div className="map-floating-card-title">
+              <span className="map-floating-card-badge">Vuelo {previewFlight.flightId}</span>
+              <strong>Envíos asignados</strong>
+            </div>
+            <button
+              type="button"
+              className="map-floating-card-close"
+              onClick={closePreviewFlight}
+              aria-label="Cerrar detalle"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="map-floating-card-body">
+            <div className="map-floating-card-subtitle">
+              {previewFlight.origen} → {previewFlight.destino}
+            </div>
+
+            <button type="button" className="btn ghost" onClick={goBackToFlightCard}>
+              ← Volver
+            </button>
+
+            {flightShipmentsLoading ? (
+              <div className="crud-empty">Cargando envíos del vuelo...</div>
+            ) : null}
+
+            {flightShipmentsError ? (
+              <div className="crud-error" style={{ margin: 0 }}>
+                {flightShipmentsError}
+              </div>
+            ) : null}
+
+            {!flightShipmentsLoading && !flightShipmentsError && flightShipments.length === 0 ? (
+              <div className="crud-empty">No hay envíos asignados a este vuelo.</div>
+            ) : null}
+
+            {!flightShipmentsLoading && !flightShipmentsError ? (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {flightShipments.map((shipment) => {
+                  const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
+
+                  return (
+                    <div
+                      key={shipment.id ?? shipment.codigoPedido}
+                      style={{
+                        display: 'grid',
+                        gap: '10px',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: '1px solid #d9e4f4',
+                        background: '#f8fbff',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, color: '#10213a' }}>{shipment.codigoPedido}</div>
+                          <div style={{ fontSize: '12px', color: '#52647d' }}>
+                            {shipment.origen} → {shipment.destino}
+                          </div>
+                        </div>
+                        <span className={`status-badge ${statusClass}`}>
+                          {shipment.status ?? 'PENDING'}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                          gap: '8px',
+                        }}
+                      >
+                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                          <strong style={{ fontSize: '18px' }}>{formatBags(shipment.cantidad)}</strong>
+                          <span>Maletas</span>
+                        </div>
+                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                          <strong style={{ fontSize: '18px' }}>
+                            {formatDurationHours(shipment.slaHoras, 0)}
+                          </strong>
+                          <span>SLA</span>
+                        </div>
+                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                          <strong style={{ fontSize: '18px' }}>{shipment.asignado ? 'Sí' : 'No'}</strong>
+                          <span>Asignado</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="map-floating-card-action"
+                        onClick={() => openShipmentDetails(shipment)}
+                        style={{ minHeight: '40px', fontSize: '14px' }}
+                      >
+                        Ver maletas
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : previewFlight && detailStage === 'shipmentDetails' ? (
+        <div className="map-floating-card" style={{ width: 'min(420px, calc(100% - 32px))' }}>
+          <div className="map-floating-card-header">
+            <div className="map-floating-card-title">
+              <span className="map-floating-card-badge">Maletas</span>
+              <strong>{selectedShipment?.codigoPedido ?? `Vuelo ${previewFlight.flightId}`}</strong>
+            </div>
+            <button
+              type="button"
+              className="map-floating-card-close"
+              onClick={closePreviewFlight}
+              aria-label="Cerrar detalle"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="map-floating-card-body">
+            <div className="map-floating-card-subtitle">
+              {previewFlight.origen} → {previewFlight.destino}
+            </div>
+
+            <button type="button" className="btn ghost" onClick={goBackToShipmentsList}>
+              ← Volver
+            </button>
+
+            {selectedShipment ? (
+              <>
+                <div className="map-floating-card-metrics" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  <div className="map-floating-card-metric">
+                    <strong>{formatBags(selectedShipment.cantidad)}</strong>
+                    <span>Número de maletas</span>
+                  </div>
+                  <div className="map-floating-card-metric">
+                    <strong>{selectedShipment.idCliente || '--'}</strong>
+                    <span>Cliente</span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '8px',
+                    border: '1px solid #d9e4f4',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    background: '#f8fbff',
+                    fontSize: '13px',
+                    color: '#334155',
+                  }}
+                >
+                  <div><strong>Origen:</strong> {selectedShipment.origen}</div>
+                  <div><strong>Destino:</strong> {selectedShipment.destino}</div>
+                  <div><strong>Estado:</strong> {selectedShipment.status ?? 'PENDING'}</div>
+                  <div><strong>SLA:</strong> {formatDurationHours(selectedShipment.slaHoras, 0)}</div>
+                </div>
+              </>
+            ) : (
+              <div className="crud-empty">Selecciona un envío para ver sus maletas.</div>
+            )}
+          </div>
+        </div>
       ) : previewAirport ? (
         <MapFloatingCard
           actionLabel="Ver detalle completo"

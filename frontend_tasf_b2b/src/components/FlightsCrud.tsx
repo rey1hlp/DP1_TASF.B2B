@@ -4,6 +4,7 @@ import { cancelFlightDay, createFlight, deleteFlight, listAirports, listFlights,
 import type { AirportCrudDto } from '../types/sim'
 import { useSimulationContext } from '../contexts/SimulationContext'
 import { formatDateTime, formatFileSize, formatInteger, formatIsoDateFromDayIndex } from '../utils/time'
+import { appendCancelledFlightDay } from '../utils/cancelledFlightTraces'
 
 interface FlightsCrudProps {
   onViewDetail: (id: number) => void;
@@ -168,6 +169,15 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
     }
   }
 
+  const getMinuteOfDay = (value: string) => {
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return null
+    }
+
+    return parsed.getHours() * 60 + parsed.getMinutes() + parsed.getSeconds() / 60
+  }
+
   const handleCancelDay = async (id?: number) => {
     if (!id) return
     setDayCancelLoadingId(id)
@@ -176,13 +186,52 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       const simulationActive = status === 'READY' || status === 'RUNNING' || status === 'PAUSED'
       const simulatedContext = simulationActive ? getSimulatedCancelContext() : null
       const fecha = simulatedContext?.contextDate ?? getLimaDate()
-      console.debug('[FlightsCrud] cancel day', {
+      let airportCatalog = airports
+
+      if (airportCatalog.length === 0) {
+        const airportResult = await listAirports(0, 1000, '')
+        airportCatalog = airportResult.content
+        setAirports(airportCatalog)
+        setAirportsLoaded(true)
+      }
+
+      const flight = items.find((item) => item.id === id) ?? allItems.find((item) => item.id === id)
+      const origin = flight ? airportCatalog.find((airport) => airport.codigoOaci.toUpperCase() === flight.origenOaci.toUpperCase()) : null
+      const destination = flight ? airportCatalog.find((airport) => airport.codigoOaci.toUpperCase() === flight.destinoOaci.toUpperCase()) : null
+      const salidaMin = flight ? getMinuteOfDay(flight.salida) : null
+      const llegadaMin = flight ? getMinuteOfDay(flight.llegada) : null
+
+      console.log('[FlightsCrud] cancel day', {
         flightId: id,
         fecha,
         simulationActive,
         simulatedContext,
       })
       await cancelFlightDay(id, fecha, simulatedContext ?? undefined)
+      appendCancelledFlightDay({
+        flightId: id,
+        fecha,
+        origen: flight?.origenOaci,
+        destino: flight?.destinoOaci,
+        origenLat: origin?.latitud,
+        origenLon: origin?.longitud,
+        destinoLat: destination?.latitud,
+        destinoLon: destination?.longitud,
+        salidaMin: salidaMin ?? undefined,
+        llegadaMin: llegadaMin ?? undefined,
+      })
+      console.log('[FlightsCrud] cancelled day stored', {
+        flightId: id,
+        fecha,
+        origen: flight?.origenOaci,
+        destino: flight?.destinoOaci,
+        origenLat: origin?.latitud,
+        origenLon: origin?.longitud,
+        destinoLat: destination?.latitud,
+        destinoLon: destination?.longitud,
+        salidaMin,
+        llegadaMin,
+      })
       await load()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo cancelar el vuelo para el dia'

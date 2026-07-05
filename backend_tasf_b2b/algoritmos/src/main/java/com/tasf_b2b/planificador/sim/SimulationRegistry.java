@@ -402,6 +402,17 @@ public class SimulationRegistry {
             rutas.putAll(extra.rutasPorPaquete);
         }
 
+        java.util.Map<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> envios = new java.util.LinkedHashMap<>();
+        if (base.enviosPorCodigo != null) {
+            envios.putAll(base.enviosPorCodigo);
+        }
+        if (extra.enviosPorCodigo != null) {
+            envios.putAll(extra.enviosPorCodigo);
+        }
+
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> enviosPorVuelo =
+            mergeShipmentsByFlight(base.enviosPorVuelo, extra.enviosPorVuelo);
+
         int diaMin = Math.min(base.diaMin, extra.diaMin);
         int diaMax = Math.max(base.diaMax, extra.diaMax);
         int diasExtra = Math.max(base.diasExtra, extra.diasExtra);
@@ -419,8 +430,48 @@ public class SimulationRegistry {
             base.speedMinPerSec > 0 ? base.speedMinPerSec : extra.speedMinPerSec,
             vuelos,
             almacenes,
-            rutas
+            rutas,
+            envios,
+            enviosPorVuelo
         );
+    }
+
+    private java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> mergeShipmentsByFlight(
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> base,
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> extra
+    ) {
+        java.util.Map<Integer, java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> merged =
+            new java.util.LinkedHashMap<>();
+        mergeShipmentsByFlightInto(merged, base);
+        mergeShipmentsByFlightInto(merged, extra);
+
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> result =
+            new java.util.LinkedHashMap<>();
+        for (java.util.Map.Entry<Integer, java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> entry : merged.entrySet()) {
+            result.put(entry.getKey(), new java.util.ArrayList<>(entry.getValue().values()));
+        }
+        return result;
+    }
+
+    private void mergeShipmentsByFlightInto(
+        java.util.Map<Integer, java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> target,
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> source
+    ) {
+        if (source == null) {
+            return;
+        }
+        for (java.util.Map.Entry<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> entry : source.entrySet()) {
+            java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> bucket =
+                target.computeIfAbsent(entry.getKey(), k -> new java.util.LinkedHashMap<>());
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (com.tasf_b2b.planificador.api.dto.ShipmentCrudDto dto : entry.getValue()) {
+                if (dto != null && dto.codigoPedido != null) {
+                    bucket.putIfAbsent(dto.codigoPedido, dto);
+                }
+            }
+        }
     }
 
     private java.util.List<WarehouseStatusDto> mergeWarehouses(

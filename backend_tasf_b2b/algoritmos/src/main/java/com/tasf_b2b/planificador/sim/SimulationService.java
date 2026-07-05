@@ -1,6 +1,7 @@
 package com.tasf_b2b.planificador.sim;
 
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
+import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
 import com.tasf_b2b.planificador.api.dto.WarehouseEventDto;
 import com.tasf_b2b.planificador.api.dto.WarehouseStatusDto;
 import com.tasf_b2b.planificador.api.dto.PasoRutaDto;
@@ -80,36 +81,184 @@ public class SimulationService {
         this.cancellationRepository = cancellationRepository;
         this.shipmentRepository = shipmentRepository;
     }
-
+    
     public java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> getShipmentsByFlight(
         String simId, Long flightId) {
 
         SimulationState state = registry.get(simId);  // usa 'registry', no 'simulationRegistry'
         if (state == null || state.data == null || state.data.rutasPorPaquete == null) {
+            log.warn(
+                "[SIM:{}][SHIPMENTS_BY_FLIGHT] state missing or incomplete flightId={} hasData={} hasRoutes={}",
+                simId,
+                flightId,
+                state != null && state.data != null,
+                state != null && state.data != null && state.data.rutasPorPaquete != null
+            );
             return null;
         }
 
-        // 1. Filtrar en memoria los codigoPedido que pasan por este flightId
+        // Localizar el segmento del vuelo seleccionado por su flightId interno para obtener su
+        // horario ESTABLE: origen, destino, salidaMin y llegadaMin (minutos absolutos desde epoch).
+        // Ese horario identifica al vuelo de forma consistente entre chunks; el índice interno
+        // flightId/vueloId se reinicia por cada bloque incremental y puede colisionar al fusionarse.
+        FlightSegmentDto segmento = null;
+        if (state.data.vuelos != null) {
+            segmento = state.data.vuelos.stream()
+                .filter(seg -> seg != null && seg.flightId == flightId.intValue())
+                .findFirst()
+                .orElse(null);
+        }
+        final FlightSegmentDto segmentoRef = segmento;
+
+        log.info(
+            "[SIM:{}][SHIPMENTS_BY_FLIGHT] start flightId={} routes={} envios={} segmento={}",
+            simId,
+            flightId,
+            state.data.rutasPorPaquete.size(),
+            state.data.enviosPorCodigo != null ? state.data.enviosPorCodigo.size() : -1,
+            segmentoRef != null
+                ? (segmentoRef.origen + "->" + segmentoRef.destino
+                    + " [" + segmentoRef.salidaMin + "," + segmentoRef.llegadaMin + "]")
+                : "null"
+        );
+
+        // 1. Filtrar los codigoPedido cuya ruta pasa por este vuelo.
+        //    Si conocemos el horario del segmento, casamos por horario estable
+        //    (origen+destino+salidaMin+llegadaMin); si no, caemos al índice interno como respaldo.
         java.util.List<String> codes = new java.util.ArrayList<>();
         for (java.util.Map.Entry<String, RespuestaRutaEnvioDto> entry
                 : state.data.rutasPorPaquete.entrySet()) {
             RespuestaRutaEnvioDto ruta = entry.getValue();
             if (ruta == null || ruta.ruta == null) continue;
-            boolean perteneceAlVuelo = ruta.ruta.stream()
-                    .anyMatch(paso -> paso.vueloId == flightId.intValue());
+            boolean perteneceAlVuelo = ruta.ruta.stream().anyMatch(paso -> {
+                if (paso == null) return false;
+                if (segmentoRef != null) {
+                    return segmentoRef.origen != null
+                        && segmentoRef.destino != null
+                        && segmentoRef.origen.equalsIgnoreCase(paso.origen)
+                        && segmentoRef.destino.equalsIgnoreCase(paso.destino)
+                        && paso.salidaMin == segmentoRef.salidaMin
+                        && paso.llegadaMin == segmentoRef.llegadaMin;
+                }
+                return paso.vueloId == flightId.intValue();
+            });
             if (perteneceAlVuelo) {
                 codes.add(entry.getKey());
             }
         }
 
+        log.info(
+            "[SIM:{}][SHIPMENTS_BY_FLIGHT] matched codes flightId={} total={} sample={}",
+            simId,
+            flightId,
+            codes.size(),
+            codes.stream().limit(10).toList()
+        );
+
         if (codes.isEmpty()) {
+            log.warn("[SIM:{}][SHIPMENTS_BY_FLIGHT] no route codes matched flightId={}", simId, flightId);
+
+            // === DIAGNÓSTICO TEMPORAL ===
+            if (segmentoRef != null) {
+                int indexMatchCount = 0;
+                int sameOdCount = 0;
+                java.util.List<String> sameOdSamples = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, RespuestaRutaEnvioDto> entry : state.data.rutasPorPaquete.entrySet()) {
+                    RespuestaRutaEnvioDto ruta = entry.getValue();
+                    if (ruta == null || ruta.ruta == null) continue;
+                    for (PasoRutaDto paso : ruta.ruta) {
+                        if (paso == null) continue;
+                        if (paso.vueloId == flightId.intValue()) indexMatchCount++;
+                        boolean sameOd = segmentoRef.origen != null && segmentoRef.destino != null
+                            && segmentoRef.origen.equalsIgnoreCase(paso.origen)
+                            && segmentoRef.destino.equalsIgnoreCase(paso.destino);
+                        if (sameOd) {
+                            sameOdCount++;
+                            if (sameOdSamples.size() < 15) {
+                                sameOdSamples.add(entry.getKey() + " vId=" + paso.vueloId
+                                    + " sal=" + paso.salidaMin + " lleg=" + paso.llegadaMin);
+                            }
+                        }
+                    }
+                }
+                log.warn(
+                    "[SIM:{}][SHIPMENTS_BY_FLIGHT][DIAG] flightId={} seg={}->{} segSal={} segLleg={} | indexMatchCount={} sameOdPasos={} sameOdSamples={}",
+                    simId, flightId, segmentoRef.origen, segmentoRef.destino,
+                    segmentoRef.salidaMin, segmentoRef.llegadaMin,
+                    indexMatchCount, sameOdCount, sameOdSamples
+                );
+                long segsConMismoOd = state.data.vuelos == null ? 0 : state.data.vuelos.stream()
+                    .filter(s -> s != null && segmentoRef.origen != null && segmentoRef.destino != null
+                        && segmentoRef.origen.equalsIgnoreCase(s.origen)
+                        && segmentoRef.destino.equalsIgnoreCase(s.destino))
+                    .count();
+                log.warn(
+                    "[SIM:{}][SHIPMENTS_BY_FLIGHT][DIAG] segmentos con mismo O/D en vuelos={} (total vuelos={})",
+                    simId, segsConMismoOd, state.data.vuelos == null ? 0 : state.data.vuelos.size()
+                );
+
+                // ¿Cuántos SEGMENTOS comparten este mismo flightId interno? (colisión de índice entre chunks)
+                java.util.List<String> colisiones = new java.util.ArrayList<>();
+                if (state.data.vuelos != null) {
+                    for (FlightSegmentDto s : state.data.vuelos) {
+                        if (s != null && s.flightId == flightId.intValue()) {
+                            colisiones.add(s.origen + "->" + s.destino
+                                + " planId=" + s.planId + " sal=" + s.salidaMin
+                                + " lleg=" + s.llegadaMin + " carga=" + s.carga);
+                        }
+                    }
+                }
+                log.warn(
+                    "[SIM:{}][SHIPMENTS_BY_FLIGHT][DIAG] segmentos con flightId={} -> count={} detalle={}",
+                    simId, flightId, colisiones.size(), colisiones
+                );
+            }
+            // === FIN DIAGNÓSTICO ===
+
             return java.util.Collections.emptyList();
         }
 
-        // 2. Cruzar contra la BD para obtener todos los campos del ShipmentEntity
-        return shipmentRepository.findByCodigoPedidoIn(codes).stream()
+        // 2. Mapear los códigos a DTOs desde el índice en memoria (envíos de la simulación).
+        java.util.List<ShipmentCrudDto> inMemory = new java.util.ArrayList<>();
+        if (state.data.enviosPorCodigo != null && !state.data.enviosPorCodigo.isEmpty()) {
+            for (String code : codes) {
+                ShipmentCrudDto dto = state.data.enviosPorCodigo.get(code);
+                if (dto != null) {
+                    inMemory.add(dto);
+                }
+            }
+        }
+
+        if (!inMemory.isEmpty()) {
+            log.info(
+                "[SIM:{}][SHIPMENTS_BY_FLIGHT] in-memory shipments flightId={} total={} sample={}",
+                simId,
+                flightId,
+                inMemory.size(),
+                inMemory.stream().limit(10).map(s -> s.codigoPedido).toList()
+            );
+            return inMemory;
+        }
+
+        // 3. Último recurso: cruzar los códigos ya emparejados contra la BD.
+        log.warn(
+            "[SIM:{}][SHIPMENTS_BY_FLIGHT] in-memory shipments empty, fallback to DB flightId={} codes={}",
+            simId,
+            flightId,
+            codes
+        );
+        java.util.List<ShipmentCrudDto> fromDb = shipmentRepository.findByCodigoPedidoIn(codes).stream()
                 .map(this::toShipmentDto)
                 .collect(java.util.stream.Collectors.toList());
+
+        log.info(
+            "[SIM:{}][SHIPMENTS_BY_FLIGHT] db fallback result flightId={} total={} sample={}",
+            simId,
+            flightId,
+            fromDb.size(),
+            fromDb.stream().limit(10).map(s -> s.codigoPedido).toList()
+        );
+        return fromDb;
     }
 
     private com.tasf_b2b.planificador.api.dto.ShipmentCrudDto toShipmentDto(
@@ -132,6 +281,56 @@ public class SimulationService {
         dto.status       = entity.status;
         dto.auditDateIns = entity.auditDateIns;
         return dto;
+    }
+
+    private ShipmentCrudDto toShipmentDto(com.tasf_b2b.planificador.dominio.Envio envio) {
+        ShipmentCrudDto dto = new ShipmentCrudDto();
+        dto.codigoPedido = envio.idPedido;
+        dto.origen = envio.origen;
+        dto.destino = envio.destino;
+        dto.fecha = envio.fecha;
+        dto.gmtOffset = envio.gmtOffset;
+        dto.cantidad = envio.cantidad;
+        dto.idCliente = envio.idCliente;
+        dto.slaHoras = envio.slaHoras;
+        dto.status = envio.status;
+        return dto;
+    }
+
+    private java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> buildShipmentsByFlight(
+        java.util.Map<String, RespuestaRutaEnvioDto> rutasPorPaquete,
+        java.util.Map<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> enviosPorCodigo
+    ) {
+        java.util.Map<Integer, java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> grouped =
+            new java.util.LinkedHashMap<>();
+
+        if (rutasPorPaquete == null || rutasPorPaquete.isEmpty() || enviosPorCodigo == null || enviosPorCodigo.isEmpty()) {
+            return new java.util.LinkedHashMap<>();
+        }
+
+        for (java.util.Map.Entry<String, RespuestaRutaEnvioDto> entry : rutasPorPaquete.entrySet()) {
+            String codigo = entry.getKey();
+            RespuestaRutaEnvioDto ruta = entry.getValue();
+            ShipmentCrudDto dto = enviosPorCodigo.get(codigo);
+            if (ruta == null || ruta.ruta == null || dto == null) {
+                continue;
+            }
+            for (PasoRutaDto paso : ruta.ruta) {
+                if (paso == null) {
+                    continue;
+                }
+                java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> bucket =
+                    grouped.computeIfAbsent(paso.vueloId, k -> new java.util.LinkedHashMap<>());
+                bucket.putIfAbsent(codigo, dto);
+            }
+        }
+
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> result =
+            new java.util.LinkedHashMap<>();
+        for (java.util.Map.Entry<Integer, java.util.LinkedHashMap<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> entry : grouped.entrySet()) {
+            result.put(entry.getKey(), new java.util.ArrayList<>(entry.getValue().values()));
+        }
+        return result;
     }
 
 
@@ -1122,6 +1321,25 @@ public class SimulationService {
                 ? request.speedMinPerSec
                 : DEFAULT_SPEED_MIN_PER_SEC;
     
+        java.util.Map<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> enviosPorCodigo =
+            envios.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    e -> e.idPedido,
+                    this::toShipmentDto,
+                    (left, right) -> left,
+                    java.util.LinkedHashMap::new
+                ));
+
+        java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> enviosPorVuelo =
+            buildShipmentsByFlight(rutasPorPaquete, enviosPorCodigo);
+
+        log.info(
+            "[SIM][BUILD] shipments index built enviosPorCodigo={} enviosPorVuelo={} routes={}",
+            enviosPorCodigo.size(),
+            enviosPorVuelo.size(),
+            rutasPorPaquete != null ? rutasPorPaquete.size() : 0
+        );
+
         return new SimulationData(
             inicioFinal,
             finFinal,
@@ -1133,7 +1351,9 @@ public class SimulationService {
             speed,
             segmentos,
             almacenes,
-            rutasPorPaquete
+            rutasPorPaquete,
+            enviosPorCodigo,
+            enviosPorVuelo
         );
     }
 }
