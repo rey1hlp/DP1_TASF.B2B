@@ -90,10 +90,62 @@ export type EntityExplorerProps = {
   shipmentListHeight?: number
 }
 
+type FlightSortKey =
+  | 'default'
+  | 'occupancy'
+  | 'departure'
+  | 'arrival'
+  | 'origin'
+  | 'destination'
+
+type SortDirection = 'asc' | 'desc'
+
 const ITEM_HEIGHT = 44
 const FLIGHT_ITEM_HEIGHT = 56
 const AIRPORT_ITEM_HEIGHT = 56
 const AIRPORT_PREVIEW_LIMIT = 30
+
+const FLIGHT_SORT_DEFAULT_DIRECTION: Record<FlightSortKey, SortDirection> = {
+  default: 'asc',
+  occupancy: 'desc',
+  departure: 'asc',
+  arrival: 'asc',
+  origin: 'asc',
+  destination: 'asc',
+}
+
+function getFlightOccupancyValue(flight: EntityFlightItem) {
+  if (typeof flight.porcentaje === 'number') return flight.porcentaje
+  if (
+    typeof flight.carga === 'number' &&
+    typeof flight.capacidad === 'number' &&
+    flight.capacidad > 0
+  ) {
+    return (flight.carga * 100) / flight.capacidad
+  }
+
+  return null
+}
+
+function compareNullableNumber(
+  left: number | null | undefined,
+  right: number | null | undefined,
+  direction: SortDirection,
+) {
+  const leftMissing = left === null || left === undefined || Number.isNaN(left)
+  const rightMissing = right === null || right === undefined || Number.isNaN(right)
+
+  if (leftMissing && rightMissing) return 0
+  if (leftMissing) return 1
+  if (rightMissing) return -1
+
+  return direction === 'asc' ? left - right : right - left
+}
+
+function compareText(left: string, right: string, direction: SortDirection) {
+  const result = left.localeCompare(right)
+  return direction === 'asc' ? result : -result
+}
 
 function getShipmentStatusLabel(status?: string | null): string {
   if (!status) return 'Desconocido'
@@ -161,6 +213,8 @@ export default function EntityExplorer({
   void getDynamicShipmentStatus
   const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>("flights");
   const [flightQuery, setFlightQuery] = useState("");
+  const [flightSortKey, setFlightSortKey] = useState<FlightSortKey>('default')
+  const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
   const [airportQuery, setAirportQuery] = useState("");
   const [shipmentQuery, setShipmentQuery] = useState("");
 
@@ -216,6 +270,58 @@ export default function EntityExplorer({
     });
   }, [flights, flightQuery]);
 
+  const orderedFlights = useMemo(() => {
+    if (flightSortKey === 'default') {
+      return filteredFlights
+    }
+
+    return [...filteredFlights].sort((left, right) => {
+      switch (flightSortKey) {
+        case 'occupancy': {
+          const result = compareNullableNumber(
+            getFlightOccupancyValue(left),
+            getFlightOccupancyValue(right),
+            flightSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'departure': {
+          const result = compareNullableNumber(
+            left.salidaMin,
+            right.salidaMin,
+            flightSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'arrival': {
+          const result = compareNullableNumber(
+            left.llegadaMin,
+            right.llegadaMin,
+            flightSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'origin': {
+          const result = compareText(left.origen, right.origen, flightSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        case 'destination': {
+          const result = compareText(left.destino, right.destino, flightSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        default:
+          break
+      }
+
+      return left.flightId - right.flightId
+    })
+  }, [filteredFlights, flightSortDirection, flightSortKey]);
+
   const airportQueryText = airportQuery.trim().toLowerCase()
 
   const filteredAirports = useMemo(() => {
@@ -250,7 +356,7 @@ export default function EntityExplorer({
     );
   }, [shipments, shipmentQuery]);
 
-  const flightList = useVirtualList(filteredFlights, {
+  const flightList = useVirtualList(orderedFlights, {
     itemHeight: FLIGHT_ITEM_HEIGHT,
     listHeight,
   });
@@ -265,15 +371,32 @@ export default function EntityExplorer({
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
-    const target = filteredFlights[0];
+    const target = orderedFlights[0];
     if (target) onSelectFlight(target.flightId);
   };
+
+  const handleFlightSortChange = (value: FlightSortKey) => {
+    setFlightSortKey(value)
+    setFlightSortDirection(FLIGHT_SORT_DEFAULT_DIRECTION[value])
+    flightList.setScrollTop(0)
+  }
+
+  const handleFlightSortDirectionToggle = () => {
+    if (flightSortKey === 'default') return
+
+    setFlightSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    flightList.setScrollTop(0)
+  }
 
   const handleAirportKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     const target = displayedAirports[0];
     if (target) onSelectAirport(target.codigoOaci);
   };
+
+  useEffect(() => {
+    flightList.setScrollTop(0)
+  }, [flightQuery, flightSortDirection, flightSortKey])
 
   useEffect(() => {
     if (!focusRequest) return
@@ -313,6 +436,39 @@ export default function EntityExplorer({
           onKeyDown={handleFlightKeyDown}
         />
       </label>
+      <div className="entity-toolbar">
+        <label className="field entity-sort-field">
+          <span className="entity-toolbar-label">Ordenar por</span>
+          <div className="entity-sort-row">
+            <select
+              value={flightSortKey}
+              onChange={(event) => handleFlightSortChange(event.target.value as FlightSortKey)}
+            >
+              <option value="default">Orden actual</option>
+              <option value="occupancy">Nivel de ocupacion</option>
+              <option value="departure">Hora de salida</option>
+              <option value="arrival">Hora de llegada</option>
+              <option value="origin">Origen</option>
+              <option value="destination">Destino</option>
+            </select>
+            <button
+              type="button"
+              className="entity-sort-direction"
+              onClick={handleFlightSortDirectionToggle}
+              disabled={flightSortKey === 'default'}
+              title={
+                flightSortKey === 'default'
+                  ? 'Selecciona un criterio para activar el orden'
+                  : flightSortDirection === 'asc'
+                    ? 'Cambiar a descendente'
+                    : 'Cambiar a ascendente'
+              }
+            >
+              {flightSortDirection === 'asc' ? '↑ Asc.' : '↓ Desc.'}
+            </button>
+          </div>
+        </label>
+      </div>
       <div
         className="flight-list"
         onScroll={(event) =>
@@ -369,7 +525,7 @@ export default function EntityExplorer({
       </div>
       <div className="flight-hint">
         {labels?.flightHint ??
-          `${formatInteger(filteredFlights.length)} ${labels?.flightHintNoun ?? "vuelos"}`}
+          `${formatInteger(orderedFlights.length)} ${labels?.flightHintNoun ?? "vuelos"}`}
       </div>
       {/* --- NUEVO CÓDIGO: PANEL DE MALETAS --- */}
       {selectedFlightId && (
