@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
-import type { FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
+import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
@@ -50,6 +50,8 @@ export type SimulationControlsProps = {
   sampleShipments: string[]
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
+  airportTextFilters: AirportTextFilters
+  onAirportTextFiltersChange: (filters: AirportTextFilters) => void
   currentMinute: number | null
   entityFocusRequest?: EntityFocusRequest | null
 }
@@ -81,6 +83,8 @@ export default function SimulationControls({
   sampleShipments,
   flightTextFilters,
   onFlightTextFiltersChange,
+  airportTextFilters,
+  onAirportTextFiltersChange,
   currentMinute,
   entityFocusRequest,
 }: SimulationControlsProps) {
@@ -217,6 +221,8 @@ export default function SimulationControls({
               onSelectAirport={onSelectAirport}
               flightFilters={flightTextFilters}
               onFlightFiltersChange={onFlightTextFiltersChange}
+              airportFilters={airportTextFilters}
+              onAirportFiltersChange={onAirportTextFiltersChange}
               onSearchShipment={onSearchShipment}
               shipmentSearchError={shipmentSearchError}
               currentMinute={currentMinute}

@@ -2,7 +2,7 @@ import { RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
-import type { FlightTextFilters } from '../types/mapFilters'
+import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
 import type { ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
 import { getShipmentsByFlight, getSimulationShipmentsByFlight } from '../services/api'
@@ -38,6 +38,7 @@ export type EntityAirportItem = {
   codigoOaci: string
   nombre: string
   pais: string
+  continente?: string
   capacidad?: number
   ocupacion?: number
   porcentaje?: number
@@ -72,6 +73,8 @@ export type EntityExplorerProps = {
   onSelectAirport: (codigoOaci: string) => void
   flightFilters: FlightTextFilters
   onFlightFiltersChange: (filters: FlightTextFilters) => void
+  airportFilters: AirportTextFilters
+  onAirportFiltersChange: (filters: AirportTextFilters) => void
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   currentMinute: number | null
@@ -217,6 +220,8 @@ export default function EntityExplorer({
   onSelectAirport,
   flightFilters,
   onFlightFiltersChange,
+  airportFilters,
+  onAirportFiltersChange,
   onSearchShipment,
   shipmentSearchError,
   currentMinute,
@@ -232,7 +237,6 @@ export default function EntityExplorer({
   const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
   const [airportSortKey, setAirportSortKey] = useState<AirportSortKey>('occupancy')
   const [airportSortDirection, setAirportSortDirection] = useState<SortDirection>('desc')
-  const [airportQuery, setAirportQuery] = useState("");
   const [shipmentQuery, setShipmentQuery] = useState("");
 
   const { simulation } = useSimulationContext();
@@ -351,17 +355,25 @@ export default function EntityExplorer({
     })
   }, [filteredFlights, flightSortDirection, flightSortKey]);
 
-  const airportQueryText = airportQuery.trim().toLowerCase()
+  const airportCodeQuery = airportFilters.codeQuery.trim().toLowerCase()
+  const airportContinentQuery = airportFilters.continentQuery.trim().toLowerCase()
 
   const filteredAirports = useMemo(() => {
-    const query = airportQuery.trim().toLowerCase();
-    const matchesQuery = (airport: EntityAirportItem) => {
-      const label =
-        `${airport.codigoOaci} ${airport.nombre} ${airport.pais}`.toLowerCase()
-      return label.includes(query);
-    }
-    return query ? airports.filter(matchesQuery) : airports
-  }, [airports, airportQuery]);
+    return airports.filter((airport) => {
+      if (airportCodeQuery && !airport.codigoOaci.toLowerCase().includes(airportCodeQuery)) {
+        return false
+      }
+
+      if (
+        airportContinentQuery &&
+        (airport.continente ?? '').trim().toLowerCase() !== airportContinentQuery
+      ) {
+        return false
+      }
+
+      return true
+    })
+  }, [airportCodeQuery, airportContinentQuery, airports]);
 
   const orderedAirports = useMemo(() => {
     return [...filteredAirports].sort((left, right) => {
@@ -400,9 +412,9 @@ export default function EntityExplorer({
   }, [airportSortDirection, airportSortKey, filteredAirports])
 
   const displayedAirports = useMemo(() => {
-    if (airportQueryText) return orderedAirports
+    if (airportCodeQuery || airportContinentQuery) return orderedAirports
     return orderedAirports.slice(0, AIRPORT_PREVIEW_LIMIT)
-  }, [airportQueryText, orderedAirports])
+  }, [airportCodeQuery, airportContinentQuery, orderedAirports])
 
   const flightFilterAirportOptions = useMemo(() => {
     return [...airports].sort((left, right) => {
@@ -411,6 +423,24 @@ export default function EntityExplorer({
       return left.nombre.localeCompare(right.nombre)
     })
   }, [airports])
+
+  const airportContinentOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        airports
+          .map((airport) => (airport.continente ?? '').trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right))
+  }, [airports])
+
+  const selectedAirportContinentValue = useMemo(() => {
+    return (
+      airportContinentOptions.find(
+        (continent) => continent.toLowerCase() === airportContinentQuery,
+      ) ?? ''
+    )
+  }, [airportContinentOptions, airportContinentQuery])
 
   const filteredShipments = useMemo(() => {
     const query = shipmentQuery.trim().toLowerCase();
@@ -477,6 +507,24 @@ export default function EntityExplorer({
     if (target) onSelectAirport(target.codigoOaci);
   };
 
+  const handleAirportFilterChange = (
+    key: keyof AirportTextFilters,
+    value: string,
+  ) => {
+    onAirportFiltersChange({
+      ...airportFilters,
+      [key]: key === 'codeQuery' ? value.toUpperCase() : value,
+    })
+  }
+
+  const clearAirportFilters = () => {
+    onAirportFiltersChange({
+      codeQuery: '',
+      continentQuery: '',
+    })
+    airportList.setScrollTop(0)
+  }
+
   const handleAirportSortChange = (value: AirportSortKey) => {
     setAirportSortKey(value)
     setAirportSortDirection(AIRPORT_SORT_DEFAULT_DIRECTION[value])
@@ -500,14 +548,18 @@ export default function EntityExplorer({
 
   useEffect(() => {
     airportList.setScrollTop(0)
-  }, [airportQuery, airportSortDirection, airportSortKey])
+  }, [
+    airportFilters.codeQuery,
+    airportFilters.continentQuery,
+    airportSortDirection,
+    airportSortKey,
+  ])
 
   useEffect(() => {
     if (!focusRequest) return
 
     if (focusRequest.type === 'airport') {
       setActiveEntityTab('airports')
-      setAirportQuery(String(focusRequest.id))
       airportList.setScrollTop(0)
       return
     }
@@ -848,17 +900,49 @@ export default function EntityExplorer({
   const renderAirports = () => (
     <>
       <h3>{labels?.airportTitle ?? "Buscar aeropuerto en la simulación"}</h3>
-      <label className="field">
-        <input
-          type="text"
-          placeholder={
-            labels?.airportPlaceholder ?? "Buscar por OACI, nombre o país"
-          }
-          value={airportQuery}
-          onChange={(event) => setAirportQuery(event.target.value)}
-          onKeyDown={handleAirportKeyDown}
-        />
-      </label>
+      <div className="entity-filter-panel">
+        <div className="entity-filter-header">
+          <span className="entity-toolbar-label">Filtros de almacenes</span>
+          <button
+            type="button"
+            className="entity-filter-clear"
+            onClick={clearAirportFilters}
+            disabled={!airportFilters.codeQuery && !airportFilters.continentQuery}
+            title="Limpiar filtros"
+          >
+            <RotateCcw size={15} />
+            <span>Limpiar</span>
+          </button>
+        </div>
+        <div className="entity-filter-grid entity-filter-grid-airports">
+          <label className="field">
+            <span className="entity-filter-label">Codigo</span>
+            <input
+              type="text"
+              placeholder={labels?.airportPlaceholder ?? 'Ej. LIM'}
+              value={airportFilters.codeQuery}
+              onChange={(event) => handleAirportFilterChange('codeQuery', event.target.value)}
+              onKeyDown={handleAirportKeyDown}
+            />
+          </label>
+          <label className="field">
+            <span className="entity-filter-label">Region continental</span>
+            <select
+              value={selectedAirportContinentValue}
+              onChange={(event) =>
+                handleAirportFilterChange('continentQuery', event.target.value)
+              }
+            >
+              <option value="">Todas</option>
+              {airportContinentOptions.map((continent) => (
+                <option key={continent} value={continent}>
+                  {continent}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
       <div className="entity-toolbar">
         <label className="field entity-sort-field">
           <span className="entity-toolbar-label">Ordenar por</span>
@@ -938,7 +1022,7 @@ export default function EntityExplorer({
       <div className="flight-hint">
         {labels?.airportHint ??
           (
-            airportQueryText
+            airportCodeQuery || airportContinentQuery
               ? `${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "almacenes"}`
               : `Mostrando ${formatInteger(displayedAirports.length)} de ${formatInteger(filteredAirports.length)} ${labels?.airportHintNoun ?? "almacenes"}`
           )}

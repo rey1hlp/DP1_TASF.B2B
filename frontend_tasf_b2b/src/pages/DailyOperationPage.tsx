@@ -13,6 +13,7 @@ import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
+import { resolveAirportContinent } from '../utils/continents'
 import { resolveSemaphoreColor } from '../utils/semaphore'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
@@ -591,6 +592,11 @@ export default function DailyOperationPage() {
       codigoOaci: airport.codigoOaci,
       nombre: airport.nombre,
       pais: airport.pais,
+      continente: resolveAirportContinent(
+        airport.continente,
+        airport.latitud,
+        airport.longitud,
+      ),
       capacidad: warehouseSnapshot[airport.codigoOaci]?.capacidad ?? airport.capacidad,
       ocupacion: warehouseSnapshot[airport.codigoOaci]?.ocupacion,
       porcentaje: warehouseSnapshot[airport.codigoOaci]?.porcentaje,
@@ -751,6 +757,16 @@ export default function DailyOperationPage() {
               ...current,
               flights: {
                 ...current.flights,
+                text: filters,
+              },
+            }))
+          }
+          airportTextFilters={mapFilters.warehouses.text}
+          onAirportTextFiltersChange={(filters) =>
+            setMapFilters((current) => ({
+              ...current,
+              warehouses: {
+                ...current.warehouses,
                 text: filters,
               },
             }))

@@ -14,6 +14,7 @@ import {
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
+import { resolveAirportContinent } from '../utils/continents'
 import { resolveSemaphoreColor } from '../utils/semaphore'
 import FlightDetailPage from './FlightDetailPage'
 import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
@@ -110,6 +111,10 @@ export default function SimulationPage() {
       warehouses: {
         ...DEFAULT_MAP_SEMAPHORE_FILTERS.warehouses,
         ...parsed?.warehouses,
+        text: {
+          ...DEFAULT_MAP_SEMAPHORE_FILTERS.warehouses.text,
+          ...parsed?.warehouses?.text,
+        },
       },
     }
   })
@@ -674,6 +679,11 @@ export default function SimulationPage() {
         codigoOaci: airport.codigoOaci,
         nombre: airport.nombre,
         pais: airport.pais,
+        continente: resolveAirportContinent(
+          airport.continente,
+          airport.latitud,
+          airport.longitud,
+        ),
         capacidad: snapshot?.capacidad ?? airport.capacidad,
         ocupacion: snapshot?.ocupacion,
         porcentaje: percent,
@@ -858,6 +868,16 @@ export default function SimulationPage() {
                   ...current,
                   flights: {
                     ...current.flights,
+                    text: filters,
+                  },
+                }))
+              }
+              airportTextFilters={mapFilters.warehouses.text}
+              onAirportTextFiltersChange={(filters) =>
+                setMapFilters((current) => ({
+                  ...current,
+                  warehouses: {
+                    ...current.warehouses,
                     text: filters,
                   },
                 }))

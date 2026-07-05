@@ -6,6 +6,11 @@ export type FlightTextFilters = {
   destinationQuery: string
 }
 
+export type AirportTextFilters = {
+  codeQuery: string
+  continentQuery: string
+}
+
 export type MapSemaphoreFilters = {
   flights: {
     semaphore: SemaphoreFilterLevel
@@ -13,6 +18,7 @@ export type MapSemaphoreFilters = {
   }
   warehouses: {
     semaphore: SemaphoreFilterLevel
+    text: AirportTextFilters
   }
 }
 
@@ -22,6 +28,11 @@ export const DEFAULT_FLIGHT_TEXT_FILTERS: FlightTextFilters = {
   destinationQuery: '',
 }
 
+export const DEFAULT_AIRPORT_TEXT_FILTERS: AirportTextFilters = {
+  codeQuery: '',
+  continentQuery: '',
+}
+
 export const DEFAULT_MAP_SEMAPHORE_FILTERS: MapSemaphoreFilters = {
   flights: {
     semaphore: 'all',
@@ -29,5 +40,6 @@ export const DEFAULT_MAP_SEMAPHORE_FILTERS: MapSemaphoreFilters = {
   },
   warehouses: {
     semaphore: 'all',
+    text: DEFAULT_AIRPORT_TEXT_FILTERS,
   },
 }

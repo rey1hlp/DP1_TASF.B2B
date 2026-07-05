@@ -7,7 +7,7 @@ import {
   formatInteger,
 } from '../utils/time'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
-import type { FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
+import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
@@ -78,6 +78,8 @@ export type DailyOperationControlsProps = {
   sampleShipments: string[]
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
+  airportTextFilters: AirportTextFilters
+  onAirportTextFiltersChange: (filters: AirportTextFilters) => void
   currentMinute: number | null
   entityFocusRequest?: EntityFocusRequest | null
 }
@@ -110,6 +112,8 @@ export default function DailyOperationControls({
   sampleShipments,
   flightTextFilters,
   onFlightTextFiltersChange,
+  airportTextFilters,
+  onAirportTextFiltersChange,
   currentMinute,
   entityFocusRequest,
 }: DailyOperationControlsProps) {
@@ -300,6 +304,8 @@ export default function DailyOperationControls({
           onSelectAirport={onSelectAirport}
           flightFilters={flightTextFilters}
           onFlightFiltersChange={onFlightTextFiltersChange}
+          airportFilters={airportTextFilters}
+          onAirportFiltersChange={onAirportTextFiltersChange}
           onSearchShipment={onSearchShipment}
           shipmentSearchError={shipmentSearchError}
           currentMinute={currentMinute}

@@ -1,5 +1,11 @@
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
-import type { FlightTextFilters, MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
+import type {
+  AirportTextFilters,
+  FlightTextFilters,
+  MapSemaphoreFilters,
+  SemaphoreFilterLevel,
+} from '../types/mapFilters'
+import { resolveAirportContinent } from './continents'
 import { resolveSemaphoreLevel, type SemaphoreRanges } from './semaphore'
 
 type WarehouseSnapshot = Record<
@@ -83,6 +89,13 @@ type FlightFilterTarget = {
   destino: string
 }
 
+type AirportFilterTarget = {
+  codigoOaci: string
+  continente?: string
+  latitud?: number
+  longitud?: number
+}
+
 function normalizeFilterValue(value: string) {
   return value.trim().toLowerCase()
 }
@@ -117,6 +130,27 @@ export function filterFlightsByTextFilters<T extends FlightFilterTarget>(
   return flights.filter((flight) => matchesFlightTextFilters(flight, filters))
 }
 
+export function matchesAirportTextFilters(
+  airport: AirportFilterTarget,
+  filters: AirportTextFilters,
+) {
+  const codeQuery = normalizeFilterValue(filters.codeQuery)
+  const continentQuery = normalizeFilterValue(filters.continentQuery)
+  const resolvedContinent = normalizeFilterValue(
+    resolveAirportContinent(airport.continente, airport.latitud, airport.longitud),
+  )
+
+  if (codeQuery && !airport.codigoOaci.toLowerCase().includes(codeQuery)) {
+    return false
+  }
+
+  if (continentQuery && resolvedContinent !== continentQuery) {
+    return false
+  }
+
+  return true
+}
+
 export function isFlightVisibleByMapFilters(
   segment: FlightSegmentDto,
   filters: MapSemaphoreFilters,
@@ -130,13 +164,16 @@ export function isFlightVisibleByMapFilters(
 }
 
 export function isAirportVisibleByMapFilters(
-  airportCode: string,
+  airport: AirportDto,
   warehouseSnapshot: WarehouseSnapshot,
   filters: MapSemaphoreFilters,
   ranges: SemaphoreRanges
 ) {
-  const level = getSemaphoreLevel(warehouseSnapshot[airportCode]?.porcentaje, ranges)
-  return matchesSemaphoreFilter(level, filters.warehouses.semaphore)
+  const level = getSemaphoreLevel(warehouseSnapshot[airport.codigoOaci]?.porcentaje, ranges)
+  return (
+    matchesSemaphoreFilter(level, filters.warehouses.semaphore) &&
+    matchesAirportTextFilters(airport, filters.warehouses.text)
+  )
 }
 
 export function filterFlightSegmentsByMapFilters(
@@ -154,6 +191,6 @@ export function filterAirportsByMapFilters(
   ranges: SemaphoreRanges
 ) {
   return airports.filter((airport) =>
-    isAirportVisibleByMapFilters(airport.codigoOaci, warehouseSnapshot, filters, ranges)
+    isAirportVisibleByMapFilters(airport, warehouseSnapshot, filters, ranges)
   )
 }
