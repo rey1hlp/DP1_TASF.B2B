@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
+import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
 import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
 import { formatBags, formatInteger, formatMinuteRange, formatPercent } from '../utils/time'
@@ -35,6 +36,8 @@ export type MapViewProps = {
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
 const DEFAULT_ZOOM = 2
+const YOUR_API_KEY = 'cs78LhJcqA5P4sFbhTaG';
+const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/019f2fff-a937-7733-b3ff-b0ebc2406d84/style.json`
 const MAP_PANES = {
   route: 'tasf-route-pane',
   airport: 'tasf-airport-pane',
@@ -242,11 +245,28 @@ export default function MapView({
     airportPane.style.zIndex = '520'
     planePane.style.zIndex = '620'
 
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012',
+    new MaptilerLayer({
+      apiKey: YOUR_API_KEY,
+      style: MAPTILER_STYLE_URL,
     }).addTo(map)
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map)
+    const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map)
+    window.setTimeout(() => {
+      const container = zoomControl.getContainer()
+      if (!container) {
+        return
+      }
+      const zoomIn = container.querySelector('.leaflet-control-zoom-in') as HTMLAnchorElement | null
+      const zoomOut = container.querySelector('.leaflet-control-zoom-out') as HTMLAnchorElement | null
+      if (zoomIn) {
+        zoomIn.title = 'Acercar'
+        zoomIn.setAttribute('aria-label', 'Acercar')
+      }
+      if (zoomOut) {
+        zoomOut.title = 'Alejar'
+        zoomOut.setAttribute('aria-label', 'Alejar')
+      }
+    }, 0)
 
     airportLayerRef.current = L.layerGroup().addTo(map)
     planeLayerRef.current = L.layerGroup().addTo(map)
