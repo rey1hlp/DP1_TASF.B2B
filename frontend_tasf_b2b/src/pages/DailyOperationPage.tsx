@@ -9,6 +9,7 @@ import DailyOperationControls, { type RespuestaRutaEnvioDto } from '../component
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import {
+  buildAirportFlightTimings,
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
@@ -584,6 +585,8 @@ export default function DailyOperationPage() {
   }, [upcomingSegments, currentMinute, ranges])
   
   const airportItems = useMemo(() => {
+    const airportFlightTimings = buildAirportFlightTimings(segments, currentMinute)
+
     return airports.map((airport) => ({
       codigoOaci: airport.codigoOaci,
       nombre: airport.nombre,
@@ -591,11 +594,13 @@ export default function DailyOperationPage() {
       capacidad: warehouseSnapshot[airport.codigoOaci]?.capacidad ?? airport.capacidad,
       ocupacion: warehouseSnapshot[airport.codigoOaci]?.ocupacion,
       porcentaje: warehouseSnapshot[airport.codigoOaci]?.porcentaje,
+      nextDepartureMin: airportFlightTimings[airport.codigoOaci]?.nextDepartureMin,
+      nextArrivalMin: airportFlightTimings[airport.codigoOaci]?.nextArrivalMin,
       color: warehouseSnapshot[airport.codigoOaci]
         ? resolveSemaphoreColor(warehouseSnapshot[airport.codigoOaci].porcentaje, ranges).fill
         : undefined,
     }))
-  }, [airports, warehouseSnapshot, ranges])
+  }, [airports, currentMinute, ranges, segments, warehouseSnapshot])
   
   const lastSyncLabel = formatDateTime(lastSyncAt)
 

@@ -10,6 +10,7 @@ import { useSimulationContext } from '../contexts/SimulationContext'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS, type MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import {
+  buildAirportFlightTimings,
   filterAirportsByMapFilters,
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
@@ -664,6 +665,8 @@ export default function SimulationPage() {
   }, [activeSegments, ranges])
 
   const airportItems = useMemo(() => {
+    const airportFlightTimings = buildAirportFlightTimings(cappedSegments, displayMinute)
+
     return airports.map((airport) => {
       const snapshot = warehouseSnapshot[airport.codigoOaci]
       const percent = snapshot?.porcentaje
@@ -674,10 +677,12 @@ export default function SimulationPage() {
         capacidad: snapshot?.capacidad ?? airport.capacidad,
         ocupacion: snapshot?.ocupacion,
         porcentaje: percent,
+        nextDepartureMin: airportFlightTimings[airport.codigoOaci]?.nextDepartureMin,
+        nextArrivalMin: airportFlightTimings[airport.codigoOaci]?.nextArrivalMin,
         color: percent !== undefined ? resolveSemaphoreColor(percent, ranges).fill : undefined,
       }
     })
-  }, [airports, warehouseSnapshot, ranges])
+  }, [airports, cappedSegments, displayMinute, warehouseSnapshot, ranges])
 
   const handleSelectFlight = (flightId: number) => {
     const nextFlightId = selectedFlightId === flightId ? null : flightId

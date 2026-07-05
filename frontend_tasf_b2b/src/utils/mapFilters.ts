@@ -7,6 +7,54 @@ type WarehouseSnapshot = Record<
   { capacidad: number; ocupacion: number; porcentaje: number; libre: number }
 >
 
+type FlightTimingSource = {
+  origen: string
+  destino: string
+  salidaMin: number
+  llegadaMin: number
+}
+
+export function buildAirportFlightTimings<T extends FlightTimingSource>(
+  segments: T[],
+  currentMinute: number | null,
+) {
+  const timings: Record<
+    string,
+    { nextDepartureMin?: number; nextArrivalMin?: number }
+  > = {}
+
+  if (currentMinute === null) {
+    return timings
+  }
+
+  segments.forEach((segment) => {
+    const originCode = segment.origen.toUpperCase()
+    const destinationCode = segment.destino.toUpperCase()
+
+    if (segment.salidaMin >= currentMinute) {
+      const current = timings[originCode]?.nextDepartureMin
+      if (current === undefined || segment.salidaMin < current) {
+        timings[originCode] = {
+          ...timings[originCode],
+          nextDepartureMin: segment.salidaMin,
+        }
+      }
+    }
+
+    if (segment.llegadaMin >= currentMinute) {
+      const current = timings[destinationCode]?.nextArrivalMin
+      if (current === undefined || segment.llegadaMin < current) {
+        timings[destinationCode] = {
+          ...timings[destinationCode],
+          nextArrivalMin: segment.llegadaMin,
+        }
+      }
+    }
+  })
+
+  return timings
+}
+
 export function getSemaphoreLevel(
   percent: number | null | undefined,
   ranges: SemaphoreRanges
