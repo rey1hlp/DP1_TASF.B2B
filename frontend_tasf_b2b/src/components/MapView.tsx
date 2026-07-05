@@ -14,7 +14,11 @@ import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 
-const AIRPORT_PATH = "M2 21h20M3 7l9-4 9 4v14H3V7zm6 14v-7h6v7"
+// Ícono profesional de "Avión Despegando / Aeropuerto"
+const AIRPORT_PATHS = [
+  "M2 22h20",
+  "M6.36 13.4 22 9c.59-.15 1 .37.84.95l-1.35 4.86c-.16.58-.75.96-1.35.88l-5.63-.78-5.32 4.19A1.55 1.55 0 0 1 8 19V14.6L4.35 14a1.6 1.6 0 0 1-1.32-1.85L3.4 9.6a.6.6 0 0 1 1.08-.2l2.36 3.1z"
+]
 
 export type MapViewProps = {
   airports: AirportDto[]
@@ -45,9 +49,9 @@ const MAP_PANES = {
 } as const
 const SELECTED_ROUTE_STYLE = {
   color: '#0dcaf0',
-  weight: 4,
+  weight: 5,
   dashArray: '8, 8',
-  opacity: 0.8,
+  opacity: 0.95,
   pane: MAP_PANES.route,
 } satisfies L.PolylineOptions
 const SELECTED_AIRPORT_COLORS = {
@@ -56,10 +60,33 @@ const SELECTED_AIRPORT_COLORS = {
 }
 
 const LANDED_ROUTE_STYLE = {
-  ...SELECTED_ROUTE_STYLE,
   color: '#9ca3af', // tailwind gray-400
-  dashArray: '4, 6',
+  weight: 4,
+  dashArray: '5, 8',
+  opacity: 0.75,
+  pane: MAP_PANES.route,
 } satisfies L.PolylineOptions
+
+// 👻 Estilo de la ruta "fantasma" para vuelos recién aterrizados que ya salieron de `segments`.
+// Empieza en esta opacidad y el intervalo de desvanecimiento la va bajando hasta 0 en ~4s.
+const GHOST_ROUTE_STYLE = {
+  color: '#9ca3af', // tailwind gray-400
+  weight: 3,
+  dashArray: '5, 8',
+  opacity: 0.8,
+  pane: MAP_PANES.route,
+} satisfies L.PolylineOptions
+
+// Cuánto tarda una ruta fantasma en desvanecerse por completo, en milisegundos reales.
+const GHOST_FADE_DURATION_MS = 4000
+
+// Estilo base para las rutas "de fondo" de todos los vuelos activos (no seleccionados).
+const ALL_FLIGHTS_ROUTE_BASE_STYLE = {
+  weight: 2.8,
+  opacity: 0.5,
+  dashArray: '3, 4',
+  pane: MAP_PANES.route,
+} satisfies Omit<L.PolylineOptions, 'color'>
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -83,6 +110,7 @@ function buildPlaneIcon(
   dimmed = false,
   isSelected = false,
 ) {
+  // está dibujado apuntando en diagonal (hacia arriba a la derecha).
   const rotation = heading - 45
 
   const percent =
@@ -120,13 +148,16 @@ function buildAirportIcon(
   isSelected: boolean
 ) {
   const markerSize = isSelected ? 42 : 34
-  const iconSize = isSelected ? 30 : 24
+  const iconSize = isSelected ? 22 : 18 // ✅ Ligeramente más pequeño para que respire dentro del círculo
   const displayColors = isSelected ? SELECTED_AIRPORT_COLORS : colors
 
+  // ✅ Recorremos los paths del nuevo ícono y le aplicamos el color dinámico
+  const svgPaths = AIRPORT_PATHS.map(path => `<path d="${path}"/>`).join('')
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
-    fill="${displayColors.fill}" stroke="${displayColors.stroke}" stroke-width="2"
+    fill="${displayColors.fill}" stroke="${displayColors.stroke}" stroke-width="1.8"
     stroke-linecap="round" stroke-linejoin="round">
-    <path d="${AIRPORT_PATH}"/>
+    ${svgPaths}
   </svg>`
 
   return L.divIcon({
@@ -180,7 +211,11 @@ export default function MapView({
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
+  const ghostLayerRef = useRef<L.LayerGroup | null>(null)
   const planeMarkersRef = useRef<Map<number, L.Marker>>(new Map())
+  // 👻 Memoria temporal de vuelos recién aterrizados (para el efecto "fantasma")
+  const prevSegmentsMapRef = useRef<Map<number, FlightSegmentDto>>(new Map())
+  const landedGhostsRef = useRef<Map<number, { polyline: L.Polyline; startedAt: number }>>(new Map())
   const resizeFrameRef = useRef<number | null>(null)
   const resizeTimerRef = useRef<number | null>(null)
   const closedPreviewAirportCodeRef = useRef<string | null>(null)
@@ -271,6 +306,7 @@ export default function MapView({
     airportLayerRef.current = L.layerGroup().addTo(map)
     planeLayerRef.current = L.layerGroup().addTo(map)
     routeLayerRef.current = L.layerGroup().addTo(map)
+    ghostLayerRef.current = L.layerGroup().addTo(map)
 
     mapRef.current = map
   }, [])
@@ -539,11 +575,44 @@ export default function MapView({
   }, [segments, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId])
 
   useEffect(() => {
-    if (!routeLayerRef.current) {
+    const layer = routeLayerRef.current
+    if (!layer) {
       return
     }
 
-    routeLayerRef.current.clearLayers()
+    layer.clearLayers()
+
+    if (currentMinute === null) {
+      return
+    }
+
+    // 1) Rutas "de fondo": TODOS los vuelos actualmente en el aire (mismo criterio que
+    // usan los íconos de avión), en trazo fino, tenue y punteado, con el color de su semáforo.
+    const activeSegments = segments.filter(
+      (seg) => currentMinute >= seg.salidaMin && currentMinute <= seg.llegadaMin
+    )
+
+    activeSegments.forEach((seg) => {
+      if (selectedFlightId !== null && seg.flightId === selectedFlightId) {
+        return // la ruta del vuelo seleccionado se dibuja después, por encima del resto
+      }
+
+      /*const percent =
+        seg.capacidad !== undefined && seg.capacidad > 0
+          ? (seg.carga * 100) / seg.capacidad
+          : null*/
+      //const colors = percent === null ? NEUTRAL_SEMAPHORE_COLORS : resolveSemaphoreColor(percent, ranges)
+
+      L.polyline(
+        [
+          [seg.origenLat, seg.origenLon],
+          [seg.destinoLat, seg.destinoLon],
+        ],
+        { ...ALL_FLIGHTS_ROUTE_BASE_STYLE, color: '#000000' }
+      ).addTo(layer)
+    })
+
+    // 2) Ruta de un envío/maleta específico: tiene prioridad y se dibuja por encima de todo.
     if (selectedShipmentRoute && selectedShipmentRoute.ruta && selectedShipmentRoute.ruta.length > 0) {
       const latlngs: L.LatLngExpression[] = []
 
@@ -561,27 +630,27 @@ export default function MapView({
       }
 
       if (latlngs.length > 1) {
-        addSelectedRouteToLayer(latlngs, routeLayerRef.current)
+        addSelectedRouteToLayer(latlngs, layer)
       }
       return
     }
 
+    // 3) Ruta del vuelo seleccionado, resaltada (gruesa) por encima de las rutas de fondo.
     if (selectedFlightId !== null) {
       const selectedSegment = segments.find((segment) => segment.flightId === selectedFlightId)
       if (selectedSegment) {
-        const minuteForRender = currentMinute
-        const hasDeparted = minuteForRender !== null && minuteForRender >= selectedSegment.salidaMin
-        const isLanded = minuteForRender !== null && minuteForRender >= selectedSegment.llegadaMin
+        const hasDeparted = currentMinute >= selectedSegment.salidaMin
+        const isLanded = currentMinute >= selectedSegment.llegadaMin
 
         // Estilos: Definimos el estilo opaco copiando el original pero bajando la opacidad.
         // Opcional: le agregué un 'dashArray' para que se vea punteada la parte que ya pasó.
-        const TRAVERSED_STYLE = { ...SELECTED_ROUTE_STYLE, opacity: 0.3, dashArray: '5, 5' }
+        const TRAVERSED_STYLE = { ...SELECTED_ROUTE_STYLE, opacity: 0.5, dashArray: '5, 5' }
         const REMAINING_STYLE = SELECTED_ROUTE_STYLE
 
         if (hasDeparted && !isLanded) {
           // 1. El avión está en el aire: calculamos su posición exacta
           const total = Math.max(1, selectedSegment.llegadaMin - selectedSegment.salidaMin)
-          const progress = Math.min(1, Math.max(0, (minuteForRender - selectedSegment.salidaMin) / total))
+          const progress = Math.min(1, Math.max(0, (currentMinute - selectedSegment.salidaMin) / total))
 
           const currentLat = selectedSegment.origenLat + (selectedSegment.destinoLat - selectedSegment.origenLat) * progress
           const currentLon = selectedSegment.origenLon + (selectedSegment.destinoLon - selectedSegment.origenLon) * progress
@@ -589,27 +658,93 @@ export default function MapView({
           L.polyline(
             [[selectedSegment.origenLat, selectedSegment.origenLon], [currentLat, currentLon]],
             TRAVERSED_STYLE
-          ).addTo(routeLayerRef.current)
+          ).addTo(layer)
 
           L.polyline(
             [[currentLat, currentLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
             REMAINING_STYLE
-          ).addTo(routeLayerRef.current)
+          ).addTo(layer)
 
         } else if (isLanded) {
           L.polyline(
             [[selectedSegment.origenLat, selectedSegment.origenLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
             LANDED_ROUTE_STYLE
-          ).addTo(routeLayerRef.current)
+          ).addTo(layer)
         } else {
           L.polyline(
             [[selectedSegment.origenLat, selectedSegment.origenLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
             REMAINING_STYLE
-          ).addTo(routeLayerRef.current)
+          ).addTo(layer)
         }
       }
     }
-  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute])
+  }, [selectedFlightId, selectedShipmentRoute, airports, segments, currentMinute, ranges])
+
+  // 👻 Efecto "fantasma": detecta vuelos que desaparecieron de `segments` porque ya
+  // aterrizaron (currentMinute superó su llegadaMin) y los guarda en memoria temporal
+  // para poder seguir dibujando su ruta unos segundos más mientras se desvanece.
+  useEffect(() => {
+    const layer = ghostLayerRef.current
+    if (!layer) {
+      return
+    }
+
+    if (currentMinute === null) {
+      // Simulación reiniciada o sin datos: limpiamos cualquier fantasma y el snapshot previo.
+      landedGhostsRef.current.forEach((ghost) => layer.removeLayer(ghost.polyline))
+      landedGhostsRef.current.clear()
+      prevSegmentsMapRef.current = new Map()
+      return
+    }
+
+    const prevMap = prevSegmentsMapRef.current
+    const currentIds = new Set(segments.map((seg) => seg.flightId))
+
+    prevMap.forEach((prevSeg, flightId) => {
+      const stillPresent = currentIds.has(flightId)
+      const alreadyGhost = landedGhostsRef.current.has(flightId)
+
+      if (!stillPresent && !alreadyGhost && currentMinute > prevSeg.llegadaMin) {
+        const polyline = L.polyline(
+          [
+            [prevSeg.origenLat, prevSeg.origenLon],
+            [prevSeg.destinoLat, prevSeg.destinoLon],
+          ],
+          GHOST_ROUTE_STYLE
+        ).addTo(layer)
+
+        landedGhostsRef.current.set(flightId, { polyline, startedAt: Date.now() })
+      }
+    })
+
+    // Actualizamos el snapshot para poder comparar en el próximo cambio de `segments`.
+    prevSegmentsMapRef.current = new Map(segments.map((seg) => [seg.flightId, seg]))
+  }, [segments, currentMinute])
+
+  // ⏱️ Intervalo único que va bajando la opacidad de cada ruta fantasma hasta que
+  // desaparece por completo (a los GHOST_FADE_DURATION_MS milisegundos reales).
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const layer = ghostLayerRef.current
+      if (!layer) {
+        return
+      }
+
+      landedGhostsRef.current.forEach((ghost, flightId) => {
+        const elapsed = Date.now() - ghost.startedAt
+        if (elapsed >= GHOST_FADE_DURATION_MS) {
+          layer.removeLayer(ghost.polyline)
+          landedGhostsRef.current.delete(flightId)
+          return
+        }
+
+        const remainingRatio = 1 - elapsed / GHOST_FADE_DURATION_MS
+        ghost.polyline.setStyle({ opacity: (GHOST_ROUTE_STYLE.opacity ?? 0.7) * remainingRatio })
+      })
+    }, 100)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   return (
     <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>

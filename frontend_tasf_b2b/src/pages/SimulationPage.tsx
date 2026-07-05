@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react' // ✅ useState importado
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
 import type { AirportDto } from '../types/sim'
 import { API_BASE, authFetch, fetchAirports, startSimulation } from '../services/api'
@@ -69,7 +69,7 @@ async function fetchSimulationShipments(simId: string, minute: number | null): P
 }
 
 export default function SimulationPage() {
-  const [airports, setAirports] = useState<AirportDto[]>([]) // ✅ useState con tipo
+  const [airports, setAirports] = useState<AirportDto[]>([])
   const [error, setError] = useState<string | null>(null)
 
   // 💾 UI States inicializados desde sessionStorage para recordar "dónde te quedaste"
@@ -94,6 +94,9 @@ export default function SimulationPage() {
   })
 
   const [fullDetailFlightId, setFullDetailFlightId] = useState<number | null>(null)
+
+  // ⏱️ Estado para el cronómetro en tiempo real (en segundos)
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
 
   const { setTopbarMain } = useOutletContext<AppLayoutContext>()
   const navigate = useNavigate()
@@ -127,6 +130,45 @@ export default function SimulationPage() {
     localCompleted,
     ranges,
   } = simulation
+
+  // ✅ Extraemos la validación fuera del useEffect
+  // Debe reflejar lo mismo que "isPreparing" (READY o RUNNING cuentan como simulación activa),
+  // pero en su forma "ya lista" (currentMinute !== null) en vez de "todavía calculando".
+  const isActuallyMoving = (status === 'RUNNING' || status === 'READY') && currentMinute !== null;
+
+  // ⏱️ Efecto que maneja el tic-tac del cronómetro real
+  useEffect(() => {
+    let cronometroInterval: ReturnType<typeof setInterval> | null = null
+
+    if (isActuallyMoving) {
+      // Como isActuallyMoving se mantiene en "true" aunque currentMinute cambie, 
+      // este intervalo ya no se interrumpe y puede contar tranquilamente.
+      cronometroInterval = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1)
+      }, 1000)
+    } else if (status === 'READY' || status === 'CLOSED') {
+      setElapsedSeconds(0)
+    }
+
+    return () => {
+      if (cronometroInterval) clearInterval(cronometroInterval)
+    }
+  }, [isActuallyMoving, status]) // ✅ Se añadió currentMinute para que reaccione al momento exacto en que termina de preparar
+
+  // Función auxiliar interna para dar formato hh:mm:ss o mm:ss al cronómetro
+  const formatCronometro = (totalSegundos: number): string => {
+    const hrs = Math.floor(totalSegundos / 3600)
+    const mins = Math.floor((totalSegundos % 3600) / 60)
+    const secs = totalSegundos % 60
+
+    const fMins = String(mins).padStart(2, '0')
+    const fSecs = String(secs).padStart(2, '0')
+
+    if (hrs > 0) {
+      return `${String(hrs).padStart(2, '0')}:${fMins}:${fSecs}`
+    }
+    return `${fMins}:${fSecs}`
+  }
 
   // 💾 Efectos para guardar de forma reactiva el estado UI de la pantalla en la sesión activa
   useEffect(() => {
@@ -610,9 +652,8 @@ export default function SimulationPage() {
           flightId={fullDetailFlightId}
           isSimulation={true}
           simId={simId ?? undefined}
-          simulationData={simulation} // ✅ Corregido: Se usa 'simulation' que es el estado real del archivo
+          simulationData={simulation}
           simulationFlight={(() => {
-            // Busca el segmento del vuelo seleccionado en la lista de segments (del contexto)
             const seg = segments.find(s => s.flightId === fullDetailFlightId);
             if (!seg) return undefined;
             return {
@@ -622,7 +663,7 @@ export default function SimulationPage() {
               capacidad: seg.capacidad,
               salidaMin: seg.salidaMin,
               llegadaMin: seg.llegadaMin,
-              ocupacion: seg.carga, // ✅ Extraemos la carga en tiempo real que ya maneja el mapa
+              ocupacion: seg.carga,
             };
           })()}
           onVolver={() => setFullDetailFlightId(null)}
@@ -642,6 +683,9 @@ export default function SimulationPage() {
               </div>
               <div className="status-item">
                 Maletas: <strong>{formatInteger(meta?.totalMaletas)}</strong>
+              </div>
+              <div className="status-item">
+                Tiempo transcurrido: <strong style={{ color: '#0288d1' }}>{formatCronometro(elapsedSeconds)}</strong>
               </div>
             </div>
           </section>
