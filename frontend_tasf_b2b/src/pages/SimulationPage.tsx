@@ -7,7 +7,7 @@ import SimulationControls from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
 import type { AppLayoutContext } from '../layouts/AppLayout'
 import { useSimulationContext } from '../contexts/SimulationContext'
-import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
+import { DEFAULT_MAP_SEMAPHORE_FILTERS, type MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import {
   filterAirportsByMapFilters,
@@ -88,9 +88,29 @@ export default function SimulationPage() {
   const [simulationMode, setSimulationMode] = useState<'period' | 'collapse'>(() => {
     return (sessionStorage.getItem('sim_mode') as 'period' | 'collapse') || 'period'
   })
-  const [mapFilters, setMapFilters] = useState(() => {
+  const [mapFilters, setMapFilters] = useState<MapSemaphoreFilters>(() => {
     const saved = sessionStorage.getItem('sim_map_filters')
-    return saved ? JSON.parse(saved) : DEFAULT_MAP_SEMAPHORE_FILTERS
+    if (!saved) {
+      return DEFAULT_MAP_SEMAPHORE_FILTERS
+    }
+
+    const parsed = JSON.parse(saved)
+    return {
+      ...DEFAULT_MAP_SEMAPHORE_FILTERS,
+      ...parsed,
+      flights: {
+        ...DEFAULT_MAP_SEMAPHORE_FILTERS.flights,
+        ...parsed?.flights,
+        text: {
+          ...DEFAULT_MAP_SEMAPHORE_FILTERS.flights.text,
+          ...parsed?.flights?.text,
+        },
+      },
+      warehouses: {
+        ...DEFAULT_MAP_SEMAPHORE_FILTERS.warehouses,
+        ...parsed?.warehouses,
+      },
+    }
   })
   const [isPanelCollapsed, setIsPanelCollapsed] = useState<boolean>(() => {
     const saved = sessionStorage.getItem('sim_panel_collapsed')
@@ -827,6 +847,16 @@ export default function SimulationPage() {
               onSearchShipment={handleSearchShipment}
               shipmentSearchError={shipmentSearchError}
               sampleShipments={sampleShipments}
+              flightTextFilters={mapFilters.flights.text}
+              onFlightTextFiltersChange={(filters) =>
+                setMapFilters((current) => ({
+                  ...current,
+                  flights: {
+                    ...current.flights,
+                    text: filters,
+                  },
+                }))
+              }
               currentMinute={displayMinute}
               entityFocusRequest={entityFocusRequest}
             />

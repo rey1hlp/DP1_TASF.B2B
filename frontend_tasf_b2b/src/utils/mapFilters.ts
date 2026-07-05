@@ -1,5 +1,5 @@
 import type { AirportDto, FlightSegmentDto } from '../types/sim'
-import type { MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
+import type { FlightTextFilters, MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
 import { resolveSemaphoreLevel, type SemaphoreRanges } from './semaphore'
 
 type WarehouseSnapshot = Record<
@@ -29,13 +29,56 @@ export function getFlightOccupancyPercent(segment: FlightSegmentDto) {
   return (segment.carga * 100) / segment.capacidad
 }
 
+type FlightFilterTarget = {
+  flightId: number | string
+  origen: string
+  destino: string
+}
+
+function normalizeFilterValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
+export function matchesFlightTextFilters(
+  flight: FlightFilterTarget,
+  filters: FlightTextFilters,
+) {
+  const codeQuery = normalizeFilterValue(filters.codeQuery)
+  const originQuery = normalizeFilterValue(filters.originQuery)
+  const destinationQuery = normalizeFilterValue(filters.destinationQuery)
+
+  if (codeQuery && !String(flight.flightId).toLowerCase().includes(codeQuery)) {
+    return false
+  }
+
+  if (originQuery && !flight.origen.toLowerCase().includes(originQuery)) {
+    return false
+  }
+
+  if (destinationQuery && !flight.destino.toLowerCase().includes(destinationQuery)) {
+    return false
+  }
+
+  return true
+}
+
+export function filterFlightsByTextFilters<T extends FlightFilterTarget>(
+  flights: T[],
+  filters: FlightTextFilters,
+) {
+  return flights.filter((flight) => matchesFlightTextFilters(flight, filters))
+}
+
 export function isFlightVisibleByMapFilters(
   segment: FlightSegmentDto,
   filters: MapSemaphoreFilters,
   ranges: SemaphoreRanges
 ) {
   const level = getSemaphoreLevel(getFlightOccupancyPercent(segment), ranges)
-  return matchesSemaphoreFilter(level, filters.flights.semaphore)
+  return (
+    matchesSemaphoreFilter(level, filters.flights.semaphore) &&
+    matchesFlightTextFilters(segment, filters.flights.text)
+  )
 }
 
 export function isAirportVisibleByMapFilters(

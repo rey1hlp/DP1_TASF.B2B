@@ -740,6 +740,16 @@ export default function DailyOperationPage() {
           onSearchShipment={handleSearchShipment}
           shipmentSearchError={shipmentSearchError}
           sampleShipments={sampleShipments}
+          flightTextFilters={mapFilters.flights.text}
+          onFlightTextFiltersChange={(filters) =>
+            setMapFilters((current) => ({
+              ...current,
+              flights: {
+                ...current.flights,
+                text: filters,
+              },
+            }))
+          }
           currentMinute={currentMinute}
           alerts={alerts}
           isCollapsed={isPanelCollapsed}
