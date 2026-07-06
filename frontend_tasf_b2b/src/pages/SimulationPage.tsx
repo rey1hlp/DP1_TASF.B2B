@@ -15,9 +15,10 @@ import {
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
 import { resolveAirportContinent } from '../utils/continents'
-import { resolveSemaphoreColor } from '../utils/semaphore'
+import { resolveSemaphoreColor, resolveSemaphoreLevel } from '../utils/semaphore'
 import FlightDetailPage from './FlightDetailPage'
 import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
+import SimulationReportModal from '../components/SimulationReportModal'
 
 import {
   formatDurationHours,
@@ -129,6 +130,8 @@ export default function SimulationPage() {
   })
 
   const [fullDetailFlightId, setFullDetailFlightId] = useState<number | null>(null)
+
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
 
   // ⏱️ Estado para el cronómetro en tiempo real (en segundos)
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
@@ -336,6 +339,7 @@ export default function SimulationPage() {
     setShipmentsPlanificados([])
     setShipmentsEnVuelo([])
     setShipmentsEntregados([])
+    setIsReportModalOpen(false)
 
     try {
       await new Promise<void>((resolve) => {
@@ -501,15 +505,11 @@ export default function SimulationPage() {
     }
   }, [localCompleted, requestedEndMinute, displayMinuteRaw, activeSegmentsCount, setSimulation])
 
-  // Cuando se completa localmente, limpiar todo (resetea simulación)
-  useEffect(() => {
-    if (localCompleted) {
-      resetSimulation()
-    }
-  }, [localCompleted, resetSimulation])
+  // Cuando se completa localmente, dejamos que el usuario vea el mapa final.
+  // Ya no hacemos resetSimulation automático para no destruir el modal ni la vista.
 
   const displayMinute =
-    localCompleted && requestedEndMinute !== null ? null : displayMinuteRaw
+    localCompleted && requestedEndMinute !== null ? requestedEndMinute : displayMinuteRaw
 
   const simulatedDateKey =
     displayMinute === null ? null : formatIsoDateFromDayIndex(Math.floor(displayMinute / 1440))
@@ -543,6 +543,12 @@ export default function SimulationPage() {
       setIsStartingSimulation(false)
     }
   }, [status, currentMinute])
+
+  useEffect(() => {
+    if (status === 'COMPLETED' || localCompleted) {
+      setIsReportModalOpen(true)
+    }
+  }, [status, localCompleted])
 
   const duration = simulationMode === 'collapse'
     ? 'Hasta colapso'
@@ -679,11 +685,40 @@ export default function SimulationPage() {
         )
         : 0
     const activePct = totalSegments > 0 ? (totalActive * 100) / totalSegments : 0
+    let totalWarehouseOcupacion = 0
+    let totalWarehouseCapacidad = 0
+    Object.values(warehouseSnapshot).forEach((w) => {
+      totalWarehouseOcupacion += w.ocupacion
+      totalWarehouseCapacidad += w.capacidad
+    })
+    const warehouseCapacityPct = totalWarehouseCapacidad > 0 ? (totalWarehouseOcupacion * 100) / totalWarehouseCapacidad : 0
+
     return {
       cards: [
         { label: 'Vuelos activos', value: formatInteger(totalActive) },
         { label: 'Maletas en aire', value: formatBags(totalCargo) },
-        { label: 'Capacidad usada', value: formatPercent(capacityPct) },
+        {
+          label: 'Capacidad usada almacenes',
+          value: formatPercent(warehouseCapacityPct),
+          color: resolveSemaphoreColor(warehouseCapacityPct, ranges).fill,
+          borderColor: resolveSemaphoreColor(warehouseCapacityPct, ranges).stroke,
+          textColor: '#ffffff',
+          labelColor: (() => {
+            const l = resolveSemaphoreLevel(warehouseCapacityPct, ranges);
+            return l === 'green' ? '#0f5223' : l === 'amber' ? '#734b00' : l === 'red' ? '#66140c' : '#5f6f8e';
+          })(),
+        },
+        {
+          label: 'Capacidad usada vuelos',
+          value: formatPercent(capacityPct),
+          color: resolveSemaphoreColor(capacityPct, ranges).fill,
+          borderColor: resolveSemaphoreColor(capacityPct, ranges).stroke,
+          textColor: '#ffffff',
+          labelColor: (() => {
+            const l = resolveSemaphoreLevel(capacityPct, ranges);
+            return l === 'green' ? '#0f5223' : l === 'amber' ? '#734b00' : l === 'red' ? '#66140c' : '#5f6f8e';
+          })(),
+        },
         { label: 'Duración prom. vuelo', value: formatDurationHours(avgDurationMin / 60, 2) },
       ],
       bars: [
@@ -692,7 +727,7 @@ export default function SimulationPage() {
         { label: 'Actividad de vuelos', value: activePct },
       ],
     }
-  }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute])
+  }, [activeSegments, cappedSegments, displayMinute, requestedStartMinute, requestedEndMinute, ranges, warehouseSnapshot])
 
   const flightItems = useMemo(() => {
     return activeSegments.map((segment) => {
@@ -969,6 +1004,20 @@ export default function SimulationPage() {
               onSelectedShipmentCategoryChange={setSelectedShipmentCategory}
             />
           </section>
+          
+          <SimulationReportModal
+            isOpen={isReportModalOpen}
+            onClose={() => {
+              setIsReportModalOpen(false)
+              if (localCompleted || status === 'COMPLETED') {
+                resetSimulation()
+              }
+            }}
+            mode={simulationMode}
+            meta={meta}
+            statusMessage={statusMessage}
+            stats={stats}
+          />
         </div>
       )}
     </>

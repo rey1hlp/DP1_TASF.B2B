@@ -250,7 +250,6 @@ export default function MapView({
   const [airportShipmentsLoading, setAirportShipmentsLoading] = useState(false)
   const [airportShipmentsError, setAirportShipmentsError] = useState<string | null>(null)
   const [selectedAirportShipment, setSelectedAirportShipment] = useState<ShipmentCrudDto | null>(null)
-  const [airportShipmentsMinute, setAirportShipmentsMinute] = useState<number | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -687,7 +686,6 @@ export default function MapView({
       simId,
       minute: currentMinute,
     })
-    setAirportShipmentsMinute(currentMinute)
     setAirportDetailStage('shipments')
   }
 
@@ -836,7 +834,6 @@ export default function MapView({
     ) {
       setPreviewAirportCode(selectedAirportCode)
       setAirportDetailStage('airport')
-      setAirportShipmentsMinute(currentMinute)
     }
   }, [previewAirportCode, selectedAirportCode, currentMinute])
 
@@ -920,7 +917,6 @@ export default function MapView({
         closedPreviewAirportCodeRef.current = null
         setPreviewAirportCode(airport.codigoOaci)
         setAirportDetailStage('airport')
-        setAirportShipmentsMinute(currentMinute)
         onAirportPreview?.(airport.codigoOaci)
       })
       marker.addTo(airportLayerRef.current as L.LayerGroup)

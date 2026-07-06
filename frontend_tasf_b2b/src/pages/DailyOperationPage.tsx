@@ -14,7 +14,7 @@ import {
   filterFlightSegmentsByMapFilters,
 } from '../utils/mapFilters'
 import { resolveAirportContinent } from '../utils/continents'
-import { resolveSemaphoreColor } from '../utils/semaphore'
+import { resolveSemaphoreColor, resolveSemaphoreLevel } from '../utils/semaphore'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
 import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
 
@@ -528,12 +528,41 @@ export default function DailyOperationPage() {
         shipmentSummary.total
       : 0
   
+    let totalWarehouseOcupacion = 0
+    let totalWarehouseCapacidad = 0
+    Object.values(warehouseSnapshot).forEach((w) => {
+      totalWarehouseOcupacion += w.ocupacion
+      totalWarehouseCapacidad += w.capacidad
+    })
+    const warehouseCapacityPct = totalWarehouseCapacidad > 0 ? (totalWarehouseOcupacion * 100) / totalWarehouseCapacidad : 0
+
     return {
       cards: [
         { label: 'Vuelos activos', value: formatInteger(totalActive) },
         { label: 'Vuelos planificados', value: formatInteger(totalFlights) },
         { label: 'Maletas en aire', value: formatBags(totalCargo) },
-        { label: 'Capacidad usada', value: formatPercent(capacityPct) },
+        {
+          label: 'Capacidad usada almacenes',
+          value: formatPercent(warehouseCapacityPct),
+          color: resolveSemaphoreColor(warehouseCapacityPct, ranges).fill,
+          borderColor: resolveSemaphoreColor(warehouseCapacityPct, ranges).stroke,
+          textColor: '#ffffff',
+          labelColor: (() => {
+            const l = resolveSemaphoreLevel(warehouseCapacityPct, ranges);
+            return l === 'green' ? '#0f5223' : l === 'amber' ? '#734b00' : l === 'red' ? '#66140c' : '#5f6f8e';
+          })(),
+        },
+        {
+          label: 'Capacidad usada vuelos',
+          value: formatPercent(capacityPct),
+          color: resolveSemaphoreColor(capacityPct, ranges).fill,
+          borderColor: resolveSemaphoreColor(capacityPct, ranges).stroke,
+          textColor: '#ffffff',
+          labelColor: (() => {
+            const l = resolveSemaphoreLevel(capacityPct, ranges);
+            return l === 'green' ? '#0f5223' : l === 'amber' ? '#734b00' : l === 'red' ? '#66140c' : '#5f6f8e';
+          })(),
+        },
       ],
       bars: [
         { label: 'Actividad de vuelos', value: activePct },
@@ -541,7 +570,7 @@ export default function DailyOperationPage() {
         { label: 'Avance de envíos', value: shipmentProgressPct },
       ],
     }
-  }, [segments, activeSegments, shipmentSummary])
+  }, [segments, activeSegments, shipmentSummary, ranges, warehouseSnapshot])
 
   const activeFlightItems = useMemo(() => {
     return activeSegments.map((segment) => ({

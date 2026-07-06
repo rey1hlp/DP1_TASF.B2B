@@ -38,7 +38,7 @@ export type DailyOperationControlsProps = {
   mapFilterCounts: { flights: number; warehouses: number }
 
   stats: {
-    cards: Array<{ label: string; value: string }>
+    cards: Array<{ label: string; value: string; color?: string; borderColor?: string; textColor?: string; labelColor?: string }>
     bars: Array<{ label: string; value: number }>
   }
 
@@ -239,9 +239,50 @@ export default function DailyOperationControls({
 
           <div className="metric-grid">
             {stats.cards.map((card) => (
-              <div className="metric" key={card.label}>
-                <div className="metric-value">{card.value}</div>
-                <div className="metric-label">{card.label}</div>
+              <div
+                className="metric"
+                key={card.label}
+                style={
+                  card.color
+                    ? {
+                        background: card.color,
+                        border: `1px solid ${card.borderColor || 'transparent'}`,
+                      }
+                    : {}
+                }
+              >
+                <div
+                  className="metric-value"
+                  style={
+                    card.textColor
+                      ? {
+                          color: card.textColor,
+                          textShadow: card.textColor === '#ffffff' ? '0 1px 2px rgba(0, 0, 0, 0.3)' : 'none',
+                        }
+                      : {}
+                  }
+                >
+                  {card.value}
+                </div>
+                <div
+                  className="metric-label"
+                  style={
+                    card.labelColor
+                      ? {
+                          color: card.labelColor,
+                          fontWeight: 600,
+                        }
+                      : card.textColor
+                      ? {
+                          color: card.textColor,
+                          opacity: 0.8,
+                          textShadow: card.textColor === '#ffffff' ? '0 1px 1px rgba(0, 0, 0, 0.3)' : 'none',
+                        }
+                      : {}
+                  }
+                >
+                  {card.label}
+                </div>
               </div>
             ))}
           </div>

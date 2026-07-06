@@ -62,12 +62,21 @@ export function useSimulationSocket(simId: string | null) {
       }
     }
 
+    let isIntentionallyClosed = false
+
     ws.onclose = () => {
-      setStatus('CLOSED')
-      setStatusMessage('Conexion finalizada.')
+      if (isIntentionallyClosed) return
+      setStatus((prev) => {
+        if (prev !== 'COMPLETED' && prev !== 'FAILED') {
+          setStatusMessage('Conexion finalizada.')
+          return 'CLOSED'
+        }
+        return prev
+      })
     }
 
     return () => {
+      isIntentionallyClosed = true
       ws.close()
     }
   }, [simId])
