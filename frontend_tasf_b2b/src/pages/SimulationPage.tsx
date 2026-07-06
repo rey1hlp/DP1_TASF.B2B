@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
 import type { AirportDto, FlightCrudDto } from '../types/sim'
-import { API_BASE, authFetch, fetchAirports, listFlights, startSimulation } from '../services/api'
+import { API_BASE, authFetch, fetchAirports, listFlights, startSimulation, fetchCategorizedShipments, type EnvioDetalleDto } from '../services/api'
 import MapView from '../components/MapView'
-import SimulationControls from '../components/SimulationControls'
+import SimulationControls, { type ShipmentCategory } from '../components/SimulationControls'
 import UploadEnvios from '../components/UploadEnvios'
 import type { AppLayoutContext } from '../layouts/AppLayout'
 import { useSimulationContext } from '../contexts/SimulationContext'
@@ -40,6 +40,10 @@ export type PasoRutaDto = {
   salidaMin: number
   llegadaMin: number
 }
+
+export type ShipmentFilters = {
+  origen: string;
+};
 
 export type RespuestaRutaEnvioDto = {
   codigoPedido: string
@@ -135,6 +139,15 @@ export default function SimulationPage() {
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
+  const [shipmentsPlanificados, setShipmentsPlanificados] = useState<EnvioDetalleDto[]>([])
+  const [shipmentsEnVuelo, setShipmentsEnVuelo] = useState<EnvioDetalleDto[]>([])
+  const [shipmentsEntregados, setShipmentsEntregados] = useState<EnvioDetalleDto[]>([])
+  const [shipmentOriginFilter, setShipmentOriginFilter] = useState('')
+  const [shipmentDestinationFilter, setShipmentDestinationFilter] = useState('')
+  const [selectedShipmentCategory, setSelectedShipmentCategory] = useState<ShipmentCategory>(() => {
+    const saved = sessionStorage.getItem('sim_shipment_category')
+    return (saved as ShipmentCategory) || 'EN_VUELO'
+  })
   const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
   const entityFocusRequestIdRef = useRef(0)
   const [isStartingSimulation, setIsStartingSimulation] = useState(false)
@@ -231,6 +244,10 @@ export default function SimulationPage() {
     sessionStorage.setItem('sim_panel_collapsed', String(isPanelCollapsed))
   }, [isPanelCollapsed])
 
+  useEffect(() => {
+    sessionStorage.setItem('sim_shipment_category', selectedShipmentCategory)
+  }, [selectedShipmentCategory])
+
 
   useEffect(() => {
     setTopbarMain(
@@ -304,16 +321,21 @@ export default function SimulationPage() {
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
     setError(null)
     setIsStartingSimulation(true)
-    setSimulation((prev) => ({
-      ...prev,
-      requestedStart: inicio,
-      requestedDays: simulationMode === 'period' ? dias : null,
-      displayOffset: null,
-      localCompleted: false,
-    }))
+    setSimulation((prev) => (
+      {
+        ...prev,
+        requestedStart: inicio,
+        requestedDays: simulationMode === 'period' ? dias : null,
+        displayOffset: null,
+        localCompleted: false,
+      }
+    ))
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
     setSampleShipments([])
+    setShipmentsPlanificados([])
+    setShipmentsEnVuelo([])
+    setShipmentsEntregados([])
 
     try {
       await new Promise<void>((resolve) => {
@@ -411,10 +433,12 @@ export default function SimulationPage() {
   useEffect(() => {
     if (requestedStartMinute === null || currentMinute === null) return
     if (displayOffset === null) {
-      setSimulation((prev) => ({
-        ...prev,
-        displayOffset: requestedStartMinute - currentMinute,
-      }))
+      setSimulation((prev) => (
+        {
+          ...prev,
+          displayOffset: requestedStartMinute - currentMinute,
+        }
+      ))
     }
   }, [requestedStartMinute, currentMinute, displayOffset, setSimulation])
 
@@ -432,6 +456,28 @@ export default function SimulationPage() {
   useEffect(() => {
     if (simId && meta && (status === 'READY' || status === 'RUNNING' || status === 'COMPLETED' || status === 'PAUSED')) {
       fetchSimulationShipments(simId, simulatedQuarterMinute).then(setSampleShipments).catch(() => setSampleShipments([]))
+    }
+  }, [simId, meta, status, simulatedQuarterMinute])
+
+  // Obtener los envíos categorizados (Planificados / En Vuelo / Entregados Recientes) según el minuto actual
+  useEffect(() => {
+    if (
+      simId &&
+      meta &&
+      simulatedQuarterMinute !== null &&
+      (status === 'READY' || status === 'RUNNING' || status === 'COMPLETED' || status === 'PAUSED')
+    ) {
+      fetchCategorizedShipments(simId, simulatedQuarterMinute)
+        .then((data) => {
+          setShipmentsPlanificados(data.planificados)
+          setShipmentsEnVuelo(data.enVuelo)
+          setShipmentsEntregados(data.entregadosRecientes)
+        })
+        .catch(() => {
+          setShipmentsPlanificados([])
+          setShipmentsEnVuelo([])
+          setShipmentsEntregados([])
+        })
     }
   }, [simId, meta, status, simulatedQuarterMinute])
 
@@ -694,6 +740,34 @@ export default function SimulationPage() {
     })
   }, [airports, cappedSegments, displayMinute, warehouseSnapshot, ranges])
 
+  // Filtramos en tiempo real las tres listas categorizadas según origen y destino
+  const filterShipmentsByOriginDestino = useCallback(
+    (items: EnvioDetalleDto[]) => {
+      const originQuery = shipmentOriginFilter.trim().toLowerCase()
+      const destinoQuery = shipmentDestinationFilter.trim().toLowerCase()
+
+      return items.filter((item) => {
+        const matchesOrigin = !originQuery || (item.origen ?? '').toLowerCase().includes(originQuery)
+        const matchesDestino = !destinoQuery || (item.destino ?? '').toLowerCase().includes(destinoQuery)
+        return matchesOrigin && matchesDestino
+      })
+    },
+    [shipmentOriginFilter, shipmentDestinationFilter]
+  )
+
+  const filteredShipmentsPlanificados = useMemo(
+    () => filterShipmentsByOriginDestino(shipmentsPlanificados),
+    [filterShipmentsByOriginDestino, shipmentsPlanificados]
+  )
+  const filteredShipmentsEnVuelo = useMemo(
+    () => filterShipmentsByOriginDestino(shipmentsEnVuelo),
+    [filterShipmentsByOriginDestino, shipmentsEnVuelo]
+  )
+  const filteredShipmentsEntregados = useMemo(
+    () => filterShipmentsByOriginDestino(shipmentsEntregados),
+    [filterShipmentsByOriginDestino, shipmentsEntregados]
+  )
+
   const handleSelectFlight = (flightId: number) => {
     const nextFlightId = selectedFlightId === flightId ? null : flightId
     setSelectedFlightId(nextFlightId)
@@ -884,6 +958,15 @@ export default function SimulationPage() {
               }
               currentMinute={displayMinute}
               entityFocusRequest={entityFocusRequest}
+              shipmentsPlanificados={filteredShipmentsPlanificados}
+              shipmentsEnVuelo={filteredShipmentsEnVuelo}
+              shipmentsEntregados={filteredShipmentsEntregados}
+              shipmentOriginFilter={shipmentOriginFilter}
+              onShipmentOriginFilterChange={setShipmentOriginFilter}
+              shipmentDestinationFilter={shipmentDestinationFilter}
+              onShipmentDestinationFilterChange={setShipmentDestinationFilter}
+              selectedShipmentCategory={selectedShipmentCategory}
+              onSelectedShipmentCategoryChange={setSelectedShipmentCategory}
             />
           </section>
         </div>

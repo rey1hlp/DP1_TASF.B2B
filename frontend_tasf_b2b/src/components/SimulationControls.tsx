@@ -4,6 +4,7 @@ import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
+import type { EnvioDetalleDto } from '../services/api'
 
 export type PasoRutaDto = {
   vueloId: number
@@ -19,6 +20,8 @@ export type RespuestaRutaEnvioDto = {
   tiempoTotalHoras: number
   ruta: PasoRutaDto[]
 }
+
+export type ShipmentCategory = 'PLANIFICADOS' | 'EN_VUELO' | 'ENTREGADOS'
 
 export type SimulationControlsProps = {
   mode: 'period' | 'collapse'
@@ -54,6 +57,15 @@ export type SimulationControlsProps = {
   onAirportTextFiltersChange: (filters: AirportTextFilters) => void
   currentMinute: number | null
   entityFocusRequest?: EntityFocusRequest | null
+  shipmentsPlanificados: EnvioDetalleDto[]
+  shipmentsEnVuelo: EnvioDetalleDto[]
+  shipmentsEntregados: EnvioDetalleDto[]
+  shipmentOriginFilter: string
+  onShipmentOriginFilterChange: (value: string) => void
+  shipmentDestinationFilter: string
+  onShipmentDestinationFilterChange: (value: string) => void
+  selectedShipmentCategory: ShipmentCategory
+  onSelectedShipmentCategoryChange: (category: ShipmentCategory) => void
 }
 
 export default function SimulationControls({
@@ -87,6 +99,15 @@ export default function SimulationControls({
   onAirportTextFiltersChange,
   currentMinute,
   entityFocusRequest,
+  shipmentsPlanificados,
+  shipmentsEnVuelo,
+  shipmentsEntregados,
+  shipmentOriginFilter,
+  onShipmentOriginFilterChange,
+  shipmentDestinationFilter,
+  onShipmentDestinationFilterChange,
+  selectedShipmentCategory,
+  onSelectedShipmentCategoryChange,
 }: SimulationControlsProps) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15T00:00')
@@ -210,28 +231,39 @@ export default function SimulationControls({
           ) : null}
 
           {activeTab === 'entities' ? (
-            <EntityExplorer
-              flights={flightItems}
-              airports={airportItems}
-              shipments={sampleShipments}
-              selectedFlightId={selectedFlightId}
-              selectedAirportCode={selectedAirportCode}
-              selectedShipmentRoute={selectedShipmentRoute}
-              onSelectFlight={onSelectFlight}
-              onSelectAirport={onSelectAirport}
-              flightFilters={flightTextFilters}
-              onFlightFiltersChange={onFlightTextFiltersChange}
-              airportFilters={airportTextFilters}
-              onAirportFiltersChange={onAirportTextFiltersChange}
-              onSearchShipment={onSearchShipment}
-              shipmentSearchError={shipmentSearchError}
-              currentMinute={currentMinute}
-              focusRequest={entityFocusRequest}
-              labels={{
-                flightHintNoun: 'vuelos activos',
-                shipmentEmpty: 'No hay muestras (inicia simulación)',
-              }}
-            />
+            <>
+              <EntityExplorer
+                flights={flightItems}
+                airports={airportItems}
+                shipments={sampleShipments}
+                selectedFlightId={selectedFlightId}
+                selectedAirportCode={selectedAirportCode}
+                selectedShipmentRoute={selectedShipmentRoute}
+                onSelectFlight={onSelectFlight}
+                onSelectAirport={onSelectAirport}
+                flightFilters={flightTextFilters}
+                onFlightFiltersChange={onFlightTextFiltersChange}
+                airportFilters={airportTextFilters}
+                onAirportFiltersChange={onAirportTextFiltersChange}
+                onSearchShipment={onSearchShipment}
+                shipmentSearchError={shipmentSearchError}
+                currentMinute={currentMinute}
+                focusRequest={entityFocusRequest}
+                shipmentsPlanificados={shipmentsPlanificados}
+                shipmentsEnVuelo={shipmentsEnVuelo}
+                shipmentsEntregados={shipmentsEntregados}
+                selectedShipmentCategory={selectedShipmentCategory}
+                onSelectedShipmentCategoryChange={onSelectedShipmentCategoryChange}
+                shipmentOriginFilter={shipmentOriginFilter}
+                onShipmentOriginFilterChange={onShipmentOriginFilterChange}
+                shipmentDestinationFilter={shipmentDestinationFilter}
+                onShipmentDestinationFilterChange={onShipmentDestinationFilterChange}
+                labels={{
+                  flightHintNoun: 'vuelos activos',
+                  shipmentEmpty: 'No hay envíos en esta categoría',
+                }}
+              />
+            </>
           ) : null}
         </div>
       )}

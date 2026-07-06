@@ -538,3 +538,38 @@ export async function getShipmentByCode(code: string): Promise<ShipmentCrudDto |
   const content = Array.isArray(data?.content) ? data.content : []
   return content.find((shipment: ShipmentCrudDto) => shipment.codigoPedido === code) ?? null
 }
+
+//NUEVAS FUNCIONES PARA CUBRIR LOS DETALLES DE VUELOS
+export interface EnvioDetalleDto {
+  codigoPedido: string;
+  origen: string;
+  destino: string;
+  ut: string;
+  cantidadMaletas: number;
+  estado: 'PLANIFICADO' | 'EN_VUELO' | 'ENTREGADO';
+  minutoEntrega?: number | null;
+}
+
+export interface SimulationShipmentsResponseDto {
+  planificados: EnvioDetalleDto[];
+  enVuelo: EnvioDetalleDto[];
+  entregadosRecientes: EnvioDetalleDto[];
+}
+
+export async function fetchCategorizedShipments(
+  simId: string,
+  currentMinute: number
+): Promise<SimulationShipmentsResponseDto> {
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/shipments/categorized?currentMinute=${currentMinute}`
+  );
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error('No se encontró el estado de la simulación.');
+    }
+    throw new Error('Error al obtener los envíos categorizados.');
+  }
+
+  return res.json();
+}
