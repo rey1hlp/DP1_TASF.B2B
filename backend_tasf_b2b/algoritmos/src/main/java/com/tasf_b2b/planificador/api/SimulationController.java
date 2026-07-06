@@ -90,9 +90,24 @@ public class SimulationController {
     @GetMapping("/{simId}/flights/{flightId}/shipments")
     public ResponseEntity<java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> listarEnviosPorVuelo(
             @PathVariable String simId,
-            @PathVariable Long flightId) {
+            @PathVariable Long flightId,
+            @RequestParam(required = false) Integer planId,
+            @RequestParam(required = false) Integer salidaMin) {
         java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> result =
-                simulationService.getShipmentsByFlight(simId, flightId);
+                simulationService.getShipmentsByFlight(simId, flightId, planId, salidaMin);
+        if (result == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/{simId}/airports/{oaci}/shipments")
+    public ResponseEntity<java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> listarEnviosPorAeropuerto(
+            @PathVariable String simId,
+            @PathVariable String oaci,
+            @RequestParam(required = false) Integer minute) {
+        java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> result =
+                simulationService.getShipmentsByAirport(simId, oaci, minute);
         if (result == null) {
             return ResponseEntity.notFound().build();
         }

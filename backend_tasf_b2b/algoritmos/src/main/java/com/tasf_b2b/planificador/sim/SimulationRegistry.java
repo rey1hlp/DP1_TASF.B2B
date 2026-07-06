@@ -265,9 +265,11 @@ public class SimulationRegistry {
 
     private SimulationAppendMessage buildAppendMessage(String simulationId, SimulationData mergedData, SimulationData blockData) {
         SimulationAppendMessage append = new SimulationAppendMessage();
+        // Enviamos el set COMPLETO de vuelos ya reconciliado (fillCommonFields usa mergedData.vuelos)
+        // para que el cliente REEMPLACE sus segmentos y no acumule vuelos-fantasma de bloques previos.
+        // Los almacenes se mantienen por bloque, como antes.
         fillCommonFields(append, simulationId, mergedData);
         if (blockData != null) {
-            append.vuelos = blockData.vuelos;
             append.almacenes = blockData.almacenes;
         }
         return append;
@@ -413,6 +415,14 @@ public class SimulationRegistry {
         java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> enviosPorVuelo =
             mergeShipmentsByFlight(base.enviosPorVuelo, extra.enviosPorVuelo);
 
+        // Reconciliar los segmentos con las rutas FINALES fusionadas. Al solaparse bloques, la ruta
+        // de un envío puede reasignarse a otra instancia del vuelo; si solo concatenáramos segmentos
+        // quedarían vuelos-fantasma (carga heredada de un bloque cuyo envío ya fue reasignado, sin
+        // ninguna ruta que pase por ellos). Reconstruimos la lista para que cada vuelo mostrado tenga
+        // carga real y coincida con lo que devuelve la consulta de envíos por vuelo.
+        java.util.List<FlightSegmentDto> vuelosReconciliados =
+            reconciliarVuelosConRutas(vuelos, rutas, envios);
+
         int diaMin = Math.min(base.diaMin, extra.diaMin);
         int diaMax = Math.max(base.diaMax, extra.diaMax);
         int diasExtra = Math.max(base.diasExtra, extra.diasExtra);
@@ -428,12 +438,90 @@ public class SimulationRegistry {
             totalEnvios,
             totalMaletas,
             base.speedMinPerSec > 0 ? base.speedMinPerSec : extra.speedMinPerSec,
-            vuelos,
+            vuelosReconciliados,
             almacenes,
             rutas,
             envios,
             enviosPorVuelo
         );
+    }
+
+    /**
+     * Reconstruye la lista de segmentos de vuelo a partir de las rutas fusionadas, de modo que solo
+     * aparezcan los vuelos realmente usados por alguna ruta y su carga refleje la suma de las
+     * cantidades de los envíos cuya ruta FINAL pasa por ese vuelo. Elimina vuelos-fantasma.
+     *
+     * @param vuelosMeta segmentos previos (base + extra) usados como fuente de metadatos
+     *                   (flightId, planId, capacidad, coordenadas) por identidad estable del vuelo.
+     * @param rutas      rutas fusionadas por codigoPedido.
+     * @param envios     envíos fusionados por codigoPedido (para obtener la cantidad de maletas).
+     */
+    private java.util.List<FlightSegmentDto> reconciliarVuelosConRutas(
+        java.util.List<FlightSegmentDto> vuelosMeta,
+        Map<String, RespuestaRutaEnvioDto> rutas,
+        Map<String, com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> envios
+    ) {
+        if (rutas == null || rutas.isEmpty()) {
+            return vuelosMeta != null ? vuelosMeta : new java.util.ArrayList<>();
+        }
+
+        java.util.Map<String, FlightSegmentDto> metaPorClave = new java.util.LinkedHashMap<>();
+        if (vuelosMeta != null) {
+            for (FlightSegmentDto seg : vuelosMeta) {
+                if (seg == null) continue;
+                metaPorClave.putIfAbsent(
+                    claveVuelo(seg.origen, seg.destino, seg.salidaMin, seg.llegadaMin), seg);
+            }
+        }
+
+        java.util.Map<String, FlightSegmentDto> reconstruidos = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, RespuestaRutaEnvioDto> entry : rutas.entrySet()) {
+            RespuestaRutaEnvioDto ruta = entry.getValue();
+            if (ruta == null || ruta.ruta == null) continue;
+            com.tasf_b2b.planificador.api.dto.ShipmentCrudDto env =
+                envios != null ? envios.get(entry.getKey()) : null;
+            long cantidad = env != null ? env.cantidad : 0L;
+            for (com.tasf_b2b.planificador.api.dto.PasoRutaDto paso : ruta.ruta) {
+                if (paso == null) continue;
+                String clave = claveVuelo(paso.origen, paso.destino, paso.salidaMin, paso.llegadaMin);
+                FlightSegmentDto seg = reconstruidos.get(clave);
+                if (seg == null) {
+                    FlightSegmentDto meta = metaPorClave.get(clave);
+                    seg = new FlightSegmentDto();
+                    if (meta != null) {
+                        seg.flightId = meta.flightId;
+                        seg.planId = meta.planId;
+                        seg.origen = meta.origen;
+                        seg.destino = meta.destino;
+                        seg.salidaMin = meta.salidaMin;
+                        seg.llegadaMin = meta.llegadaMin;
+                        seg.capacidad = meta.capacidad;
+                        seg.origenLat = meta.origenLat;
+                        seg.origenLon = meta.origenLon;
+                        seg.destinoLat = meta.destinoLat;
+                        seg.destinoLon = meta.destinoLon;
+                    } else {
+                        seg.flightId = paso.vueloId;
+                        seg.planId = -1;
+                        seg.origen = paso.origen;
+                        seg.destino = paso.destino;
+                        seg.salidaMin = paso.salidaMin;
+                        seg.llegadaMin = paso.llegadaMin;
+                        seg.capacidad = 0;
+                    }
+                    seg.carga = 0L;
+                    reconstruidos.put(clave, seg);
+                }
+                seg.carga += cantidad;
+            }
+        }
+        return new java.util.ArrayList<>(reconstruidos.values());
+    }
+
+    private String claveVuelo(String origen, String destino, int salidaMin, int llegadaMin) {
+        return (origen == null ? "" : origen.trim().toUpperCase())
+            + "|" + (destino == null ? "" : destino.trim().toUpperCase())
+            + "|" + salidaMin + "|" + llegadaMin;
     }
 
     private java.util.Map<Integer, java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> mergeShipmentsByFlight(

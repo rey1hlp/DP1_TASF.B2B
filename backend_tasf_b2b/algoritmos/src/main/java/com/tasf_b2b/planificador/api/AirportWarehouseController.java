@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+import com.tasf_b2b.planificador.sim.DailyPlanningService;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -20,10 +21,16 @@ public class AirportWarehouseController {
 
     private final JdbcTemplate jdbcTemplate;
     private final AirportRepository airportRepository;
+    private final DailyPlanningService dailyPlanningService;
 
-    public AirportWarehouseController(JdbcTemplate jdbcTemplate, AirportRepository airportRepository) {
+    public AirportWarehouseController(
+        JdbcTemplate jdbcTemplate,
+        AirportRepository airportRepository,
+        DailyPlanningService dailyPlanningService
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.airportRepository = airportRepository;
+        this.dailyPlanningService = dailyPlanningService;
     }
 
     @GetMapping("/{oaci}")
@@ -82,5 +89,45 @@ public class AirportWarehouseController {
         }, oaci.toUpperCase());
 
         return ResponseEntity.ok(shipments);
+    }
+
+    @GetMapping("/{oaci}/shipments")
+    public ResponseEntity<List<ShipmentCrudDto>> getAirportShipments(@PathVariable String oaci) {
+        List<ShipmentCrudDto> shipments = dailyPlanningService.getShipmentsByAirport(oaci);
+        if (!shipments.isEmpty()) {
+            return ResponseEntity.ok(shipments);
+        }
+
+        String sql = "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
+                     "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
+                     "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
+                     "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
+                     "FROM shipment s " +
+                     "JOIN airport ao ON s.origen_id = ao.id " +
+                     "JOIN airport ad ON s.destino_id = ad.id " +
+                     "WHERE ao.codigo_oaci = ? OR ad.codigo_oaci = ? " +
+                     "ORDER BY s.hora_ingreso_utc DESC";
+
+        List<ShipmentCrudDto> fallback = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            ShipmentCrudDto dto = new ShipmentCrudDto();
+            dto.id = rs.getLong("id");
+            dto.codigoPedido = rs.getString("codigo_pedido");
+            dto.origen = rs.getString("origen_oaci");
+            dto.origenCiudad = rs.getString("origen_ciudad");
+            dto.destino = rs.getString("destino_oaci");
+            dto.destinoCiudad = rs.getString("destino_ciudad");
+            dto.fecha = rs.getString("fecha");
+            dto.ingresoUtc = rs.getTimestamp("hora_ingreso_utc").toLocalDateTime();
+            dto.ingresoLocal = rs.getTimestamp("hora_ingreso_local").toLocalDateTime();
+            dto.gmtOffset = rs.getInt("gmt_offset");
+            dto.cantidad = rs.getInt("cantidad");
+            dto.idCliente = rs.getString("id_cliente");
+            dto.slaHoras = rs.getInt("sla_horas");
+            dto.status = ShipmentStatus.valueOf(rs.getString("status"));
+            dto.auditDateIns = rs.getTimestamp("audit_date_ins").toLocalDateTime();
+            return dto;
+        }, oaci.toUpperCase(), oaci.toUpperCase());
+
+        return ResponseEntity.ok(fallback);
     }
 }

@@ -3,6 +3,7 @@ package com.tasf_b2b.planificador.sim;
 import com.tasf_b2b.planificador.api.dto.FlightSegmentDto;
 import com.tasf_b2b.planificador.api.dto.PasoRutaDto;
 import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
+import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
 import com.tasf_b2b.planificador.dominio.Aeropuerto;
 import com.tasf_b2b.planificador.dominio.Envio;
 import com.tasf_b2b.planificador.dominio.Vuelo;
@@ -681,6 +682,70 @@ public class DailyPlanningService {
             }
         }
         return result;
+    }
+
+    public List<ShipmentCrudDto> getShipmentsByAirport(String airportCode) {
+        String airport = normalizeAirport(airportCode);
+        if (airport == null || lastRutasPorPaquete.isEmpty()) {
+            log.warn(
+                "[DAILY_PLAN][SHIPMENTS_BY_AIRPORT] empty state airport={} routes={}",
+                airportCode,
+                lastRutasPorPaquete != null ? lastRutasPorPaquete.size() : -1
+            );
+            return List.of();
+        }
+
+        List<String> codes = new ArrayList<>();
+        for (Map.Entry<String, RespuestaRutaEnvioDto> entry : lastRutasPorPaquete.entrySet()) {
+            RespuestaRutaEnvioDto route = entry.getValue();
+            if (route == null || route.ruta == null || route.ruta.isEmpty()) {
+                continue;
+            }
+            boolean matchesAirport = route.ruta.stream().anyMatch(step ->
+                step != null && (
+                    airport.equals(normalizeAirport(step.origen))
+                        || airport.equals(normalizeAirport(step.destino))
+                )
+            );
+            if (matchesAirport) {
+                codes.add(entry.getKey());
+            }
+        }
+
+        log.info(
+            "[DAILY_PLAN][SHIPMENTS_BY_AIRPORT] airport={} matchedCodes={} sample={}",
+            airport,
+            codes.size(),
+            codes.stream().limit(10).toList()
+        );
+
+        if (codes.isEmpty()) {
+            return List.of();
+        }
+
+        return shipmentRepository.findByCodigoPedidoIn(codes).stream()
+            .map(this::toShipmentDto)
+            .collect(Collectors.toList());
+    }
+
+    private ShipmentCrudDto toShipmentDto(ShipmentEntity entity) {
+        ShipmentCrudDto dto = new ShipmentCrudDto();
+        dto.id = entity.id;
+        dto.codigoPedido = entity.codigoPedido;
+        dto.origen = entity.origen != null ? entity.origen.codigoOaci : null;
+        dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
+        dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
+        dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
+        dto.fecha = entity.fecha;
+        dto.ingresoUtc = entity.ingresoUtc;
+        dto.ingresoLocal = entity.ingresoLocal;
+        dto.gmtOffset = entity.gmtOffset;
+        dto.cantidad = entity.cantidad;
+        dto.idCliente = entity.idCliente;
+        dto.slaHoras = entity.slaHoras;
+        dto.status = entity.status;
+        dto.auditDateIns = entity.auditDateIns;
+        return dto;
     }
 
     private boolean isWithinWindow(int minute, int start, int end) {

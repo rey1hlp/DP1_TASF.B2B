@@ -44,19 +44,12 @@ export function useSimulationSocket(simId: string | null) {
       if (payload.type === 'append') {
         const append = payload as WsAppendMessage
         setMeta(append)
-        setSegments((prev) => {
-          const merged = [...prev, ...(append.vuelos ?? [])]
-          const seen = new Set<string>()
-          const deduped: FlightSegmentDto[] = []
-          for (const seg of merged) {
-            const key = `${seg.flightId}_${seg.planId}_${seg.salidaMin}_${seg.llegadaMin}`
-            if (seen.has(key)) continue
-            seen.add(key)
-            deduped.push(seg)
-          }
-          deduped.sort((left, right) => left.salidaMin - right.salidaMin || left.flightId - right.flightId)
-          return deduped
-        })
+        // El backend envía el set COMPLETO de vuelos ya reconciliado con las rutas finales.
+        // Reemplazamos (no acumulamos) para no arrastrar vuelos-fantasma de bloques anteriores
+        // cuyos envíos fueron reasignados a otra instancia del vuelo.
+        const next = [...(append.vuelos ?? [])]
+        next.sort((left, right) => left.salidaMin - right.salidaMin || left.flightId - right.flightId)
+        setSegments(next)
         setStatus('READY')
         setStatusMessage(null)
       }

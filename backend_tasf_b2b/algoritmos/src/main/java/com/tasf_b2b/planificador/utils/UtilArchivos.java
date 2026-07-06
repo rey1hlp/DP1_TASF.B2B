@@ -134,7 +134,8 @@ public class UtilArchivos extends BaseParser {
                         ? aeroOrigen.calcularSla(aeroDestino)
                         : (obtenerContinente(origen).equals(obtenerContinente(destino)) ? 24 : 48);
 
-                    envios.add(new Envio(idPedido, origen, destino, fecha, hh, mm, cantidad, idCliente, sla, aeroOrigen));
+                    String codigoGlobal = normalizarCodigoPedido(origen, idPedido);
+                    envios.add(new Envio(codigoGlobal, origen, destino, fecha, hh, mm, cantidad, idCliente, sla, aeroOrigen));
                 } catch (Exception e) {}
             }
         }
@@ -186,5 +187,13 @@ public class UtilArchivos extends BaseParser {
         Matcher m = PATRON_ORIGEN.matcher(nombreArchivo);
         if (m.find()) return m.group(1).toUpperCase(Locale.ROOT);
         return "EBCI";
+    }
+
+    private static String normalizarCodigoPedido(String origen, String idPedido) {
+        String codigoOrigen = (origen == null || origen.isBlank())
+            ? "EBCI"
+            : origen.trim().toUpperCase(Locale.ROOT);
+        String codigoPedido = (idPedido == null) ? "" : idPedido.trim();
+        return codigoOrigen + "-" + codigoPedido;
     }
 }

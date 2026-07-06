@@ -123,6 +123,33 @@ export async function getWarehouseShipments(airportCode: string): Promise<Shipme
   return res.json();
 }
 
+export async function getAirportShipments(
+  airportCode: string,
+  opts?: { simId?: string | null; minute?: number | null }
+): Promise<ShipmentCrudDto[]> {
+  const minuteQuery = opts?.minute !== undefined && opts?.minute !== null
+    ? `?minute=${encodeURIComponent(String(opts.minute))}`
+    : ''
+
+  if (opts?.simId) {
+    const res = await authFetch(
+      `${API_BASE}/api/simulations/${encodeURIComponent(opts.simId)}/airports/${encodeURIComponent(airportCode)}/shipments${minuteQuery}`
+    )
+    if (!res.ok) {
+      throw new Error('Error al obtener envíos del aeropuerto en simulación')
+    }
+    return res.json()
+  }
+
+  const res = await authFetch(
+    `${API_BASE}/api/db/airports/${encodeURIComponent(airportCode)}/shipments${minuteQuery}`
+  )
+  if (!res.ok) {
+    throw new Error('Error al obtener envíos del aeropuerto')
+  }
+  return res.json()
+}
+
 // Vuelo por ID
 export async function getFlightById(id: number): Promise<FlightCrudDto> {
   const res = await authFetch(`${API_BASE}/api/db/flights/${id}`);
@@ -472,10 +499,15 @@ export async function fetchOccupancyReport(): Promise<FlightOccupancyData[]> {
 
 export async function getSimulationShipmentsByFlight(
   simId: string,
-  flightId: number
+  flightId: number,
+  opts?: { planId?: number; salidaMin?: number }
 ): Promise<ShipmentCrudDto[]> {
+  const params = new URLSearchParams()
+  if (opts?.planId !== undefined && opts.planId !== null) params.set('planId', String(opts.planId))
+  if (opts?.salidaMin !== undefined && opts.salidaMin !== null) params.set('salidaMin', String(opts.salidaMin))
+  const query = params.toString()
   const res = await authFetch(
-    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/flights/${flightId}/shipments`
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/flights/${flightId}/shipments${query ? `?${query}` : ''}`
   );
   if (!res.ok) {
     if (res.status === 404) {

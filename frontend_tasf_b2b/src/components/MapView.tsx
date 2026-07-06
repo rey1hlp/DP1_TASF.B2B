@@ -6,6 +6,7 @@ import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim
 import {
   API_BASE,
   authFetch,
+  getAirportShipments,
   getShipmentByCode,
   getShipmentsByFlight,
   getSimulationShipmentsByFlight,
@@ -22,6 +23,7 @@ import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 import type { CancelledFlightTrace } from '../utils/cancelledFlightTraces'
 
 type FlightDetailsStage = 'flight' | 'shipments' | 'shipmentDetails'
+type AirportDetailsStage = 'airport' | 'shipments' | 'shipmentDetails'
 
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
@@ -238,10 +240,16 @@ export default function MapView({
   const [previewAirportCode, setPreviewAirportCode] = useState<string | null>(null)
   const [previewFlightId, setPreviewFlightId] = useState<number | null>(null)
   const [detailStage, setDetailStage] = useState<FlightDetailsStage>('flight')
+  const [airportDetailStage, setAirportDetailStage] = useState<AirportDetailsStage>('airport')
   const [flightShipments, setFlightShipments] = useState<ShipmentCrudDto[]>([])
   const [flightShipmentsLoading, setFlightShipmentsLoading] = useState(false)
   const [flightShipmentsError, setFlightShipmentsError] = useState<string | null>(null)
   const [selectedShipment, setSelectedShipment] = useState<ShipmentCrudDto | null>(null)
+  const [airportShipments, setAirportShipments] = useState<ShipmentCrudDto[]>([])
+  const [airportShipmentsLoading, setAirportShipmentsLoading] = useState(false)
+  const [airportShipmentsError, setAirportShipmentsError] = useState<string | null>(null)
+  const [selectedAirportShipment, setSelectedAirportShipment] = useState<ShipmentCrudDto | null>(null)
+  const [airportShipmentsMinute, setAirportShipmentsMinute] = useState<number | null>(null)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -281,6 +289,14 @@ export default function MapView({
     setSelectedShipment(null)
     setFlightShipmentsLoading(false)
   }, [previewFlightId])
+
+  useEffect(() => {
+    setAirportDetailStage('airport')
+    setAirportShipments([])
+    setAirportShipmentsError(null)
+    setSelectedAirportShipment(null)
+    setAirportShipmentsLoading(false)
+  }, [previewAirportCode])
 
   useEffect(() => {
     if (detailStage !== 'shipments' || previewFlightId === null) {
@@ -414,7 +430,10 @@ export default function MapView({
 
       try {
         const result = simId
-          ? await getSimulationShipmentsByFlight(simId, activeFlightId)
+          ? await getSimulationShipmentsByFlight(simId, activeFlightId, {
+              planId: previewFlight?.planId,
+              salidaMin: previewFlight?.salidaMin,
+            })
           : await getShipmentsByFlight(activeFlightId)
 
         if (!cancelled) {
@@ -501,6 +520,67 @@ export default function MapView({
     }
   }, [detailStage, previewFlightId, previewFlight?.flightId, simId])
 
+  useEffect(() => {
+    if (airportDetailStage !== 'shipments' || previewAirportCode === null || previewAirport === null) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadAirportShipments = async () => {
+      setAirportShipmentsLoading(true)
+      setAirportShipmentsError(null)
+      console.log('[MapView] loading airport shipments', {
+        airportCode: previewAirport.codigoOaci,
+        simId,
+        detailStage: airportDetailStage,
+        minute: airportShipmentsMinute,
+        source: simId ? 'simulation' : 'database',
+      })
+
+      try {
+        const result = await getAirportShipments(previewAirport.codigoOaci, {
+          simId,
+          minute: airportShipmentsMinute,
+        })
+
+        if (!cancelled) {
+          console.log('[MapView] airport shipments loaded', {
+            airportCode: previewAirport.codigoOaci,
+            simId,
+            total: result.length,
+            codes: result.slice(0, 10).map((shipment) => shipment.codigoPedido),
+            source: simId ? 'simulation' : 'database',
+          })
+          setAirportShipments(result)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[MapView] airport shipments fetch failed', {
+            airportCode: previewAirport.codigoOaci,
+            simId,
+            detailStage: airportDetailStage,
+            error: error instanceof Error ? error.message : error,
+          })
+          setAirportShipments([])
+          setAirportShipmentsError(
+            error instanceof Error ? error.message : 'No se pudo cargar los envíos del aeropuerto',
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setAirportShipmentsLoading(false)
+        }
+      }
+    }
+
+    void loadAirportShipments()
+
+    return () => {
+      cancelled = true
+    }
+  }, [airportDetailStage, airportShipmentsMinute, previewAirport, previewAirportCode, simId])
+
   const invalidateMapSize = () => {
     if (!mapRef.current) {
       return
@@ -539,6 +619,16 @@ export default function MapView({
     onFlightPreview?.(null)
   }
 
+  const closePreviewAirport = () => {
+    closedPreviewAirportCodeRef.current = previewAirportCode
+    setPreviewAirportCode(null)
+    setAirportDetailStage('airport')
+    setAirportShipments([])
+    setAirportShipmentsError(null)
+    setSelectedAirportShipment(null)
+    setAirportShipmentsLoading(false)
+  }
+
   const openShipmentsStage = () => {
     if (previewFlightId === null) {
       return
@@ -565,6 +655,36 @@ export default function MapView({
   const goBackToShipmentsList = () => {
     setDetailStage('shipments')
     setSelectedShipment(null)
+  }
+
+  const openAirportShipmentsStage = () => {
+    if (previewAirportCode === null) {
+      return
+    }
+
+    console.log('[MapView] open airport shipments stage', {
+      airportCode: previewAirportCode,
+      simId,
+      minute: currentMinute,
+    })
+    setAirportShipmentsMinute(currentMinute)
+    setAirportDetailStage('shipments')
+  }
+
+  const goBackToAirportCard = () => {
+    setAirportDetailStage('airport')
+    setSelectedAirportShipment(null)
+    setAirportShipmentsError(null)
+  }
+
+  const openAirportShipmentDetails = (shipment: ShipmentCrudDto) => {
+    setSelectedAirportShipment(shipment)
+    setAirportDetailStage('shipmentDetails')
+  }
+
+  const goBackToAirportShipmentsList = () => {
+    setAirportDetailStage('shipments')
+    setSelectedAirportShipment(null)
   }
 
   useEffect(() => {
@@ -1312,9 +1432,11 @@ export default function MapView({
             )}
           </div>
         </div>
-      ) : previewAirport ? (
+      ) : previewAirport && airportDetailStage === 'airport' ? (
         <MapFloatingCard
           actionLabel="Ver detalle completo"
+          secondaryActionLabel="Ver envíos"
+          onSecondaryAction={openAirportShipmentsStage}
           badge={previewAirport.codigoOaci}
           metrics={[
             {
@@ -1329,10 +1451,7 @@ export default function MapView({
             },
           ]}
           onAction={() => onAirportDetailRequest?.(previewAirport.codigoOaci)}
-          onClose={() => {
-            closedPreviewAirportCodeRef.current = previewAirport.codigoOaci
-            setPreviewAirportCode(null)
-          }}
+          onClose={closePreviewAirport}
           statusColor={resolveSemaphoreColor(
             warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
             ranges
@@ -1344,6 +1463,171 @@ export default function MapView({
           subtitle={previewAirport.pais}
           title={previewAirport.nombre}
         />
+      ) : previewAirport && airportDetailStage === 'shipments' ? (
+        <div className="map-floating-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
+          <div className="map-floating-card-header">
+            <div className="map-floating-card-title">
+              <span className="map-floating-card-badge">{previewAirport.codigoOaci}</span>
+              <strong>Envíos en el almacén</strong>
+            </div>
+            <button
+              type="button"
+              className="map-floating-card-close"
+              onClick={closePreviewAirport}
+              aria-label="Cerrar detalle"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="map-floating-card-body">
+            <div className="map-floating-card-subtitle">{previewAirport.nombre}</div>
+
+            <button type="button" className="btn ghost" onClick={goBackToAirportCard}>
+              ← Volver
+            </button>
+
+            {airportShipmentsLoading ? (
+              <div className="crud-empty">Cargando envíos del aeropuerto...</div>
+            ) : null}
+
+            {airportShipmentsError ? (
+              <div className="crud-error" style={{ margin: 0 }}>
+                {airportShipmentsError}
+              </div>
+            ) : null}
+
+            {!airportShipmentsLoading && !airportShipmentsError && airportShipments.length === 0 ? (
+              <div className="crud-empty">No hay envíos en este aeropuerto.</div>
+            ) : null}
+
+            {!airportShipmentsLoading && !airportShipmentsError ? (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {airportShipments.map((shipment) => {
+                  const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
+
+                  return (
+                    <div
+                      key={shipment.id ?? shipment.codigoPedido}
+                      style={{
+                        display: 'grid',
+                        gap: '10px',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: '1px solid #d9e4f4',
+                        background: '#f8fbff',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, color: '#10213a' }}>{shipment.codigoPedido}</div>
+                          <div style={{ fontSize: '12px', color: '#52647d' }}>
+                            {shipment.origen} → {shipment.destino}
+                          </div>
+                        </div>
+                        <span className={`status-badge ${statusClass}`}>
+                          {shipment.status ?? 'PENDING'}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                          gap: '8px',
+                        }}
+                      >
+                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                          <strong style={{ fontSize: '18px' }}>{formatBags(shipment.cantidad)}</strong>
+                          <span>Maletas</span>
+                        </div>
+                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                          <strong style={{ fontSize: '18px' }}>
+                            {formatDurationHours(shipment.slaHoras, 0)}
+                          </strong>
+                          <span>SLA</span>
+                        </div>
+                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                          <strong style={{ fontSize: '18px' }}>{shipment.asignado ? 'Sí' : 'No'}</strong>
+                          <span>Asignado</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="map-floating-card-action"
+                        onClick={() => openAirportShipmentDetails(shipment)}
+                        style={{ minHeight: '40px', fontSize: '14px' }}
+                      >
+                        Ver maletas
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : previewAirport && airportDetailStage === 'shipmentDetails' ? (
+        <div className="map-floating-card" style={{ width: 'min(420px, calc(100% - 32px))' }}>
+          <div className="map-floating-card-header">
+            <div className="map-floating-card-title">
+              <span className="map-floating-card-badge">Maletas</span>
+              <strong>{selectedAirportShipment?.codigoPedido ?? previewAirport.codigoOaci}</strong>
+            </div>
+            <button
+              type="button"
+              className="map-floating-card-close"
+              onClick={closePreviewAirport}
+              aria-label="Cerrar detalle"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="map-floating-card-body">
+            <div className="map-floating-card-subtitle">{previewAirport.nombre}</div>
+
+            <button type="button" className="btn ghost" onClick={goBackToAirportShipmentsList}>
+              ← Volver
+            </button>
+
+            {selectedAirportShipment ? (
+              <>
+                <div className="map-floating-card-metrics" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  <div className="map-floating-card-metric">
+                    <strong>{formatBags(selectedAirportShipment.cantidad)}</strong>
+                    <span>Número de maletas</span>
+                  </div>
+                  <div className="map-floating-card-metric">
+                    <strong>{selectedAirportShipment.idCliente || '--'}</strong>
+                    <span>Cliente</span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '8px',
+                    border: '1px solid #d9e4f4',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    background: '#f8fbff',
+                    fontSize: '13px',
+                    color: '#334155',
+                  }}
+                >
+                  <div><strong>Origen:</strong> {selectedAirportShipment.origen}</div>
+                  <div><strong>Destino:</strong> {selectedAirportShipment.destino}</div>
+                  <div><strong>Estado:</strong> {selectedAirportShipment.status ?? 'PENDING'}</div>
+                  <div><strong>SLA:</strong> {formatDurationHours(selectedAirportShipment.slaHoras, 0)}</div>
+                </div>
+              </>
+            ) : (
+              <div className="crud-empty">Selecciona un envío para ver sus maletas.</div>
+            )}
+          </div>
+        </div>
       ) : null}
       <div ref={containerRef} className="map"></div>
     </div>
