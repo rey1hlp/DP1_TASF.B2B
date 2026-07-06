@@ -246,6 +246,7 @@ export default function MapView({
   const [flightShipmentsError, setFlightShipmentsError] = useState<string | null>(null)
   const [selectedShipment, setSelectedShipment] = useState<ShipmentCrudDto | null>(null)
   const [airportShipments, setAirportShipments] = useState<ShipmentCrudDto[]>([])
+  const [shipmentFilterType, setShipmentFilterType] = useState<'all' | 'entrante' | 'saliente'>('all')
   const [airportShipmentsLoading, setAirportShipmentsLoading] = useState(false)
   const [airportShipmentsError, setAirportShipmentsError] = useState<string | null>(null)
   const [selectedAirportShipment, setSelectedAirportShipment] = useState<ShipmentCrudDto | null>(null)
@@ -263,6 +264,7 @@ export default function MapView({
   const resizeTimerRef = useRef<number | null>(null)
   const closedPreviewAirportCodeRef = useRef<string | null>(null)
   const closedPreviewFlightIdRef = useRef<number | null>(null)
+  const lastAirportCodeRef = useRef<string | null>(null)
   const cancelledFlightIdSet = useMemo(
     () => new Set((cancelledFlightTraces ?? []).map((trace) => trace.flightId)),
     [cancelledFlightTraces],
@@ -520,39 +522,55 @@ export default function MapView({
     }
   }, [detailStage, previewFlightId, previewFlight?.flightId, simId])
 
+  const quarterMinute = currentMinute !== null ? Math.floor(currentMinute / 15) * 15 : null
+
   useEffect(() => {
-    if (airportDetailStage !== 'shipments' || previewAirportCode === null || previewAirport === null) {
+    if (previewAirportCode === null || previewAirport === null) {
+      lastAirportCodeRef.current = null
       return
     }
 
     let cancelled = false
+    const isNewAirport = previewAirportCode !== lastAirportCodeRef.current
 
     const loadAirportShipments = async () => {
-      setAirportShipmentsLoading(true)
-      setAirportShipmentsError(null)
+      if (isNewAirport) {
+        setAirportShipmentsLoading(true)
+        setAirportShipmentsError(null)
+        setAirportShipments([]) // Clear old shipments to avoid showing stale data
+        lastAirportCodeRef.current = previewAirportCode
+      }
+
+      const queryMinute = simId ? quarterMinute : null
       console.log('[MapView] loading airport shipments', {
         airportCode: previewAirport.codigoOaci,
         simId,
         detailStage: airportDetailStage,
-        minute: airportShipmentsMinute,
+        minute: queryMinute,
         source: simId ? 'simulation' : 'database',
+        isNewAirport,
       })
 
       try {
         const result = await getAirportShipments(previewAirport.codigoOaci, {
           simId,
-          minute: airportShipmentsMinute,
+          minute: queryMinute,
         })
 
         if (!cancelled) {
+          // Solo filtrar por status en modo no-simulación; en simulación el backend se encargará
+          const activeShipments = simId
+            ? result
+            : result.filter(s => s.status !== 'DELIVERED' && s.status !== 'CANCELLED')
           console.log('[MapView] airport shipments loaded', {
             airportCode: previewAirport.codigoOaci,
             simId,
             total: result.length,
-            codes: result.slice(0, 10).map((shipment) => shipment.codigoPedido),
+            filtered: activeShipments.length,
+            codes: activeShipments.slice(0, 10).map((shipment) => shipment.codigoPedido),
             source: simId ? 'simulation' : 'database',
           })
-          setAirportShipments(result)
+          setAirportShipments(activeShipments)
         }
       } catch (error) {
         if (!cancelled) {
@@ -562,13 +580,15 @@ export default function MapView({
             detailStage: airportDetailStage,
             error: error instanceof Error ? error.message : error,
           })
-          setAirportShipments([])
-          setAirportShipmentsError(
-            error instanceof Error ? error.message : 'No se pudo cargar los envíos del aeropuerto',
-          )
+          if (isNewAirport) {
+            setAirportShipments([])
+            setAirportShipmentsError(
+              error instanceof Error ? error.message : 'No se pudo cargar los envíos del aeropuerto',
+            )
+          }
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && isNewAirport) {
           setAirportShipmentsLoading(false)
         }
       }
@@ -579,7 +599,7 @@ export default function MapView({
     return () => {
       cancelled = true
     }
-  }, [airportDetailStage, airportShipmentsMinute, previewAirport, previewAirportCode, simId])
+  }, [quarterMinute, previewAirport, previewAirportCode, simId])
 
   const invalidateMapSize = () => {
     if (!mapRef.current) {
@@ -815,8 +835,10 @@ export default function MapView({
       closedPreviewAirportCodeRef.current !== selectedAirportCode
     ) {
       setPreviewAirportCode(selectedAirportCode)
+      setAirportDetailStage('airport')
+      setAirportShipmentsMinute(currentMinute)
     }
-  }, [previewAirportCode, selectedAirportCode])
+  }, [previewAirportCode, selectedAirportCode, currentMinute])
 
   useEffect(() => {
     if (selectedFlightId === null) {
@@ -897,6 +919,8 @@ export default function MapView({
 
         closedPreviewAirportCodeRef.current = null
         setPreviewAirportCode(airport.codigoOaci)
+        setAirportDetailStage('airport')
+        setAirportShipmentsMinute(currentMinute)
         onAirportPreview?.(airport.codigoOaci)
       })
       marker.addTo(airportLayerRef.current as L.LayerGroup)
@@ -1432,38 +1456,70 @@ export default function MapView({
             )}
           </div>
         </div>
-      ) : previewAirport && airportDetailStage === 'airport' ? (
-        <MapFloatingCard
-          actionLabel="Ver detalle completo"
-          secondaryActionLabel="Ver envíos"
-          onSecondaryAction={openAirportShipmentsStage}
-          badge={previewAirport.codigoOaci}
-          metrics={[
-            {
-              label: 'Uso',
-              value: formatPercent(warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje, 1),
-            },
-            {
-              label: 'Ocupación',
-              value: warehouseSnapshot[previewAirport.codigoOaci]
-                ? `${formatInteger(warehouseSnapshot[previewAirport.codigoOaci].ocupacion)}/${formatInteger(warehouseSnapshot[previewAirport.codigoOaci].capacidad)}`
-                : `0/${formatInteger(previewAirport.capacidad)}`,
-            },
-          ]}
-          onAction={() => onAirportDetailRequest?.(previewAirport.codigoOaci)}
-          onClose={closePreviewAirport}
-          statusColor={resolveSemaphoreColor(
-            warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
-            ranges
-          ).fill}
-          statusLabel={getSemaphoreLabel(
-            warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
-            ranges
-          )}
-          subtitle={previewAirport.pais}
-          title={previewAirport.nombre}
-        />
-      ) : previewAirport && airportDetailStage === 'shipments' ? (
+      ) : previewAirport && airportDetailStage === 'airport' ? (() => {
+        // ENTRANTE: envíos cuyo origen NO es este aeropuerto (vinieron de otro lugar)
+        const incomingShipmentsList = airportShipments.filter(ship => ship.origen !== previewAirport.codigoOaci);
+        // SALIENTE: envíos que originan aquí O que están en tránsito (destino final != este aeropuerto)
+        const outgoingShipmentsList = airportShipments.filter(ship =>
+          ship.origen === previewAirport.codigoOaci || ship.destino !== previewAirport.codigoOaci
+        );
+
+        const incomingShipmentsCount = incomingShipmentsList.length;
+        const incomingBagsCount = incomingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+
+        const outgoingShipmentsCount = outgoingShipmentsList.length;
+        const outgoingBagsCount = outgoingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+
+        return (
+          <MapFloatingCard
+            actionLabel="Ver detalle completo"
+            secondaryActionLabel="Ver envíos"
+            onSecondaryAction={openAirportShipmentsStage}
+            badge={previewAirport.codigoOaci}
+            loading={airportShipmentsLoading}
+            metrics={[
+              {
+                label: 'Uso',
+                value: formatPercent(warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje, 1),
+              },
+              {
+                label: 'Ocupación',
+                value: warehouseSnapshot[previewAirport.codigoOaci]
+                  ? `${formatInteger(warehouseSnapshot[previewAirport.codigoOaci].ocupacion)}/${formatInteger(warehouseSnapshot[previewAirport.codigoOaci].capacidad)}`
+                  : `0/${formatInteger(previewAirport.capacidad)}`,
+              },
+              {
+                label: 'Envios entrantes',
+                value: String(incomingShipmentsCount),
+              },
+              {
+                label: 'Maletas entrantes',
+                value: formatBags(incomingBagsCount),
+              },
+              {
+                label: 'Envios salientes',
+                value: String(outgoingShipmentsCount),
+              },
+              {
+                label: 'Maletas salientes',
+                value: formatBags(outgoingBagsCount),
+              }
+            ]}
+            onAction={() => onAirportDetailRequest?.(previewAirport.codigoOaci)}
+            onClose={closePreviewAirport}
+            statusColor={resolveSemaphoreColor(
+              warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
+              ranges
+            ).fill}
+            statusLabel={getSemaphoreLabel(
+              warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
+              ranges
+            )}
+            subtitle={previewAirport.pais}
+            title={previewAirport.nombre}
+          />
+        );
+      })() : previewAirport && airportDetailStage === 'shipments' ? (
         <div className="map-floating-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
@@ -1487,6 +1543,34 @@ export default function MapView({
               ← Volver
             </button>
 
+            {/* Filtro Entrante / Saliente / Todos */}
+            <div style={{ display: 'flex', gap: '6px', margin: '8px 0' }}>
+              {(['all', 'entrante', 'saliente'] as const).map((filterVal) => {
+                const labels: Record<typeof filterVal, string> = { all: 'Todos', entrante: 'Entrantes', saliente: 'Salientes' };
+                const isActive = shipmentFilterType === filterVal;
+                return (
+                  <button
+                    key={filterVal}
+                    type="button"
+                    onClick={() => setShipmentFilterType(filterVal)}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '16px',
+                      border: isActive ? '2px solid #3b82f6' : '1px solid #ccc',
+                      background: isActive ? '#e8f0fe' : '#fff',
+                      color: isActive ? '#1a56db' : '#555',
+                      fontWeight: isActive ? 700 : 500,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {labels[filterVal]}
+                  </button>
+                );
+              })}
+            </div>
+
             {airportShipmentsLoading ? (
               <div className="crud-empty">Cargando envíos del aeropuerto...</div>
             ) : null}
@@ -1497,75 +1581,91 @@ export default function MapView({
               </div>
             ) : null}
 
-            {!airportShipmentsLoading && !airportShipmentsError && airportShipments.length === 0 ? (
-              <div className="crud-empty">No hay envíos en este aeropuerto.</div>
-            ) : null}
+            {!airportShipmentsLoading && !airportShipmentsError && (() => {
+              const code = previewAirport.codigoOaci;
+              const displayShipments = airportShipments.filter(ship => {
+                if (shipmentFilterType === 'entrante') return ship.origen !== code;
+                if (shipmentFilterType === 'saliente') return ship.origen === code || ship.destino !== code;
+                return true;
+              });
 
-            {!airportShipmentsLoading && !airportShipmentsError ? (
-              <div style={{ display: 'grid', gap: '10px' }}>
-                {airportShipments.map((shipment) => {
-                  const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
+              if (displayShipments.length === 0) {
+                return <div className="crud-empty">No hay envíos {shipmentFilterType === 'all' ? 'en este aeropuerto' : shipmentFilterType === 'entrante' ? 'entrantes' : 'salientes'}.</div>;
+              }
 
-                  return (
-                    <div
-                      key={shipment.id ?? shipment.codigoPedido}
-                      style={{
-                        display: 'grid',
-                        gap: '10px',
-                        padding: '12px',
-                        borderRadius: '12px',
-                        border: '1px solid #d9e4f4',
-                        background: '#f8fbff',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, color: '#10213a' }}>{shipment.codigoPedido}</div>
-                          <div style={{ fontSize: '12px', color: '#52647d' }}>
-                            {shipment.origen} → {shipment.destino}
-                          </div>
-                        </div>
-                        <span className={`status-badge ${statusClass}`}>
-                          {shipment.status ?? 'PENDING'}
-                        </span>
-                      </div>
+              return (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {displayShipments.map((shipment) => {
+                    const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-');
+                    // Determinar badges de tipo
+                    const isEntrante = shipment.origen !== code;
+                    const isSaliente = shipment.origen === code || shipment.destino !== code;
 
+                    return (
                       <div
+                        key={shipment.id ?? shipment.codigoPedido}
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                          gap: '8px',
+                          gap: '10px',
+                          padding: '12px',
+                          borderRadius: '12px',
+                          border: '1px solid #d9e4f4',
+                          background: '#f8fbff',
                         }}
                       >
-                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                          <strong style={{ fontSize: '18px' }}>{formatBags(shipment.cantidad)}</strong>
-                          <span>Maletas</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, color: '#10213a' }}>{shipment.codigoPedido}</div>
+                            <div style={{ fontSize: '12px', color: '#52647d' }}>
+                              {shipment.origen} → {shipment.destino}
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                              {isEntrante && <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>ENTRANTE</span>}
+                              {isSaliente && <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>SALIENTE</span>}
+                            </div>
+                          </div>
+                          <span className={`status-badge ${statusClass}`}>
+                            {shipment.status ?? 'PENDING'}
+                          </span>
                         </div>
-                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                          <strong style={{ fontSize: '18px' }}>
-                            {formatDurationHours(shipment.slaHoras, 0)}
-                          </strong>
-                          <span>SLA</span>
-                        </div>
-                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                          <strong style={{ fontSize: '18px' }}>{shipment.asignado ? 'Sí' : 'No'}</strong>
-                          <span>Asignado</span>
-                        </div>
-                      </div>
 
-                      <button
-                        type="button"
-                        className="map-floating-card-action"
-                        onClick={() => openAirportShipmentDetails(shipment)}
-                        style={{ minHeight: '40px', fontSize: '14px' }}
-                      >
-                        Ver maletas
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                            gap: '8px',
+                          }}
+                        >
+                          <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                            <strong style={{ fontSize: '18px' }}>{formatBags(shipment.cantidad)}</strong>
+                            <span>Maletas</span>
+                          </div>
+                          <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                            <strong style={{ fontSize: '18px' }}>
+                              {formatDurationHours(shipment.slaHoras, 0)}
+                            </strong>
+                            <span>SLA</span>
+                          </div>
+                          <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
+                            <strong style={{ fontSize: '18px' }}>{shipment.asignado ? 'Sí' : 'No'}</strong>
+                            <span>Asignado</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="map-floating-card-action"
+                          onClick={() => openAirportShipmentDetails(shipment)}
+                          style={{ minHeight: '40px', fontSize: '14px' }}
+                        >
+                          Ver maletas
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       ) : previewAirport && airportDetailStage === 'shipmentDetails' ? (

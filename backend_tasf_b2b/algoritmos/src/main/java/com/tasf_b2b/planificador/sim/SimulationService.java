@@ -247,20 +247,48 @@ public class SimulationService {
                 continue;
             }
 
-            // Solo interesan los envíos que LLEGAN a este almacén (destino final o en tránsito/escala),
-            // es decir, algún paso cuyo destino sea el aeropuerto. NO los que solo lo usan como origen
-            // de un salto futuro (esos aún están en su origen real y no han pasado por este almacén).
-            boolean matchesAirport = ruta.ruta.stream().anyMatch(paso -> {
-                if (paso == null || !airport.equalsIgnoreCase(paso.destino)) {
-                    return false;
+            // Un envío está en un aeropuerto si en el minuto actual:
+            // a) Es su aeropuerto de origen (primer paso), ya pasó la horaIngresoMin y aún no ha despegado en el primer vuelo (salidaMin)
+            // b) Es un aeropuerto de destino (escala o final), ya aterrizó allí (llegadaMin), y (si hay vuelo siguiente) aún no ha despegado.
+            // Wait, el frontend también pide "seguir contandolos incluso si han salido y mientras sigan en el aire".
+            // Para satisfacer esto: si el envío está volando HACIA el aeropuerto (minute >= paso.salidaMin && minute < paso.llegadaMin),
+            // lo contamos como en tránsito hacia el aeropuerto (Entrante).
+            // Si está volando DESDE el aeropuerto (minute >= paso.salidaMin && minute < paso.llegadaMin),
+            // lo contamos como Saliente del aeropuerto de origen.
+            // Por lo tanto, el envío pertenece al aeropuerto `paso.origen` desde [ingreso al origen] hasta [llegada al destino].
+            // Y pertenece al aeropuerto `paso.destino` desde [salida del origen] hasta [salida del destino (o fin de simulación si es final)].
+            boolean matchesAirport = false;
+            if (minute == null) {
+                // Si no hay filtro de tiempo, basta con que el aeropuerto aparezca como origen de algún paso o destino de algún paso.
+                matchesAirport = ruta.ruta.stream().anyMatch(p -> airport.equalsIgnoreCase(p.origen) || airport.equalsIgnoreCase(p.destino));
+            } else {
+                for (int i = 0; i < ruta.ruta.size(); i++) {
+                    PasoRutaDto paso = ruta.ruta.get(i);
+                    PasoRutaDto pasoAnterior = i > 0 ? ruta.ruta.get(i - 1) : null;
+                    PasoRutaDto pasoSiguiente = i < ruta.ruta.size() - 1 ? ruta.ruta.get(i + 1) : null;
+
+                    // ¿Está en (o saliendo de) este aeropuerto como ORIGEN del vuelo actual?
+                    if (airport.equalsIgnoreCase(paso.origen)) {
+                        int inicioEnOrigen = (i == 0) ? ruta.ingresoMin : pasoAnterior.llegadaMin;
+                        // Permanece asociado al origen hasta que llega al siguiente destino (así se cuenta en el aire como saliente)
+                        if (minute >= inicioEnOrigen && minute < paso.llegadaMin) {
+                            matchesAirport = true;
+                            break;
+                        }
+                    }
+
+                    // ¿Está en (o llegando a) este aeropuerto como DESTINO del vuelo actual?
+                    if (airport.equalsIgnoreCase(paso.destino)) {
+                        // Empieza a asociarse al destino en el momento en que despega hacia él (para contarlo como entrante en el aire)
+                        int inicioEnDestino = paso.salidaMin;
+                        int finEnDestino = paso.salidaAlmacenDestinoMin; 
+                        if (minute >= inicioEnDestino && minute < finEnDestino) {
+                            matchesAirport = true;
+                            break;
+                        }
+                    }
                 }
-                if (minute == null) {
-                    return true;
-                }
-                // El vuelo hacia este almacén ya despegó: el envío va en el aire hacia SEQM
-                // o ya aterrizó y está en el almacén.
-                return minute >= paso.salidaMin;
-            });
+            }
 
             if (matchesAirport) {
                 matchedCodes.add(entry.getKey());
@@ -1226,15 +1254,18 @@ public class SimulationService {
             Ruta ruta = mejor.asignaciones[i];
             RespuestaRutaEnvioDto dto = new RespuestaRutaEnvioDto();
             dto.codigoPedido = envio.idPedido;
+            dto.ingresoMin = envio.horaIngresoMin;
 
             if (ruta != null && ruta.vuelos != null && !ruta.vuelos.isEmpty()) {
                 dto.estado = (ruta.tiempoTotalHoras > envio.slaHoras) ? "CON_RETRASO" : "ENTREGADO";
                 dto.tiempoTotalHoras = ruta.tiempoTotalHoras;
                 dto.ruta = new ArrayList<>();
-                for (Vuelo v : ruta.vuelos) {
+                for (int j = 0; j < ruta.vuelos.size(); j++) {
+                    Vuelo v = ruta.vuelos.get(j);
                     PasoRutaDto paso = new PasoRutaDto();
                     paso.vueloId = v.id; paso.origen = v.origen; paso.destino = v.destino;
                     paso.salidaMin = v.salidaMin; paso.llegadaMin = v.llegadaMin;
+                    paso.salidaAlmacenDestinoMin = ruta.salidasAlmacenMin[j];
                     dto.ruta.add(paso);
                 }
             } else {
@@ -1322,6 +1353,26 @@ public class SimulationService {
             if (ruta == null || ruta.vuelos == null || ruta.vuelos.isEmpty()) {
                 continue;
             }
+
+            // EVENTO DE ORIGEN (Ocupación inicial desde que se registra el envío hasta que despega el primer vuelo)
+            Vuelo primerVuelo = ruta.vuelos.get(0);
+            if (primerVuelo.salidaMin > envio.horaIngresoMin) {
+                List<WarehouseEventDto> listaOrigen = eventos.computeIfAbsent(
+                    primerVuelo.origen,
+                    k -> new ArrayList<>()
+                );
+
+                WarehouseEventDto inOrigen = new WarehouseEventDto();
+                inOrigen.minuto = envio.horaIngresoMin;
+                inOrigen.delta = envio.cantidad;
+                listaOrigen.add(inOrigen);
+
+                WarehouseEventDto outOrigen = new WarehouseEventDto();
+                outOrigen.minuto = primerVuelo.salidaMin;
+                outOrigen.delta = -envio.cantidad;
+                listaOrigen.add(outOrigen);
+            }
+
             for (int j = 0; j < ruta.vuelos.size(); j++) {
                 int llegada = ruta.llegadasAlmacenMin[j];
                 int salida = ruta.salidasAlmacenMin[j];

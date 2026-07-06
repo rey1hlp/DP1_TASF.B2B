@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AirportCrudDto, ShipmentCrudDto } from '../types/sim'
-import { getAirportByCode, getWarehouseShipments } from '../services/api'
+import { getAirportByCode, getWarehouseShipments, getAirportShipments } from '../services/api'
 // 📦 Importamos las funciones de formateo oficiales del proyecto
 import { formatBags, formatGmtOffset, formatDateFromDayIndex, formatClockFromMinute } from '../utils/time'
 
@@ -30,7 +30,10 @@ export default function WarehouseDetailPage({ airportCode, onVolver, simulationD
         const airportData = await getAirportByCode(airportCode);
         setAirport(airportData);
 
-        if (!simulationData) {
+        if (simulationData) {
+          const shipmentsData = await getAirportShipments(airportCode, { simId: simulationData.simId, minute: simulationData.currentMinute });
+          setWarehouseShipments(shipmentsData);
+        } else {
           const shipmentsData = await getWarehouseShipments(airportCode);
           setWarehouseShipments(shipmentsData);
         }
@@ -46,13 +49,30 @@ export default function WarehouseDetailPage({ airportCode, onVolver, simulationD
 
   const filteredShipments = useMemo(() => {
     return warehouseShipments.filter(ship => {
+      // Solo filtrar por status en modo no-simulación; en simulación el backend se encargará
+      if (!simulationData && (ship.status === 'DELIVERED' || ship.status === 'CANCELLED')) {
+        return false;
+      }
       const origenMatch = !filterOrigen || ship.origen.toUpperCase().includes(filterOrigen.toUpperCase());
       const destinoMatch = !filterDestino || ship.destino.toUpperCase().includes(filterDestino.toUpperCase());
       return origenMatch && destinoMatch;
     });
-  }, [warehouseShipments, filterOrigen, filterDestino]);
+  }, [warehouseShipments, filterOrigen, filterDestino, simulationData]);
 
   const totalCargaAlmacenada = filteredShipments.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+  
+  // ENTRANTE: envíos cuyo origen NO es este aeropuerto (vinieron de otro lugar)
+  const incomingShipmentsList = filteredShipments.filter(ship => ship.origen !== airportCode);
+  // SALIENTE: envíos que originan aquí O que están en tránsito (destino final != este aeropuerto)
+  const outgoingShipmentsList = filteredShipments.filter(ship =>
+    ship.origen === airportCode || ship.destino !== airportCode
+  );
+
+  const incomingShipmentsCount = incomingShipmentsList.length;
+  const incomingBagsCount = incomingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+
+  const outgoingShipmentsCount = outgoingShipmentsList.length;
+  const outgoingBagsCount = outgoingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
 
   if (loading) return <div className="crud-panel"><div className="crud-empty">Cargando estado del almacén...</div></div>;
   if (error) return <div className="crud-panel"><div className="crud-empty">Error: {error}</div></div>;
@@ -154,6 +174,29 @@ export default function WarehouseDetailPage({ airportCode, onVolver, simulationD
             </div>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Envios entrantes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#3b82f6' }}>{incomingShipmentsCount}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de envíos</span>
+            </div>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Maletas entrantes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#3b82f6' }}>{formatBags(incomingBagsCount)}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de maletas</span>
+            </div>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Envios salientes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#f59e0b' }}>{outgoingShipmentsCount}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de envíos</span>
+            </div>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Maletas salientes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#f59e0b' }}>{formatBags(outgoingBagsCount)}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de maletas</span>
+            </div>
+          </div>
+
           <div className="upload-card" style={{ padding: '1.25rem', margin: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '13px', fontWeight: '600', color: '#555' }}>
               <span>Nivel de Llenado Físico</span>
@@ -198,6 +241,29 @@ export default function WarehouseDetailPage({ airportCode, onVolver, simulationD
         </div>
       ) : (
         <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Envios entrantes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#3b82f6' }}>{incomingShipmentsCount}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de envíos</span>
+            </div>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Maletas entrantes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#3b82f6' }}>{formatBags(incomingBagsCount)}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de maletas</span>
+            </div>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Envios salientes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#f59e0b' }}>{outgoingShipmentsCount}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de envíos</span>
+            </div>
+            <div className="upload-card" style={{ padding: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: '12px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Maletas salientes</span>
+              <strong style={{ fontSize: '1.8rem', color: '#f59e0b' }}>{formatBags(outgoingBagsCount)}</strong>
+              <span style={{ fontSize: '11px', color: '#aaa' }}>Total de maletas</span>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
             <div className="crud-search">
               <input

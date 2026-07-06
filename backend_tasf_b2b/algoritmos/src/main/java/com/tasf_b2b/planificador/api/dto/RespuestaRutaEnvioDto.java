@@ -6,5 +6,6 @@ public class RespuestaRutaEnvioDto {
     public String codigoPedido;
     public String estado;
     public double tiempoTotalHoras;
+    public int ingresoMin;
     public List<PasoRutaDto> ruta;
 }

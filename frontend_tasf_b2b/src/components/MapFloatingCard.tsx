@@ -17,6 +17,7 @@ type MapFloatingCardProps = {
   statusLabel: string
   subtitle: string
   title: ReactNode
+  loading?: boolean
 }
 
 export default function MapFloatingCard({
@@ -31,6 +32,7 @@ export default function MapFloatingCard({
   statusLabel,
   subtitle,
   title,
+  loading = false,
 }: MapFloatingCardProps) {
   return (
     <div className="map-floating-card">
@@ -49,7 +51,44 @@ export default function MapFloatingCard({
         </button>
       </div>
 
-      <div className="map-floating-card-body">
+      <div className="map-floating-card-body" style={{ position: 'relative', minHeight: '120px' }}>
+        {loading && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontWeight: '600',
+            borderRadius: '8px',
+            zIndex: 10,
+            backdropFilter: 'blur(1px)'
+          }}>
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                border: '3px solid rgba(255,255,255,0.3)',
+                borderTop: '3px solid #fff',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }} />
+              <span style={{ fontSize: '13px' }}>Cargando...</span>
+            </div>
+          </div>
+        )}
+
         <div className="map-floating-card-subtitle">{subtitle}</div>
 
         <div className="map-floating-card-metrics">

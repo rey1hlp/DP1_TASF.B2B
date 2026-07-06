@@ -6,4 +6,5 @@ public class PasoRutaDto {
     public String destino;
     public int salidaMin;
     public int llegadaMin;
+    public int salidaAlmacenDestinoMin;
 }
