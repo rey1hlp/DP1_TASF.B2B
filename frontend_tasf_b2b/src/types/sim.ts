@@ -1,3 +1,19 @@
+export interface EnvioDetalleDto {
+  codigoPedido: string;
+  origen: string;
+  destino: string;
+  ut: string;
+  cantidadMaletas: number;
+  estado: 'PLANIFICADO' | 'EN_VUELO' | 'ENTREGADO';
+  minutoEntrega?: number | null;
+}
+
+export interface SimulationShipmentsResponseDto {
+  planificados: EnvioDetalleDto[];
+  enVuelo: EnvioDetalleDto[];
+  entregadosRecientes: EnvioDetalleDto[];
+}
+
 export type AirportDto = {
   codigoOaci: string
   nombre: string

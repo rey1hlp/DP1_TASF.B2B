@@ -87,6 +87,28 @@ public class SimulationController {
         return ResponseEntity.ok(codigos);
     }
 
+    @GetMapping("/{simId}/shipments/categorized")
+    public ResponseEntity<com.tasf_b2b.planificador.api.dto.SimulationShipmentsResponseDto> listarEnviosCategorizados(
+            @PathVariable String simId,
+            @RequestParam Integer currentMinute) {
+        
+        // 1. Buscamos el estado usando el registry que SÍ existe en el controlador
+        com.tasf_b2b.planificador.sim.SimulationState state = simulationRegistry.get(simId);
+        if (state == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // 2. Le pasamos el estado ya encontrado al servicio
+        com.tasf_b2b.planificador.api.dto.SimulationShipmentsResponseDto resultado = 
+                simulationService.getEnviosCategorizados(state, currentMinute);
+                
+        if (resultado == null) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        return ResponseEntity.ok(resultado);
+    }
+
     @GetMapping("/{simId}/flights/{flightId}/shipments")
     public ResponseEntity<java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto>> listarEnviosPorVuelo(
             @PathVariable String simId,

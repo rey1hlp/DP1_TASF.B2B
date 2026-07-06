@@ -5,7 +5,7 @@ import type { EntityFocusRequest } from '../types/entityFocus'
 import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
 import type { ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
-import { getShipmentsByFlight, getSimulationShipmentsByFlight } from '../services/api'
+import { getShipmentsByFlight, getSimulationShipmentsByFlight, type EnvioDetalleDto } from '../services/api'
 
 // 2. Importa el hook del contexto de simulación
 import { useSimulationContext } from '../contexts/SimulationContext'
@@ -62,6 +62,8 @@ export type EntityShipmentRoute = {
   ruta: EntityRouteStep[]
 }
 
+export type ShipmentCategory = 'PLANIFICADOS' | 'EN_VUELO' | 'ENTREGADOS'
+
 export type EntityExplorerProps = {
   flights: EntityFlightItem[]
   airports: EntityAirportItem[]
@@ -79,6 +81,15 @@ export type EntityExplorerProps = {
   shipmentSearchError: string | null
   currentMinute: number | null
   focusRequest?: EntityFocusRequest | null
+  shipmentsPlanificados?: EnvioDetalleDto[]
+  shipmentsEnVuelo?: EnvioDetalleDto[]
+  shipmentsEntregados?: EnvioDetalleDto[]
+  selectedShipmentCategory?: ShipmentCategory
+  onSelectedShipmentCategoryChange?: (category: ShipmentCategory) => void
+  shipmentOriginFilter?: string
+  onShipmentOriginFilterChange?: (value: string) => void
+  shipmentDestinationFilter?: string
+  onShipmentDestinationFilterChange?: (value: string) => void
   labels?: {
     airportHint?: string
     airportHintNoun?: string
@@ -229,6 +240,15 @@ export default function EntityExplorer({
   labels,
   listHeight = 320,
   shipmentListHeight = 220,
+  shipmentsPlanificados = [],
+  shipmentsEnVuelo = [],
+  shipmentsEntregados = [],
+  selectedShipmentCategory = 'EN_VUELO',
+  onSelectedShipmentCategoryChange,
+  shipmentOriginFilter = '',
+  onShipmentOriginFilterChange,
+  shipmentDestinationFilter = '',
+  onShipmentDestinationFilterChange,
 }: EntityExplorerProps) {
   void currentMinute
   void getDynamicShipmentStatus
@@ -577,6 +597,65 @@ export default function EntityExplorer({
     }
   }, [focusRequest])
 
+  const renderShipmentCategoryTable = (
+    title: string,
+    items: EnvioDetalleDto[],
+    showDeliveryMinute: boolean,
+  ) => (
+    <div className="entity-shipment-category" style={{ marginBottom: "14px" }}>
+      <div className="entity-toolbar-label" style={{ marginBottom: "4px" }}>
+        {`${title} (${formatInteger(items.length)})`}
+      </div>
+      <div
+        className="flight-list"
+        style={{ maxHeight: "180px", height: "auto", overflowY: "auto" }}
+      >
+        {items.length === 0 ? (
+          <div style={{ padding: "10px", fontSize: "12px" }}>
+            Sin envíos en esta categoría.
+          </div>
+        ) : (
+          <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ textAlign: "left", background: "#eaf0fb" }}>
+                <th style={{ padding: "6px" }}>Código de pedido</th>
+                <th style={{ padding: "6px" }}>Origen actual</th>
+                <th style={{ padding: "6px" }}>Destino final</th>
+                <th style={{ padding: "6px" }}>UT salida</th>
+                <th style={{ padding: "6px" }}>N° maletas</th>
+                {showDeliveryMinute && <th style={{ padding: "6px" }}>Entrega (min)</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr
+                  key={item.codigoPedido}
+                  style={{
+                    borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => onSearchShipment(item.codigoPedido)}
+                  title="Click para ver la ruta completa"
+                >
+                  <td style={{ padding: "6px" }}>{item.codigoPedido}</td>
+                  <td style={{ padding: "6px" }}>{item.origen}</td>
+                  <td style={{ padding: "6px" }}>{item.destino}</td>
+                  <td style={{ padding: "6px" }}>{item.ut}</td>
+                  <td style={{ padding: "6px" }}>{formatBags(item.cantidadMaletas)}</td>
+                  {showDeliveryMinute && (
+                    <td style={{ padding: "6px" }}>
+                      {item.minutoEntrega ?? "-"}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+
   const renderFlights = () => (
     <>
       <h3>{labels?.flightTitle ?? "Buscar vuelo en la simulación"}</h3>
@@ -783,6 +862,95 @@ export default function EntityExplorer({
 
   const renderShipments = () => (
     <>
+      <h3>Envíos por estado (minuto actual)</h3>
+
+      {/* Selector de categoría de envíos */}
+      {onSelectedShipmentCategoryChange && (
+        <div className="shipment-category-selector" style={{ marginBottom: '15px', display: 'flex' }}>
+          <button
+            className={`category-btn ${selectedShipmentCategory === 'PLANIFICADOS' ? 'active' : ''}`}
+            onClick={() => onSelectedShipmentCategoryChange('PLANIFICADOS')}
+            style={{
+              flex: 1,
+              padding: '8px',
+              marginRight: '5px',
+              borderRadius: '4px',
+              border: '1px solid #ddd',
+              backgroundColor: selectedShipmentCategory === 'PLANIFICADOS' ? '#0288d1' : '#f5f5f5',
+              color: selectedShipmentCategory === 'PLANIFICADOS' ? 'white' : '#333',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: selectedShipmentCategory === 'PLANIFICADOS' ? 'bold' : 'normal',
+            }}
+          >
+            Planificados
+          </button>
+          <button
+            className={`category-btn ${selectedShipmentCategory === 'EN_VUELO' ? 'active' : ''}`}
+            onClick={() => onSelectedShipmentCategoryChange('EN_VUELO')}
+            style={{
+              flex: 1,
+              padding: '8px',
+              marginRight: '5px',
+              borderRadius: '4px',
+              border: '1px solid #ddd',
+              backgroundColor: selectedShipmentCategory === 'EN_VUELO' ? '#0288d1' : '#f5f5f5',
+              color: selectedShipmentCategory === 'EN_VUELO' ? 'white' : '#333',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: selectedShipmentCategory === 'EN_VUELO' ? 'bold' : 'normal',
+            }}
+          >
+            En Vuelo
+          </button>
+          <button
+            className={`category-btn ${selectedShipmentCategory === 'ENTREGADOS' ? 'active' : ''}`}
+            onClick={() => onSelectedShipmentCategoryChange('ENTREGADOS')}
+            style={{
+              flex: 1,
+              padding: '8px',
+              borderRadius: '4px',
+              border: '1px solid #ddd',
+              backgroundColor: selectedShipmentCategory === 'ENTREGADOS' ? '#0288d1' : '#f5f5f5',
+              color: selectedShipmentCategory === 'ENTREGADOS' ? 'white' : '#333',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: selectedShipmentCategory === 'ENTREGADOS' ? 'bold' : 'normal',
+            }}
+          >
+            Entregados
+          </button>
+        </div>
+      )}
+
+      {/* Filtros de origen y destino */}
+      {onShipmentOriginFilterChange && (
+        <label className="field" style={{ marginBottom: '10px' }}>
+          <span className="entity-filter-label">Filtrar por Origen</span>
+          <input
+            type="text"
+            placeholder="Ej. LIM"
+            value={shipmentOriginFilter}
+            onChange={(event) => onShipmentOriginFilterChange(event.target.value.toUpperCase())}
+          />
+        </label>
+      )}
+      {onShipmentDestinationFilterChange && (
+        <label className="field" style={{ marginBottom: '15px' }}>
+          <span className="entity-filter-label">Filtrar por Destino</span>
+          <input
+            type="text"
+            placeholder="Ej. SKBO"
+            value={shipmentDestinationFilter}
+            onChange={(event) => onShipmentDestinationFilterChange(event.target.value.toUpperCase())}
+          />
+        </label>
+      )}
+
+      {selectedShipmentCategory === 'PLANIFICADOS' && renderShipmentCategoryTable("Planificados", shipmentsPlanificados, false)}
+      {selectedShipmentCategory === 'EN_VUELO' && renderShipmentCategoryTable("En Vuelo", shipmentsEnVuelo, false)}
+      {selectedShipmentCategory === 'ENTREGADOS' && renderShipmentCategoryTable("Entregados Recientes", shipmentsEntregados, true)}
+
       <h3>{labels?.shipmentTitle ?? "Buscar envío / maleta"}</h3>
       <label className="field">
         <input

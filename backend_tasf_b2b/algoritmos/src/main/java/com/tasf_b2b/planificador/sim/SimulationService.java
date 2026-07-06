@@ -321,6 +321,75 @@ public class SimulationService {
         return fromDb;
     }
 
+    // Notar que ahora recibe el SimulationState directamente como parámetro en lugar del simId
+    public com.tasf_b2b.planificador.api.dto.SimulationShipmentsResponseDto getEnviosCategorizados(
+            com.tasf_b2b.planificador.sim.SimulationState state, int currentMinute) {
+        
+        // Ya no buscamos en el registry aquí. Solo validamos que los datos existan.
+        if (state == null || state.data == null || state.data.rutasPorPaquete == null) {
+            return null;
+        }
+
+        java.util.List<com.tasf_b2b.planificador.api.dto.EnvioDetalleDto> planificados = new java.util.ArrayList<>();
+        java.util.List<com.tasf_b2b.planificador.api.dto.EnvioDetalleDto> enVuelo = new java.util.ArrayList<>();
+        java.util.List<com.tasf_b2b.planificador.api.dto.EnvioDetalleDto> entregadosRecientes = new java.util.ArrayList<>();
+
+        // Iteramos sobre cada envío simulado
+        for (java.util.Map.Entry<String, com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto> entry : state.data.rutasPorPaquete.entrySet()) {
+            String codigoPedido = entry.getKey();
+            com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto infoRuta = entry.getValue();
+
+            // Validamos que el paquete tenga una ruta asignada y calculada
+            if (infoRuta == null || infoRuta.ruta == null || infoRuta.ruta.isEmpty()) {
+                continue;
+            }
+
+            // Obtener los extremos de la ruta accediendo directamente a las variables públicas
+            com.tasf_b2b.planificador.api.dto.PasoRutaDto primerTramo = infoRuta.ruta.get(0);
+            com.tasf_b2b.planificador.api.dto.PasoRutaDto ultimoTramo = infoRuta.ruta.get(infoRuta.ruta.size() - 1);
+
+            int minutoSalidaInicial = primerTramo.salidaMin;
+            int minutoEntregaFinal = ultimoTramo.llegadaMin;
+
+            int cantidadMaletas = 1; // Asumimos 1 por ahora
+
+            // Definimos las variables base para el DTO
+            String origenGlobal = primerTramo.origen;
+            String destinoGlobal = ultimoTramo.destino;
+            String ut = "Min " + minutoSalidaInicial;
+
+            // Clasificación según la línea de tiempo de la simulación (currentMinute)
+            if (currentMinute < minutoSalidaInicial) {
+                planificados.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
+                    codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "PLANIFICADO", null
+                ));
+            } else if (currentMinute >= minutoSalidaInicial && currentMinute <= minutoEntregaFinal) {
+                String origenTramoActual = origenGlobal;
+                String destinoTramoActual = destinoGlobal;
+                
+                for (com.tasf_b2b.planificador.api.dto.PasoRutaDto tramo : infoRuta.ruta) {
+                    if (currentMinute >= tramo.salidaMin && currentMinute <= tramo.llegadaMin) {
+                        origenTramoActual = tramo.origen;
+                        destinoTramoActual = tramo.destino;
+                        break;
+                    }
+                }
+
+                enVuelo.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
+                    codigoPedido, origenTramoActual, destinoTramoActual, ut, cantidadMaletas, "EN_VUELO", null
+                ));
+            } else {
+                if (minutoEntregaFinal >= (currentMinute - 240)) {
+                    entregadosRecientes.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
+                        codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "ENTREGADO", minutoEntregaFinal
+                    ));
+                }
+            }
+        }
+
+        return new com.tasf_b2b.planificador.api.dto.SimulationShipmentsResponseDto(planificados, enVuelo, entregadosRecientes);
+    }
+
     private com.tasf_b2b.planificador.api.dto.ShipmentCrudDto toShipmentDto(
             com.tasf_b2b.planificador.persistence.ShipmentEntity entity) {
         com.tasf_b2b.planificador.api.dto.ShipmentCrudDto dto =
