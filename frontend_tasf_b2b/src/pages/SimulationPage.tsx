@@ -811,6 +811,15 @@ export default function SimulationPage() {
     () => filterShipmentsByOriginDestino(shipmentsEntregados),
     [filterShipmentsByOriginDestino, shipmentsEntregados]
   )
+  const shipmentQuantities = useMemo(() => {
+    const entries = [
+      ...shipmentsPlanificados,
+      ...shipmentsEnVuelo,
+      ...shipmentsEntregados,
+    ].map((shipment) => [shipment.codigoPedido, shipment.cantidadMaletas] as const)
+
+    return Object.fromEntries(entries)
+  }, [shipmentsEntregados, shipmentsEnVuelo, shipmentsPlanificados])
 
   const handleSelectFlight = (flightId: number) => {
     const nextFlightId = selectedFlightId === flightId ? null : flightId
@@ -983,6 +992,7 @@ export default function SimulationPage() {
               onSearchShipment={handleSearchShipment}
               shipmentSearchError={shipmentSearchError}
               sampleShipments={sampleShipments}
+              shipmentQuantities={shipmentQuantities}
               flightTextFilters={mapFilters.flights.text}
               onFlightTextFiltersChange={(filters) =>
                 setMapFilters((current) => ({

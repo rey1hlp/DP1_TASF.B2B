@@ -80,6 +80,7 @@ export type DailyOperationControlsProps = {
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   sampleShipments: string[]
+  shipmentQuantities?: Record<string, number>
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
   airportTextFilters: AirportTextFilters
@@ -114,6 +115,7 @@ export default function DailyOperationControls({
   onSearchShipment,
   shipmentSearchError,
   sampleShipments,
+  shipmentQuantities,
   flightTextFilters,
   onFlightTextFiltersChange,
   airportTextFilters,
@@ -342,6 +344,7 @@ export default function DailyOperationControls({
           flights={allFlights}
           airports={airportItems}
           shipments={sampleShipments}
+          shipmentQuantities={shipmentQuantities}
           selectedFlightId={selectedFlightId}
           selectedAirportCode={selectedAirportCode}
           selectedShipmentRoute={selectedShipmentRoute}

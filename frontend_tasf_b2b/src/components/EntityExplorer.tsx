@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react'
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
@@ -85,6 +85,7 @@ export type EntityExplorerProps = {
   shipmentSearchError: string | null
   currentMinute: number | null
   focusRequest?: EntityFocusRequest | null
+  shipmentQuantities?: Record<string, number>
   shipmentsPlanificados?: EnvioDetalleDto[]
   shipmentsEnVuelo?: EnvioDetalleDto[]
   shipmentsEntregados?: EnvioDetalleDto[]
@@ -224,6 +225,15 @@ function getDynamicShipmentStatus(route: EntityShipmentRoute, currentMinute: num
   return 'EN ESCALA (Almacén)'
 }
 
+function formatBagCode(codigoPedido: string, index: number) {
+  return `${codigoPedido}-${String(index + 1).padStart(3, '0')}`
+}
+
+function buildBagCodes(codigoPedido: string, cantidad?: number) {
+  const total = Math.max(0, Math.floor(cantidad ?? 0))
+  return Array.from({ length: total }, (_, index) => formatBagCode(codigoPedido, index))
+}
+
 export default function EntityExplorer({
   flights,
   airports,
@@ -241,6 +251,7 @@ export default function EntityExplorer({
   shipmentSearchError,
   currentMinute,
   focusRequest,
+  shipmentQuantities = {},
   labels,
   listHeight = 320,
   shipmentListHeight = 220,
@@ -262,6 +273,7 @@ export default function EntityExplorer({
   const [airportSortKey, setAirportSortKey] = useState<AirportSortKey>('occupancy')
   const [airportSortDirection, setAirportSortDirection] = useState<SortDirection>('desc')
   const [shipmentQuery, setShipmentQuery] = useState("");
+  const [expandedShipmentCode, setExpandedShipmentCode] = useState<string | null>(null);
 
   const { simulation } = useSimulationContext();
   const simId = simulation.simId;
@@ -486,6 +498,13 @@ export default function EntityExplorer({
     itemHeight: ITEM_HEIGHT,
     listHeight: shipmentListHeight,
   });
+  const selectedShipmentCodeForBags =
+    expandedShipmentCode
+    ?? (
+      selectedShipmentRoute?.codigoPedido && shipmentQuantities[selectedShipmentRoute.codigoPedido]
+        ? selectedShipmentRoute.codigoPedido
+        : null
+    )
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
@@ -631,28 +650,67 @@ export default function EntityExplorer({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr
-                  key={item.codigoPedido}
-                  style={{
-                    borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => onSearchShipment(item.codigoPedido)}
-                  title="Click para ver la ruta completa"
-                >
-                  <td style={{ padding: "6px" }}>{item.codigoPedido}</td>
-                  <td style={{ padding: "6px" }}>{item.origen}</td>
-                  <td style={{ padding: "6px" }}>{item.destino}</td>
-                  <td style={{ padding: "6px" }}>{item.ut}</td>
-                  <td style={{ padding: "6px" }}>{formatBags(item.cantidadMaletas)}</td>
-                  {showDeliveryMinute && (
-                    <td style={{ padding: "6px" }}>
-                      {item.minutoEntrega ?? "-"}
-                    </td>
-                  )}
-                </tr>
-              ))}
+              {items.map((item) => {
+                const isExpanded = expandedShipmentCode === item.codigoPedido
+                const bagCodes = buildBagCodes(item.codigoPedido, item.cantidadMaletas)
+
+                return (
+                  <Fragment key={item.codigoPedido}>
+                    <tr
+                      key={item.codigoPedido}
+                      style={{
+                        borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
+                      }}
+                      title="Click para ver la ruta completa"
+                    >
+                      <td style={{ padding: "6px" }}>
+                        <button
+                          type="button"
+                          className="entity-link-button"
+                          onClick={() => onSearchShipment(item.codigoPedido)}
+                        >
+                          {item.codigoPedido}
+                        </button>
+                      </td>
+                      <td style={{ padding: "6px" }}>{item.origen}</td>
+                      <td style={{ padding: "6px" }}>{item.destino}</td>
+                      <td style={{ padding: "6px" }}>{item.ut}</td>
+                      <td style={{ padding: "6px" }}>
+                        <button
+                          type="button"
+                          className="entity-bag-toggle"
+                          onClick={() => setExpandedShipmentCode(isExpanded ? null : item.codigoPedido)}
+                        >
+                          {formatBags(item.cantidadMaletas)}
+                        </button>
+                      </td>
+                      {showDeliveryMinute && (
+                        <td style={{ padding: "6px" }}>
+                          {item.minutoEntrega ?? "-"}
+                        </td>
+                      )}
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${item.codigoPedido}-bags`}>
+                        <td colSpan={showDeliveryMinute ? 6 : 5} style={{ padding: "8px 6px 10px" }}>
+                          <div className="entity-bag-list">
+                            {bagCodes.map((bagCode) => (
+                              <button
+                                key={bagCode}
+                                type="button"
+                                className="entity-bag-chip"
+                                onClick={() => onSearchShipment(bagCode)}
+                              >
+                                {bagCode}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -991,20 +1049,60 @@ export default function EntityExplorer({
                 {labels?.shipmentEmpty ?? "No hay muestras (inicia simulación)"}
               </div>
             )}
-            {shipmentList.visibleItems.map((codigo) => (
+            {shipmentList.visibleItems.map((codigo) => {
+              const cantidad = shipmentQuantities[codigo]
+              const isExpanded = expandedShipmentCode === codigo
+              return (
+                <div
+                  key={codigo}
+                  className={`flight-item entity-shipment-list-item ${selectedShipmentRoute?.codigoPedido === codigo ? "active" : ""}`}
+                  style={{ height: `${ITEM_HEIGHT}px` }}
+                >
+                  <button
+                    type="button"
+                    className="entity-shipment-main"
+                    onClick={() => onSearchShipment(codigo)}
+                  >
+                    <div className="flight-label">{`${labels?.shipmentIcon ?? "📦"} Pedido: ${codigo}`}</div>
+                    <div className="flight-meta">
+                      {cantidad ? `${formatBags(cantidad)} maletas` : 'Click para ver ruta'}
+                    </div>
+                  </button>
+                  {cantidad ? (
+                    <button
+                      type="button"
+                      className="entity-bag-toggle"
+                      onClick={() => setExpandedShipmentCode(isExpanded ? null : codigo)}
+                      title={isExpanded ? 'Ocultar maletas' : 'Ver maletas'}
+                    >
+                      {isExpanded ? 'Ocultar' : 'Ver'}
+                    </button>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      {selectedShipmentCodeForBags && shipmentQuantities[selectedShipmentCodeForBags] ? (
+        <div className="entity-bag-panel">
+          <div className="entity-toolbar-label">
+            Maletas de {selectedShipmentCodeForBags}
+          </div>
+          <div className="entity-bag-list">
+            {buildBagCodes(selectedShipmentCodeForBags, shipmentQuantities[selectedShipmentCodeForBags]).map((bagCode) => (
               <button
-                key={codigo}
-                className={`flight-item ${selectedShipmentRoute?.codigoPedido === codigo ? "active" : ""}`}
-                onClick={() => onSearchShipment(codigo)}
-                style={{ height: `${ITEM_HEIGHT}px` }}
+                key={bagCode}
+                type="button"
+                className="entity-bag-chip"
+                onClick={() => onSearchShipment(bagCode)}
               >
-                <div className="flight-label">{`${labels?.shipmentIcon ?? "📦"} Pedido: ${codigo}`}</div>
-                <div className="flight-meta">Click para ver ruta</div>
+                {bagCode}
               </button>
             ))}
           </div>
         </div>
-      </div>
+      ) : null}
       <div className="flight-hint">
         {labels?.shipmentHint ??
           `${formatInteger(filteredShipments.length)} ${labels?.shipmentHintNoun ?? "envíos de muestra"}`}

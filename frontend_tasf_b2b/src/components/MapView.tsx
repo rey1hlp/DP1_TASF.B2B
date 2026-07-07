@@ -18,6 +18,18 @@ import {
   resolveSemaphoreColor,
   resolveSemaphoreLevel,
 } from '../utils/semaphore'
+import {
+  ALL_FLIGHTS_ROUTE_BASE_STYLE,
+  CANCELLED_ROUTE_STYLE,
+  GHOST_FADE_DURATION_MS,
+  GHOST_ROUTE_STYLE,
+  LANDED_ROUTE_STYLE,
+  MAP_PANES,
+  SELECTED_ROUTE_STYLE,
+  SHIPMENT_ROUTE_ACTIVE_STYLE,
+  SHIPMENT_ROUTE_DONE_STYLE,
+  SHIPMENT_ROUTE_PENDING_STYLE,
+} from '../utils/mapRouteStyles'
 import MapFloatingCard from './MapFloatingCard'
 import ShipmentRouteTracker, { type TrackerShipmentRoute } from './ShipmentRouteTracker'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
@@ -62,82 +74,10 @@ const DEFAULT_CENTER: [number, number] = [12, -10]
 const DEFAULT_ZOOM = 2
 const YOUR_API_KEY = 'cs78LhJcqA5P4sFbhTaG';
 const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/019f2fff-a937-7733-b3ff-b0ebc2406d84/style.json`
-const MAP_PANES = {
-  route: 'tasf-route-pane',
-  cancelledRoute: 'tasf-cancelled-route-pane',
-  airport: 'tasf-airport-pane',
-  plane: 'tasf-plane-pane',
-} as const
-const SELECTED_ROUTE_STYLE = {
-  color: '#0dcaf0',
-  weight: 5,
-  dashArray: '8, 8',
-  opacity: 0.95,
-  pane: MAP_PANES.route,
-} satisfies L.PolylineOptions
-const SHIPMENT_ROUTE_DONE_STYLE = {
-  color: '#64748b',
-  weight: 4,
-  dashArray: '5, 7',
-  opacity: 0.65,
-  pane: MAP_PANES.route,
-} satisfies L.PolylineOptions
-const SHIPMENT_ROUTE_ACTIVE_STYLE = {
-  color: '#14b8a6',
-  weight: 7,
-  opacity: 1,
-  pane: MAP_PANES.route,
-} satisfies L.PolylineOptions
-const SHIPMENT_ROUTE_PENDING_STYLE = {
-  color: '#0dcaf0',
-  weight: 5,
-  dashArray: '8, 8',
-  opacity: 0.9,
-  pane: MAP_PANES.route,
-} satisfies L.PolylineOptions
 const SELECTED_AIRPORT_COLORS = {
   stroke: '#2f62b5',
   fill: '#d7e5fb',
 }
-
-const LANDED_ROUTE_STYLE = {
-  color: '#9ca3af', // tailwind gray-400
-  weight: 4,
-  dashArray: '5, 8',
-  opacity: 0.75,
-  pane: MAP_PANES.route,
-} satisfies L.PolylineOptions
-
-// 👻 Estilo de la ruta "fantasma" para vuelos recién aterrizados que ya salieron de `segments`.
-// Empieza en esta opacidad y el intervalo de desvanecimiento la va bajando hasta 0 en ~4s.
-const GHOST_ROUTE_STYLE = {
-  color: '#9ca3af', // tailwind gray-400
-  weight: 3,
-  dashArray: '5, 8',
-  opacity: 0.8,
-  pane: MAP_PANES.route,
-} satisfies L.PolylineOptions
-
-// Cuánto tarda una ruta fantasma en desvanecerse por completo, en milisegundos reales.
-const GHOST_FADE_DURATION_MS = 4000
-
-// Estilo base para las rutas "de fondo" de todos los vuelos activos (no seleccionados).
-const ALL_FLIGHTS_ROUTE_BASE_STYLE = {
-  weight: 2.8,
-  opacity: 0.5,
-  dashArray: '3, 4',
-  pane: MAP_PANES.route,
-} satisfies Omit<L.PolylineOptions, 'color'>
-
-const CANCELLED_ROUTE_STYLE = {
-  weight: 4.5,
-  color: '#dc2626',
-  opacity: 1,
-  dashArray: '10, 8',
-  lineCap: 'round',
-  lineJoin: 'round',
-  pane: MAP_PANES.cancelledRoute,
-} satisfies L.PolylineOptions
 
 function toRad(value: number) {
   return (value * Math.PI) / 180
@@ -244,6 +184,11 @@ function getShipmentStepStyle(
   return SHIPMENT_ROUTE_PENDING_STYLE
 }
 
+function buildShipmentBagCodes(codigoPedido: string, cantidad?: number) {
+  const total = Math.max(0, Math.floor(cantidad ?? 0))
+  return Array.from({ length: total }, (_, index) => `${codigoPedido}-${String(index + 1).padStart(3, '0')}`)
+}
+
 export default function MapView({
   airports,
   segments,
@@ -285,6 +230,8 @@ export default function MapView({
   const [airportShipmentsLoading, setAirportShipmentsLoading] = useState(false)
   const [airportShipmentsError, setAirportShipmentsError] = useState<string | null>(null)
   const [selectedAirportShipment, setSelectedAirportShipment] = useState<ShipmentCrudDto | null>(null)
+  const [trackerCode, setTrackerCode] = useState<string | null>(null)
+  const [isTrackerOpen, setIsTrackerOpen] = useState(false)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -303,6 +250,15 @@ export default function MapView({
     () => new Set((cancelledFlightTraces ?? []).map((trace) => trace.flightId)),
     [cancelledFlightTraces],
   )
+
+  useEffect(() => {
+    if (!selectedShipmentRoute?.consultaMaleta || !selectedShipmentRoute.codigoMaleta) {
+      return
+    }
+
+    setTrackerCode(selectedShipmentRoute.codigoMaleta)
+    setIsTrackerOpen(true)
+  }, [selectedShipmentRoute?.codigoMaleta, selectedShipmentRoute?.consultaMaleta])
 
   const previewAirport = useMemo(() => {
     if (previewAirportCode === null) {
@@ -681,6 +637,12 @@ export default function MapView({
     setAirportShipmentsError(null)
     setSelectedAirportShipment(null)
     setAirportShipmentsLoading(false)
+  }
+
+  const trackBag = (bagCode: string) => {
+    setTrackerCode(bagCode)
+    setIsTrackerOpen(true)
+    void onSearchShipment?.(bagCode)
   }
 
   const openShipmentsStage = () => {
@@ -1289,8 +1251,12 @@ export default function MapView({
         selectedShipmentRoute={selectedShipmentRoute}
         shipmentSearchError={shipmentSearchError}
         currentMinute={currentMinute}
+        trackedCode={trackerCode}
+        isOpen={isTrackerOpen}
         onSearchShipment={onSearchShipment}
         onClearShipmentRoute={onClearShipmentRoute}
+        onTrackedCodeChange={setTrackerCode}
+        onOpenChange={setIsTrackerOpen}
       />
       {previewFlight && detailStage === 'flight' ? (
         <MapFloatingCard
@@ -1485,6 +1451,19 @@ export default function MapView({
                   <div><strong>Destino:</strong> {selectedShipment.destino}</div>
                   <div><strong>Estado:</strong> {selectedShipment.status ?? 'PENDING'}</div>
                   <div><strong>SLA:</strong> {formatDurationHours(selectedShipment.slaHoras, 0)}</div>
+                </div>
+
+                <div className="entity-bag-list">
+                  {buildShipmentBagCodes(selectedShipment.codigoPedido, selectedShipment.cantidad).map((bagCode) => (
+                    <button
+                      key={bagCode}
+                      type="button"
+                      className="entity-bag-chip"
+                      onClick={() => trackBag(bagCode)}
+                    >
+                      {bagCode}
+                    </button>
+                  ))}
                 </div>
               </>
             ) : (
@@ -1757,6 +1736,19 @@ export default function MapView({
                   <div><strong>Destino:</strong> {selectedAirportShipment.destino}</div>
                   <div><strong>Estado:</strong> {selectedAirportShipment.status ?? 'PENDING'}</div>
                   <div><strong>SLA:</strong> {formatDurationHours(selectedAirportShipment.slaHoras, 0)}</div>
+                </div>
+
+                <div className="entity-bag-list">
+                  {buildShipmentBagCodes(selectedAirportShipment.codigoPedido, selectedAirportShipment.cantidad).map((bagCode) => (
+                    <button
+                      key={bagCode}
+                      type="button"
+                      className="entity-bag-chip"
+                      onClick={() => trackBag(bagCode)}
+                    >
+                      {bagCode}
+                    </button>
+                  ))}
                 </div>
               </>
             ) : (

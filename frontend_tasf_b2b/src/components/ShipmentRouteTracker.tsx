@@ -26,8 +26,12 @@ type ShipmentRouteTrackerProps = {
   selectedShipmentRoute?: TrackerShipmentRoute | null
   shipmentSearchError?: string | null
   currentMinute?: number | null
+  trackedCode?: string | null
+  isOpen?: boolean
   onSearchShipment?: (codigo: string) => void | Promise<void>
   onClearShipmentRoute?: () => void
+  onTrackedCodeChange?: (codigo: string | null) => void
+  onOpenChange?: (isOpen: boolean) => void
 }
 
 function formatStatus(status?: string) {
@@ -68,15 +72,21 @@ export default function ShipmentRouteTracker({
   selectedShipmentRoute,
   shipmentSearchError,
   currentMinute,
+  trackedCode,
+  isOpen: controlledIsOpen,
   onSearchShipment,
   onClearShipmentRoute,
+  onTrackedCodeChange,
+  onOpenChange,
 }: ShipmentRouteTrackerProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [lastSubmittedCode, setLastSubmittedCode] = useState<string | null>(null)
+  const [internalTrackedCode, setInternalTrackedCode] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
 
+  const isOpen = controlledIsOpen ?? internalIsOpen
+  const lastSubmittedCode = trackedCode ?? internalTrackedCode
   const submittedCode = normalizeCode(lastSubmittedCode ?? undefined)
   const routeMatchesSubmitted =
     submittedCode.length > 0 &&
@@ -106,7 +116,8 @@ export default function ShipmentRouteTracker({
     }
 
     setLocalError(null)
-    setLastSubmittedCode(trimmed)
+    setInternalTrackedCode(trimmed)
+    onTrackedCodeChange?.(trimmed)
     setIsSearching(true)
     try {
       await onSearchShipment(trimmed)
@@ -117,8 +128,14 @@ export default function ShipmentRouteTracker({
 
   const handleClear = () => {
     onClearShipmentRoute?.()
-    setLastSubmittedCode(null)
+    setInternalTrackedCode(null)
+    onTrackedCodeChange?.(null)
     setLocalError(null)
+  }
+
+  const setOpen = (nextOpen: boolean) => {
+    setInternalIsOpen(nextOpen)
+    onOpenChange?.(nextOpen)
   }
 
   if (!isOpen) {
@@ -126,7 +143,7 @@ export default function ShipmentRouteTracker({
       <button
         type="button"
         className={`shipment-tracker-toggle ${route ? 'has-route' : ''}`}
-        onClick={() => setIsOpen(true)}
+        onClick={() => setOpen(true)}
         title="Rastrear maleta"
         aria-label="Rastrear maleta"
       >
@@ -146,7 +163,7 @@ export default function ShipmentRouteTracker({
         <button
           type="button"
           className="shipment-tracker-icon-btn"
-          onClick={() => setIsOpen(false)}
+          onClick={() => setOpen(false)}
           title="Cerrar"
           aria-label="Cerrar rastreador"
         >
