@@ -6,7 +6,7 @@
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   background: #f4f7fb;
   color: #0f1b2d;
-  --panel-tabs-height: 44px;
+  --panel-tabs-height: 60px;
 }
 
 * {
@@ -780,24 +780,25 @@ body {
 .control-panel-content {
   flex: 1;
   min-width: 0;
-  padding: 18px;
-  padding-left: 12px;
+  padding: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+}
+
+.control-panel-body {
+  padding: 18px 18px 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .panel-tabs.sticky-tabs {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: #ffffff;
-  padding-top: 4px;
-  padding-bottom: 4px;
-  margin: -4px -12px 0; /* compensa el padding del contenedor para que pegue borde a borde */
-  padding-left: 12px;
-  padding-right: 12px;
+  background: #ffffff; /* opaco, cubre TODO el ancho del scroll container */
+  padding: 18px 18px 8px 12px; /* mismo padding lateral que .control-panel-body */
   box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
 }
 
@@ -2540,6 +2541,7 @@ body {
   top: var(--panel-tabs-height);
   z-index: 4;
   background: #ffffff;
+  padding: 8px 18px 8px 12px; /* mismo padding lateral, sin negative margin */
   box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
 }
 
