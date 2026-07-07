@@ -583,7 +583,6 @@ body {
 .map-area {
   display: grid;
   grid-template-columns: 1fr 320px;
-  gap: 20px;
   flex: 1;
   min-height: 0;
   align-items: stretch;
@@ -595,13 +594,9 @@ body {
   gap: 0;
 }
 
-.map-area.panel-collapsed .map-placeholder {
-  border-radius: 22px 0 0 22px;
-}
-
 .map-placeholder {
   background: #ffffff;
-  border-radius: 22px;
+  border-radius: 22px 0 0 22px;
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.15);
   padding: 18px 18px 24px;
   position: relative;
@@ -735,93 +730,60 @@ body {
 /* ─── Control panel ─────────────────────────────────────────────── */
 .control-panel {
   background: #ffffff;
-  border-radius: 22px;
-  padding: 18px;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  flex-direction: row; /* franja + contenido lado a lado */
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.12);
   height: 100%;
-  /* fill the grid cell */
-  overflow-y: auto;
-  /* scroll internally if content is taller */
+  overflow: hidden; /* el scroll lo maneja .control-panel-content */
   position: relative;
   transition: all 0.3s ease;
 }
 
 .control-panel.collapsed {
-  padding: 0;
-  overflow: hidden;
   border-radius: 0 22px 22px 0;
   border-left: 1px solid #d9e4f4;
   box-shadow: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.control-panel:not(.collapsed) .toggle-panel-btn {
-  background: transparent;
-  border: none;
-  color: #1b3d6b;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  position: absolute;
-  top: 14px;
-  left: 10px;
-  z-index: 10;
-  display: grid;
-  place-items: center;
-}
-
-.control-panel:not(.collapsed) .toggle-panel-btn:hover {
-  background: #e6edf7;
-}
-
-.control-panel.collapsed .toggle-panel-btn {
-  position: static;
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-  background: transparent;
-  color: #1b3d6b;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.control-panel.collapsed .toggle-panel-btn:hover {
-  background: #eaf0fb;
-}
-
+/* Franja del toggle: ahora ocupa todo el alto en ambos estados */
 .toggle-panel-btn {
   background: transparent;
   border: none;
   color: #1b3d6b;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  position: absolute;
-  top: 14px;
-  left: 10px;
-  z-index: 10;
-  display: grid;
-  place-items: center;
+  width: 28px;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
 }
 
-.toggle-panel-btn:hover {
+.control-panel:not(.collapsed) .toggle-panel-btn {
+  border-right: 1px solid #eef2f8;
+}
+.control-panel:not(.collapsed) .toggle-panel-btn:hover {
   background: #e6edf7;
 }
 
+.control-panel.collapsed .toggle-panel-btn {
+  width: 100%;
+  border-radius: 0 22px 22px 0;
+}
+.control-panel.collapsed .toggle-panel-btn:hover {
+  background: #eaf0fb;
+}
+
 .control-panel-content {
+  flex: 1;
+  min-width: 0;
+  padding: 18px;
+  padding-left: 12px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-top: 24px;
-  /* Espacio para que el botón no solape el contenido al expandir */
 }
 
 .panel-tabs {
