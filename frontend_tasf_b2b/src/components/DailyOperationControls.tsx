@@ -151,7 +151,7 @@ export default function DailyOperationControls({
       
       {!isCollapsed && (
         <div className="control-panel-content">
-          <div className="panel-tabs">
+          <div className="panel-tabs sticky-tabs">
         <button
           className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
           onClick={() => setActiveTab('config')}

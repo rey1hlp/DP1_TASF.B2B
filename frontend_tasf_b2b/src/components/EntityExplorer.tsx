@@ -1200,21 +1200,21 @@ export default function EntityExplorer({
 
   return (
     <>
-      <div className="entity-subtabs">
+      <div className="entity-subtabs sticky-subtabs">
         <button
-          className={`entity-subtab ${activeEntityTab === "flights" ? "active" : ""}`}
+          className={`entity-subtab ${activeEntityTab === "flights" ? "active" : ""} ${filteredFlights.length === 0 ? "empty" : ""}`}
           onClick={() => setActiveEntityTab("flights")}
         >
           {`Vuelos (${formatInteger(filteredFlights.length)})`}
         </button>
         <button
-          className={`entity-subtab ${activeEntityTab === "shipments" ? "active" : ""}`}
+          className={`entity-subtab ${activeEntityTab === "shipments" ? "active" : ""} ${filteredShipments.length === 0 ? "empty" : ""}`}
           onClick={() => setActiveEntityTab("shipments")}
         >
           {`Envíos (${formatInteger(filteredShipments.length)})`}
         </button>
         <button
-          className={`entity-subtab ${activeEntityTab === "airports" ? "active" : ""}`}
+          className={`entity-subtab ${activeEntityTab === "airports" ? "active" : ""} ${filteredAirports.length === 0 ? "empty" : ""}`}
           onClick={() => setActiveEntityTab("airports")}
         >
           {`Aeropuertos (${formatInteger(filteredAirports.length)})`}

@@ -6,6 +6,7 @@
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   background: #f4f7fb;
   color: #0f1b2d;
+  --panel-tabs-height: 44px;
 }
 
 * {
@@ -732,7 +733,7 @@ body {
   background: #ffffff;
   display: flex;
   flex-direction: row; /* franja + contenido lado a lado */
-  box-shadow: 0 18px 42px rgba(24, 54, 92, 0.12);
+  box-shadow: 0 18px 21px rgba(24, 54, 92, 0.12);
   height: 100%;
   overflow: hidden; /* el scroll lo maneja .control-panel-content */
   position: relative;
@@ -787,12 +788,26 @@ body {
   gap: 12px;
 }
 
+.panel-tabs.sticky-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #ffffff;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin: -4px -12px 0; /* compensa el padding del contenedor para que pegue borde a borde */
+  padding-left: 12px;
+  padding-right: 12px;
+  box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
+}
+
 .panel-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid #d9e4f4;
+  height: var(--panel-tabs-height);
 }
 
 .panel-tab {
@@ -2123,6 +2138,20 @@ body {
 
 .map-floating-card-action:hover {
   background: #c8daf6;
+}
+
+/* Cascada sticky: panel-tabs queda arriba, entity-subtabs se apila justo debajo */
+.sticky-subtabs {
+  position: sticky;
+  top: var(--panel-tabs-height);
+  z-index: 4;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
+}
+
+.entity-subtab.empty:not(.active) {
+  opacity: 0.5;
+  color: #8a96a8;
 }
 
 .entity-subtabs {
