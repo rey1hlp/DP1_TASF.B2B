@@ -1,12 +1,14 @@
 package com.tasf_b2b.planificador.api;
 
 import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
+import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
 import com.tasf_b2b.planificador.api.dto.SimulationRequest;
 import com.tasf_b2b.planificador.api.dto.SimulationResponse;
 import com.tasf_b2b.planificador.api.dto.PasoRutaDto;
 import com.tasf_b2b.planificador.sim.SimulationRegistry;
 import com.tasf_b2b.planificador.sim.SimulationState;
 import com.tasf_b2b.planificador.sim.SimulationService;
+import com.tasf_b2b.planificador.utils.BagCodeResolver;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,11 +43,62 @@ public class SimulationController {
         if (state == null || state.data == null || state.data.rutasPorPaquete == null) {
             return ResponseEntity.notFound().build();
         }
-        RespuestaRutaEnvioDto ruta = state.data.rutasPorPaquete.get(codigoPedido);
+        RespuestaRutaEnvioDto ruta = resolveRoute(state, codigoPedido);
         if (ruta == null) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(ruta);
+    }
+
+    private RespuestaRutaEnvioDto resolveRoute(SimulationState state, String codigo) {
+        String codigoNormalizado = BagCodeResolver.normalize(codigo);
+        if (codigoNormalizado == null) {
+            return null;
+        }
+
+        RespuestaRutaEnvioDto exact = state.data.rutasPorPaquete.get(codigoNormalizado);
+        if (exact != null) {
+            ShipmentCrudDto shipment = findShipment(state, codigoNormalizado);
+            return copyRoute(exact, null, shipment);
+        }
+
+        BagCodeResolver.ParsedBagCode bagCode = BagCodeResolver.parse(codigoNormalizado);
+        if (bagCode == null) {
+            return null;
+        }
+
+        RespuestaRutaEnvioDto route = state.data.rutasPorPaquete.get(bagCode.codigoPedido);
+        ShipmentCrudDto shipment = findShipment(state, bagCode.codigoPedido);
+        if (route == null || shipment == null || !BagCodeResolver.isValidBagNumber(bagCode.numeroMaleta, shipment.cantidad)) {
+            return null;
+        }
+
+        return copyRoute(route, bagCode, shipment);
+    }
+
+    private ShipmentCrudDto findShipment(SimulationState state, String codigoPedido) {
+        if (state.data.enviosPorCodigo == null) {
+            return null;
+        }
+        return state.data.enviosPorCodigo.get(codigoPedido);
+    }
+
+    private RespuestaRutaEnvioDto copyRoute(
+        RespuestaRutaEnvioDto route,
+        BagCodeResolver.ParsedBagCode bagCode,
+        ShipmentCrudDto shipment
+    ) {
+        RespuestaRutaEnvioDto copy = new RespuestaRutaEnvioDto();
+        copy.codigoPedido = bagCode != null ? bagCode.codigoPedido : route.codigoPedido;
+        copy.codigoMaleta = bagCode != null ? bagCode.codigoMaleta : null;
+        copy.numeroMaleta = bagCode != null ? bagCode.numeroMaleta : null;
+        copy.consultaMaleta = bagCode != null;
+        copy.totalMaletas = shipment != null ? Math.max(0, shipment.cantidad) : null;
+        copy.estado = route.estado;
+        copy.tiempoTotalHoras = route.tiempoTotalHoras;
+        copy.ingresoMin = route.ingresoMin;
+        copy.ruta = route.ruta != null ? new java.util.ArrayList<>(route.ruta) : new java.util.ArrayList<>();
+        return copy;
     }
 
     @GetMapping("/{simId}/shipments")
