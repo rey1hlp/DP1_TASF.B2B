@@ -16,6 +16,10 @@ export type PasoRutaDto = {
 
 export type RespuestaRutaEnvioDto = {
   codigoPedido: string
+  codigoMaleta?: string
+  numeroMaleta?: number
+  totalMaletas?: number
+  consultaMaleta?: boolean
   estado: string
   tiempoTotalHoras: number
   ruta: PasoRutaDto[]
@@ -51,6 +55,7 @@ export type SimulationControlsProps = {
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   sampleShipments: string[]
+  shipmentQuantities?: Record<string, number>
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
   airportTextFilters: AirportTextFilters
@@ -93,6 +98,7 @@ export default function SimulationControls({
   onSearchShipment,
   shipmentSearchError,
   sampleShipments,
+  shipmentQuantities,
   flightTextFilters,
   onFlightTextFiltersChange,
   airportTextFilters,
@@ -131,7 +137,7 @@ export default function SimulationControls({
 
       {!isCollapsed && (
         <div className="control-panel-content">
-          <div className="panel-tabs">
+          <div className="panel-tabs sticky-tabs">
             <button
               className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
               onClick={() => setActiveTab('config')}
@@ -152,162 +158,167 @@ export default function SimulationControls({
             </button>
           </div>
 
-          {activeTab === 'config' ? (
-            <>
-              <h3>Configuración de simulación</h3>
-              {mode === 'period' ? (
-                <div className="chip-row">
-                  <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
-                    3 dias
-                  </button>
-                  <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
-                    5 dias
-                  </button>
-                  <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
-                    7 dias
-                  </button>
-                </div>
-              ) : (
-                <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
-                  La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
-                  hasta que no haya mas capacidad o datos disponibles.
-                </div>
-              )}
+          <div className="control-panel-body">
+            {activeTab === 'config' ? (
+              <>
+                {mode === 'period' ? (
 
-              <label className="field">
-                Fecha y hora de inicio
-                <input
-                  type="datetime-local"
-                  value={inicio}
-                  onChange={(event) => setInicio(event.target.value)}
+                  <label className="field">
+                    Cantidad de días a simular
+                    <div className="chip-row">
+                      <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
+                        3 dias
+                      </button>
+                      <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
+                        5 dias
+                      </button>
+                      <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
+                        7 dias
+                      </button>
+                    </div>
+                  </label>
+                ) : (
+                  <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
+                    La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
+                    hasta que no haya mas capacidad o datos disponibles.
+                  </div>
+                )}
+
+                <label className="field">
+                  Fecha y hora de inicio
+                  <input
+                    type="datetime-local"
+                    value={inicio}
+                    onChange={(event) => setInicio(event.target.value)}
+                  />
+                </label>
+
+                <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
+                <MapFiltersPanel
+                  filters={mapFilters}
+                  onChange={onMapFiltersChange}
+                  visibleCounts={mapFilterCounts}
                 />
-              </label>
 
-              <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
-              <MapFiltersPanel
-                filters={mapFilters}
-                onChange={onMapFiltersChange}
-                visibleCounts={mapFilterCounts}
-              />
+                <div className="buttons">
+                  <button className="btn primary" onClick={() => onStart({ inicio, dias })} disabled={isRunning}>
+                    {isRunning ? 'Ejecutando...' : mode === 'collapse' ? 'Iniciar hasta el colapso' : 'Iniciar'}
+                  </button>
+                  <button className="btn" onClick={isPaused ? onResume : onPause} disabled={!isRunning}>
+                    {isPaused ? 'Reanudar' : 'Pausar'}
+                  </button>
+                  <button className="btn ghost" disabled>
+                    Exportar CSV
+                  </button>
+                </div>
+              </>
+            ) : null}
 
-              <div className="buttons">
-                <button className="btn primary" onClick={() => onStart({ inicio, dias })} disabled={isRunning}>
-                  {isRunning ? 'Ejecutando...' : mode === 'collapse' ? 'Iniciar hasta el colapso' : 'Iniciar'}
-                </button>
-                <button className="btn" onClick={isPaused ? onResume : onPause} disabled={!isRunning}>
-                  {isPaused ? 'Reanudar' : 'Pausar'}
-                </button>
-                <button className="btn ghost" disabled>
-                  Exportar CSV
-                </button>
-              </div>
-            </>
-          ) : null}
-
-          {activeTab === 'stats' ? (
-            <>
-              <h3>Estadísticas de la simulación</h3>
-              <div className="metric-grid">
-                {stats.cards.map((card) => (
-                  <div
-                    className="metric"
-                    key={card.label}
-                    style={
-                      card.color
-                        ? {
-                            background: card.color,
-                            border: `1px solid ${card.borderColor || 'transparent'}`,
-                          }
-                        : {}
-                    }
-                  >
+            {activeTab === 'stats' ? (
+              <>
+                <div className="metric-grid">
+                  {stats.cards.map((card) => (
                     <div
-                      className="metric-value"
+                      className="metric"
+                      key={card.label}
                       style={
-                        card.textColor
+                        card.color
                           ? {
-                              color: card.textColor,
-                              textShadow: card.textColor === '#ffffff' ? '0 1px 2px rgba(0, 0, 0, 0.3)' : 'none',
+                              background: card.color,
+                              border: `1px solid ${card.borderColor || 'transparent'}`,
                             }
                           : {}
                       }
                     >
-                      {card.value}
+                      <div
+                        className="metric-value"
+                        style={
+                          card.textColor
+                            ? {
+                                color: card.textColor,
+                                textShadow: card.textColor === '#ffffff' ? '0 1px 2px rgba(0, 0, 0, 0.3)' : 'none',
+                              }
+                            : {}
+                        }
+                      >
+                        {card.value}
+                      </div>
+                      <div
+                        className="metric-label"
+                        style={
+                          card.labelColor
+                            ? {
+                                color: card.labelColor,
+                                fontWeight: 600, // Make it pop a bit more with semi-bold since it uses custom colors
+                              }
+                            : card.textColor
+                            ? {
+                                color: card.textColor,
+                                opacity: 0.8,
+                                textShadow: card.textColor === '#ffffff' ? '0 1px 1px rgba(0, 0, 0, 0.3)' : 'none',
+                              }
+                            : {}
+                        }
+                      >
+                        {card.label}
+                      </div>
                     </div>
-                    <div
-                      className="metric-label"
-                      style={
-                        card.labelColor
-                          ? {
-                              color: card.labelColor,
-                              fontWeight: 600, // Make it pop a bit more with semi-bold since it uses custom colors
-                            }
-                          : card.textColor
-                          ? {
-                              color: card.textColor,
-                              opacity: 0.8,
-                              textShadow: card.textColor === '#ffffff' ? '0 1px 1px rgba(0, 0, 0, 0.3)' : 'none',
-                            }
-                          : {}
-                      }
-                    >
-                      {card.label}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              <div className="progress-block">
-                <div className="progress-title">Progreso de simulación</div>
-                {stats.bars.map((bar) => (
-                  <div className="progress-item" key={bar.label}>
-                    <span>{bar.label}</span>
-                    <div className="bar">
-                      <div style={{ width: `${Math.min(100, Math.max(0, bar.value))}%` }} />
+                <div className="progress-block">
+                  <div className="progress-title">Progreso de simulación</div>
+                  {stats.bars.map((bar) => (
+                    <div className="progress-item" key={bar.label}>
+                      <span>{bar.label}</span>
+                      <div className="bar">
+                        <div style={{ width: `${Math.min(100, Math.max(0, bar.value))}%` }} />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
+                  ))}
+                </div>
+              </>
+            ) : null}
 
-          {activeTab === 'entities' ? (
-            <>
-              <EntityExplorer
-                flights={flightItems}
-                airports={airportItems}
-                shipments={sampleShipments}
-                selectedFlightId={selectedFlightId}
-                selectedAirportCode={selectedAirportCode}
-                selectedShipmentRoute={selectedShipmentRoute}
-                onSelectFlight={onSelectFlight}
-                onSelectAirport={onSelectAirport}
-                flightFilters={flightTextFilters}
-                onFlightFiltersChange={onFlightTextFiltersChange}
-                airportFilters={airportTextFilters}
-                onAirportFiltersChange={onAirportTextFiltersChange}
-                onSearchShipment={onSearchShipment}
-                shipmentSearchError={shipmentSearchError}
-                currentMinute={currentMinute}
-                focusRequest={entityFocusRequest}
-                shipmentsPlanificados={shipmentsPlanificados}
-                shipmentsEnVuelo={shipmentsEnVuelo}
-                shipmentsEntregados={shipmentsEntregados}
-                selectedShipmentCategory={selectedShipmentCategory}
-                onSelectedShipmentCategoryChange={onSelectedShipmentCategoryChange}
-                shipmentOriginFilter={shipmentOriginFilter}
-                onShipmentOriginFilterChange={onShipmentOriginFilterChange}
-                shipmentDestinationFilter={shipmentDestinationFilter}
-                onShipmentDestinationFilterChange={onShipmentDestinationFilterChange}
-                labels={{
-                  flightHintNoun: 'vuelos activos',
-                  shipmentEmpty: 'No hay envíos en esta categoría',
-                }}
-              />
-            </>
-          ) : null}
+            {activeTab === 'entities' ? (
+              <>
+                <EntityExplorer
+                  flights={flightItems}
+                  airports={airportItems}
+                  shipments={sampleShipments}
+                  shipmentQuantities={shipmentQuantities}
+                  selectedFlightId={selectedFlightId}
+                  selectedAirportCode={selectedAirportCode}
+                  selectedShipmentRoute={selectedShipmentRoute}
+                  onSelectFlight={onSelectFlight}
+                  onSelectAirport={onSelectAirport}
+                  flightFilters={flightTextFilters}
+                  onFlightFiltersChange={onFlightTextFiltersChange}
+                  airportFilters={airportTextFilters}
+                  onAirportFiltersChange={onAirportTextFiltersChange}
+                  onSearchShipment={onSearchShipment}
+                  shipmentSearchError={shipmentSearchError}
+                  currentMinute={currentMinute}
+                  focusRequest={entityFocusRequest}
+                  shipmentsPlanificados={shipmentsPlanificados}
+                  shipmentsEnVuelo={shipmentsEnVuelo}
+                  shipmentsEntregados={shipmentsEntregados}
+                  selectedShipmentCategory={selectedShipmentCategory}
+                  onSelectedShipmentCategoryChange={onSelectedShipmentCategoryChange}
+                  shipmentOriginFilter={shipmentOriginFilter}
+                  onShipmentOriginFilterChange={onShipmentOriginFilterChange}
+                  shipmentDestinationFilter={shipmentDestinationFilter}
+                  onShipmentDestinationFilterChange={onShipmentDestinationFilterChange}
+                  labels={{
+                    flightHintNoun: 'vuelos activos',
+                    shipmentEmpty: 'No hay envíos en esta categoría',
+                  }}
+                />
+              </>
+            ) : null}
+          </div>
         </div>
-      )}
-    </div>
+        )}
+      </div>
   )
 }

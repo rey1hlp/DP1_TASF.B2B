@@ -20,6 +20,10 @@ export type PasoRutaDto = {
 
 export type RespuestaRutaEnvioDto = {
   codigoPedido: string
+  codigoMaleta?: string
+  numeroMaleta?: number
+  totalMaletas?: number
+  consultaMaleta?: boolean
   estado: string
   tiempoTotalHoras: number
   ruta: PasoRutaDto[]
@@ -76,6 +80,7 @@ export type DailyOperationControlsProps = {
   onSearchShipment: (codigo: string) => void
   shipmentSearchError: string | null
   sampleShipments: string[]
+  shipmentQuantities?: Record<string, number>
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
   airportTextFilters: AirportTextFilters
@@ -110,6 +115,7 @@ export default function DailyOperationControls({
   onSearchShipment,
   shipmentSearchError,
   sampleShipments,
+  shipmentQuantities,
   flightTextFilters,
   onFlightTextFiltersChange,
   airportTextFilters,
@@ -151,7 +157,7 @@ export default function DailyOperationControls({
       
       {!isCollapsed && (
         <div className="control-panel-content">
-          <div className="panel-tabs">
+          <div className="panel-tabs sticky-tabs">
         <button
           className={`panel-tab ${activeTab === 'config' ? 'active' : ''}`}
           onClick={() => setActiveTab('config')}
@@ -338,6 +344,7 @@ export default function DailyOperationControls({
           flights={allFlights}
           airports={airportItems}
           shipments={sampleShipments}
+          shipmentQuantities={shipmentQuantities}
           selectedFlightId={selectedFlightId}
           selectedAirportCode={selectedAirportCode}
           selectedShipmentRoute={selectedShipmentRoute}

@@ -6,6 +6,7 @@
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   background: #f4f7fb;
   color: #0f1b2d;
+  --panel-tabs-height: 60px;
 }
 
 * {
@@ -583,7 +584,6 @@ body {
 .map-area {
   display: grid;
   grid-template-columns: 1fr 320px;
-  gap: 20px;
   flex: 1;
   min-height: 0;
   align-items: stretch;
@@ -595,13 +595,9 @@ body {
   gap: 0;
 }
 
-.map-area.panel-collapsed .map-placeholder {
-  border-radius: 22px 0 0 22px;
-}
-
 .map-placeholder {
   background: #ffffff;
-  border-radius: 22px;
+  border-radius: 22px 0 0 22px;
   box-shadow: 0 18px 42px rgba(24, 54, 92, 0.15);
   padding: 18px 18px 24px;
   position: relative;
@@ -717,7 +713,6 @@ body {
   grid-template-columns: 60px 1fr auto;
   gap: 10px;
   align-items: center;
-  margin-bottom: 10px;
 }
 
 .range-label {
@@ -736,99 +731,84 @@ body {
 /* ─── Control panel ─────────────────────────────────────────────── */
 .control-panel {
   background: #ffffff;
-  border-radius: 22px;
-  padding: 18px;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 18px 42px rgba(24, 54, 92, 0.12);
+  flex-direction: row; /* franja + contenido lado a lado */
+  box-shadow: 0 18px 21px rgba(24, 54, 92, 0.12);
   height: 100%;
-  /* fill the grid cell */
-  overflow-y: auto;
-  /* scroll internally if content is taller */
+  overflow: hidden; /* el scroll lo maneja .control-panel-content */
   position: relative;
   transition: all 0.3s ease;
+  border-radius: 0 22px 22px 0;
 }
 
 .control-panel.collapsed {
-  padding: 0;
-  overflow: hidden;
   border-radius: 0 22px 22px 0;
   border-left: 1px solid #d9e4f4;
   box-shadow: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.control-panel:not(.collapsed) .toggle-panel-btn {
-  background: transparent;
-  border: none;
-  color: #1b3d6b;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  position: absolute;
-  top: 14px;
-  left: 10px;
-  z-index: 10;
-  display: grid;
-  place-items: center;
-}
-
-.control-panel:not(.collapsed) .toggle-panel-btn:hover {
-  background: #e6edf7;
-}
-
-.control-panel.collapsed .toggle-panel-btn {
-  position: static;
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-  background: transparent;
-  color: #1b3d6b;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.control-panel.collapsed .toggle-panel-btn:hover {
-  background: #eaf0fb;
-}
-
+/* Franja del toggle: ahora ocupa todo el alto en ambos estados */
 .toggle-panel-btn {
   background: transparent;
   border: none;
   color: #1b3d6b;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  position: absolute;
-  top: 14px;
-  left: 10px;
-  z-index: 10;
-  display: grid;
-  place-items: center;
+  width: 28px;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
 }
 
-.toggle-panel-btn:hover {
+.control-panel:not(.collapsed) .toggle-panel-btn {
+  border-right: 1px solid #eef2f8;
+}
+.control-panel:not(.collapsed) .toggle-panel-btn:hover {
   background: #e6edf7;
 }
 
+.control-panel.collapsed .toggle-panel-btn {
+  width: 100%;
+  border-radius: 0 22px 22px 0;
+}
+.control-panel.collapsed .toggle-panel-btn:hover {
+  background: #eaf0fb;
+}
+
 .control-panel-content {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.control-panel-body {
+  padding: 18px 18px 18px 12px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-top: 24px;
-  /* Espacio para que el botón no solape el contenido al expandir */
+}
+
+.panel-tabs.sticky-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #ffffff; /* opaco, cubre TODO el ancho del scroll container */
+  padding: 18px 18px 8px 12px; /* mismo padding lateral que .control-panel-body */
+  box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
 }
 
 .panel-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #d9e4f4;
+  height: var(--panel-tabs-height);
 }
 
 .panel-tab {
@@ -851,6 +831,7 @@ body {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .chip {
@@ -1108,6 +1089,94 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.entity-shipment-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.entity-shipment-main,
+.entity-link-button {
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.entity-shipment-main {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.entity-link-button {
+  padding: 0;
+  font-weight: 700;
+  color: #21436f;
+}
+
+.entity-link-button:hover {
+  color: #2f62b5;
+  text-decoration: underline;
+}
+
+.entity-bag-toggle {
+  min-height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid #c9d7eb;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #21436f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.entity-bag-toggle:hover {
+  border-color: #2f62b5;
+  background: #eef6ff;
+}
+
+.entity-bag-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #d9e4f4;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.entity-bag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.entity-bag-chip {
+  min-height: 28px;
+  border: 1px solid #cbdaf0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #173763;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.entity-bag-chip:hover {
+  border-color: #0dcaf0;
+  background: #e9fbff;
+  color: #075985;
 }
 
 .entity-airport-status {
@@ -2027,6 +2096,312 @@ body {
   color: #21436f;
 }
 
+.shipment-tracker-toggle,
+.shipment-tracker-panel {
+  position: absolute;
+  right: 15px;
+  top: 101px;
+  z-index: 1003;
+  pointer-events: auto;
+}
+
+.shipment-tracker-toggle {
+  min-height: 38px;
+  max-width: min(230px, calc(100% - 30px));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid rgba(190, 207, 232, 0.95);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(18, 36, 68, 0.18);
+  color: #173763;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.shipment-tracker-toggle.has-route {
+  border-color: #0dcaf0;
+  color: #075985;
+}
+
+.shipment-tracker-panel {
+  width: min(360px, calc(100% - 30px));
+  max-height: calc(100% - 116px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 38px rgba(18, 36, 68, 0.2);
+}
+
+.shipment-tracker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e7f0;
+}
+
+.shipment-tracker-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #10213a;
+  font-size: 15px;
+}
+
+.shipment-tracker-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-tracker-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #34445d;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.shipment-tracker-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.shipment-tracker-search input {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid #cfd8e8;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #10213a;
+  font: inherit;
+  font-size: 13px;
+}
+
+.shipment-tracker-search button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: #2f62b5;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.shipment-tracker-search button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.shipment-tracker-error {
+  display: grid;
+  gap: 2px;
+  margin: 0 14px 12px;
+  padding: 9px 10px;
+  border: 1px solid #f2b8b5;
+  border-radius: 6px;
+  background: #fff5f5;
+  color: #a3322b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shipment-tracker-error strong {
+  color: #8f251f;
+}
+
+.shipment-tracker-error span {
+  color: #a3322b;
+}
+
+.shipment-tracker-result {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.shipment-tracker-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shipment-tracker-summary div,
+.shipment-tracker-meta {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #e2e7f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.shipment-tracker-summary span,
+.shipment-tracker-meta span {
+  color: #65738a;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.shipment-tracker-summary strong,
+.shipment-tracker-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-tracker-state {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #e7f6fb;
+  color: #075985;
+}
+
+.shipment-tracker-state.delivered {
+  background: #e8f7ed;
+  color: #1f7a3d;
+}
+
+.shipment-tracker-state.cancelled {
+  background: #fff1f1;
+  color: #a3322b;
+}
+
+.shipment-tracker-state.no-route {
+  background: #fff7df;
+  color: #895b00;
+}
+
+.shipment-tracker-route {
+  display: grid;
+  gap: 8px;
+}
+
+.shipment-tracker-step {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 9px 10px;
+  border: 1px solid #dbe6f5;
+  border-radius: 6px;
+  background: #edf6ff;
+}
+
+.shipment-tracker-step.active {
+  border-color: #14b8a6;
+  background: #e5fbf7;
+  box-shadow: inset 4px 0 0 #14b8a6;
+}
+
+.shipment-tracker-step.done {
+  border-color: #d8dde7;
+  background: #f1f5f9;
+}
+
+.shipment-tracker-step.pending {
+  border-color: #dbe6f5;
+  background: #edf6ff;
+}
+
+.shipment-tracker-step span {
+  grid-row: span 2;
+  align-self: center;
+  color: #2f62b5;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.shipment-tracker-step strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-tracker-step small {
+  color: #55657c;
+  font-size: 12px;
+}
+
+.shipment-tracker-step.active span {
+  color: #0f766e;
+}
+
+.shipment-tracker-step.done span {
+  color: #64748b;
+}
+
+.shipment-tracker-empty {
+  padding: 10px;
+  border: 1px dashed #cfd8e8;
+  border-radius: 6px;
+  color: #56677f;
+  font-size: 13px;
+}
+
+.shipment-tracker-empty.delivered {
+  border-color: #bfe6ca;
+  background: #f0fbf3;
+  color: #1f7a3d;
+}
+
+.shipment-tracker-empty.cancelled {
+  border-color: #f2b8b5;
+  background: #fff5f5;
+  color: #a3322b;
+}
+
+.shipment-tracker-empty.no-route {
+  border-color: #efd59b;
+  background: #fffaf0;
+  color: #895b00;
+}
+
+.shipment-tracker-clear {
+  min-height: 38px;
+  border: none;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #26374f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .map-floating-card {
   position: absolute;
   left: 16px;
@@ -2160,10 +2535,24 @@ body {
   background: #c8daf6;
 }
 
+/* Cascada sticky: panel-tabs queda arriba, entity-subtabs se apila justo debajo */
+.sticky-subtabs {
+  position: sticky;
+  top: var(--panel-tabs-height);
+  z-index: 4;
+  background: #ffffff;
+  padding: 8px 18px 8px 12px; /* mismo padding lateral, sin negative margin */
+  box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
+}
+
+.entity-subtab.empty:not(.active) {
+  opacity: 0.5;
+  color: #8a96a8;
+}
+
 .entity-subtabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 12px;
   border-bottom: 1px solid #d9e4f4;
   padding-bottom: 8px;
 }
@@ -2334,37 +2723,54 @@ body {
   }
 }
 
+.range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 16px;
+  background: #ffffff;
+  border: 1px solid #e6e8ec;
+  border-radius: var(--border-radius-lg, 10px);
+}
+
+.range-field-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2430;
+}
+
 .range-summary-bar {
   display: flex;
   height: 10px;
   border-radius: var(--border-radius-md, 6px);
   overflow: hidden;
-  margin-bottom: 4px;
+  gap: 2px; /* separa visualmente los 3 tramos */
 }
-
 .range-summary-segment {
   height: 100%;
   transition: width 0.15s ease;
 }
-
-.range-summary-green {
-  background: #5a9c3f;
-}
-
-.range-summary-amber {
-  background: #d99a2b;
-}
-
-.range-summary-red {
-  background: #c2483f;
-}
+.range-summary-green { background: #5a9c3f; }
+.range-summary-amber { background: #d99a2b; }
+.range-summary-red   { background: #c2483f; }
 
 .range-summary-scale {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
   color: #8a98ad;
-  margin-bottom: 14px;
+}
+
+.range-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px; /* separación entre filas, antes no existía */
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* separación dot–slider–valor, antes no existía */
 }
 
 .range-dot {
@@ -2373,26 +2779,43 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.range-dot-green { background: #5a9c3f; }
+.range-dot-amber { background: #d99a2b; }
+.range-dot-red   { background: #c2483f; }
 
-.range-dot-green {
-  background: #5a9c3f;
+.range-input {
+  flex: 1;
+  min-width: 0;
+}
+.range-input-green { accent-color: #5a9c3f; }
+.range-input-amber { accent-color: #d99a2b; }
+
+.range-input:focus-visible {
+  outline: 2px solid #8a98ad;
+  outline-offset: 2px;
 }
 
-.range-dot-amber {
-  background: #d99a2b;
+.range-static {
+  flex: 1;
 }
 
-.range-dot-red {
-  background: #c2483f;
+.range-value {
+  width: 88px; /* ancho fijo -> los tres valores quedan alineados en columna */
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums; /* evita que los números "bailen" al cambiar */
+  color: #4a5468;
 }
 
-/* el accent-color tiñe thumb + track-recorrido en navegadores modernos */
-.range-input-green {
-  accent-color: #5a9c3f;
-}
-
-.range-input-amber {
-  accent-color: #d99a2b;
+@media (max-width: 420px) {
+  .range-row {
+    flex-wrap: wrap;
+  }
+  .range-value {
+    width: auto;
+    margin-left: auto;
+  }
 }
 
 /*&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*/

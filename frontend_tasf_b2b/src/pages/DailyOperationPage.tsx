@@ -196,6 +196,7 @@ export default function DailyOperationPage() {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
+  const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({})
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
@@ -238,10 +239,10 @@ export default function DailyOperationPage() {
         return
       }
       setSelectedShipmentRoute(null)
-      setShipmentSearchError('No se encontró el envío en operación diaria.')
+      setShipmentSearchError('No se encontro el envio o maleta en operacion diaria.')
     } catch (e) {
       setSelectedShipmentRoute(null)
-      setShipmentSearchError('Error al buscar el envío.')
+      setShipmentSearchError('Error al buscar el envio o maleta.')
     }
   }
 
@@ -277,6 +278,9 @@ export default function DailyOperationPage() {
 
     if (snapshot.envios) {
       setSampleShipments(snapshot.envios.map((shipment) => shipment.codigoPedido))
+      setShipmentQuantities(Object.fromEntries(
+        snapshot.envios.map((shipment) => [shipment.codigoPedido, shipment.cantidad])
+      ))
       setSelectedShipmentRoute((currentRoute) =>
         syncSelectedShipmentRoute(currentRoute, snapshot.envios)
       )
@@ -743,7 +747,13 @@ export default function DailyOperationPage() {
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}
+            shipmentSearchError={shipmentSearchError}
             isPanelCollapsed={isPanelCollapsed}
+            onSearchShipment={handleSearchShipment}
+            onClearShipmentRoute={() => {
+              setSelectedShipmentRoute(null)
+              setShipmentSearchError(null)
+            }}
             onAirportPreview={handleMapAirportPreview}
             onAirportDetailRequest={handleMapAirportDetailRequest}
             onFlightPreview={handleMapFlightPreview}
@@ -780,6 +790,7 @@ export default function DailyOperationPage() {
           onSearchShipment={handleSearchShipment}
           shipmentSearchError={shipmentSearchError}
           sampleShipments={sampleShipments}
+          shipmentQuantities={shipmentQuantities}
           flightTextFilters={mapFilters.flights.text}
           onFlightTextFiltersChange={(filters) =>
             setMapFilters((current) => ({

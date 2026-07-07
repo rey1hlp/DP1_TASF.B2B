@@ -26,6 +26,7 @@ import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+import com.tasf_b2b.planificador.utils.BagCodeResolver;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -548,20 +549,44 @@ public class DailyPlanningService {
     }
 
     public RespuestaRutaEnvioDto getShipmentRoute(String codigoPedido) {
-        RespuestaRutaEnvioDto route = lastRutasPorPaquete.get(codigoPedido);
-        if (route == null) {
+        String codigoNormalizado = BagCodeResolver.normalize(codigoPedido);
+        if (codigoNormalizado == null) {
             return null;
         }
 
+        BagCodeResolver.ParsedBagCode bagCode = null;
+        RespuestaRutaEnvioDto route = lastRutasPorPaquete.get(codigoNormalizado);
+        ShipmentEntity shipment = shipmentRepository.findByCodigoPedido(codigoNormalizado);
+
+        if (route == null) {
+            bagCode = BagCodeResolver.parse(codigoNormalizado);
+            if (bagCode == null) {
+                return null;
+            }
+
+            route = lastRutasPorPaquete.get(bagCode.codigoPedido);
+            shipment = shipmentRepository.findByCodigoPedido(bagCode.codigoPedido);
+            if (route == null || shipment == null || !BagCodeResolver.isValidBagNumber(bagCode.numeroMaleta, shipment.cantidad)) {
+                return null;
+            }
+        }
+
         RespuestaRutaEnvioDto snapshot = new RespuestaRutaEnvioDto();
-        snapshot.codigoPedido = route.codigoPedido;
+        snapshot.codigoPedido = bagCode != null ? bagCode.codigoPedido : route.codigoPedido;
         snapshot.estado = route.estado;
         snapshot.tiempoTotalHoras = route.tiempoTotalHoras;
+        snapshot.ingresoMin = route.ingresoMin;
         snapshot.ruta = route.ruta != null ? new ArrayList<>(route.ruta) : new ArrayList<>();
 
-        ShipmentEntity shipment = shipmentRepository.findByCodigoPedido(codigoPedido);
         if (shipment != null && shipment.status != null) {
             snapshot.estado = shipment.status.name();
+            snapshot.totalMaletas = Math.max(0, shipment.cantidad);
+        }
+
+        if (bagCode != null) {
+            snapshot.codigoMaleta = bagCode.codigoMaleta;
+            snapshot.numeroMaleta = bagCode.numeroMaleta;
+            snapshot.consultaMaleta = true;
         }
 
         return snapshot;
