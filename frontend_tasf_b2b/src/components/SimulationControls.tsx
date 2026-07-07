@@ -154,19 +154,22 @@ export default function SimulationControls({
 
           {activeTab === 'config' ? (
             <>
-              <h3>Configuración de simulación</h3>
               {mode === 'period' ? (
-                <div className="chip-row">
-                  <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
-                    3 dias
-                  </button>
-                  <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
-                    5 dias
-                  </button>
-                  <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
-                    7 dias
-                  </button>
-                </div>
+
+                <label className="field">
+                  Cantidad de días a simular
+                  <div className="chip-row">
+                    <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
+                      3 dias
+                    </button>
+                    <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
+                      5 dias
+                    </button>
+                    <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
+                      7 dias
+                    </button>
+                  </div>
+                </label>
               ) : (
                 <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
                   La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
@@ -206,7 +209,6 @@ export default function SimulationControls({
 
           {activeTab === 'stats' ? (
             <>
-              <h3>Estadísticas de la simulación</h3>
               <div className="metric-grid">
                 {stats.cards.map((card) => (
                   <div

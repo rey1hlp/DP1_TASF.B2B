@@ -658,7 +658,7 @@ export default function EntityExplorer({
 
   const renderFlights = () => (
     <>
-      <h3>{labels?.flightTitle ?? "Buscar vuelo en la simulación"}</h3>
+      <h3>{labels?.flightTitle ?? "Buscar vuelo"}</h3>
       <div className="entity-filter-panel">
         <div className="entity-filter-header">
           <span className="entity-toolbar-label">Filtros de vuelos</span>
@@ -1067,7 +1067,7 @@ export default function EntityExplorer({
 
   const renderAirports = () => (
     <>
-      <h3>{labels?.airportTitle ?? "Buscar aeropuerto en la simulación"}</h3>
+      <h3>{labels?.airportTitle ?? "Buscar aeropuerto"}</h3>
       <div className="entity-filter-panel">
         <div className="entity-filter-header">
           <span className="entity-toolbar-label">Filtros de almacenes</span>

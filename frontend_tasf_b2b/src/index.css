@@ -783,13 +783,15 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .panel-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #d9e4f4;
 }
 
 .panel-tab {
@@ -812,6 +814,7 @@ body {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .chip {
@@ -2124,7 +2127,6 @@ body {
 .entity-subtabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 12px;
   border-bottom: 1px solid #d9e4f4;
   padding-bottom: 8px;
 }
