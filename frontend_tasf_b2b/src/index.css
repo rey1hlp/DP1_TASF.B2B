@@ -737,6 +737,7 @@ body {
   overflow: hidden; /* el scroll lo maneja .control-panel-content */
   position: relative;
   transition: all 0.3s ease;
+  border-radius: 0 22px 22px 0;
 }
 
 .control-panel.collapsed {
