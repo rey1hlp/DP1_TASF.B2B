@@ -57,6 +57,10 @@ export type EntityRouteStep = {
 
 export type EntityShipmentRoute = {
   codigoPedido: string
+  codigoMaleta?: string
+  numeroMaleta?: number
+  totalMaletas?: number
+  consultaMaleta?: boolean
   estado: string
   tiempoTotalHoras: number
   ruta: EntityRouteStep[]

@@ -48,6 +48,10 @@ export type ShipmentFilters = {
 
 export type RespuestaRutaEnvioDto = {
   codigoPedido: string
+  codigoMaleta?: string
+  numeroMaleta?: number
+  totalMaletas?: number
+  consultaMaleta?: boolean
   estado: string
   tiempoTotalHoras: number
   ruta: PasoRutaDto[]
@@ -407,9 +411,14 @@ export default function SimulationPage() {
       setSelectedShipmentRoute(route)
     } catch (err) {
       setSelectedShipmentRoute(null)
-      setShipmentSearchError('No se encontró la ruta para el maleta/envío.')
+      setShipmentSearchError('No se encontro la ruta para la maleta o envio.')
     }
   }
+
+  const handleClearShipmentRoute = useCallback(() => {
+    setSelectedShipmentRoute(null)
+    setShipmentSearchError(null)
+  }, [])
 
   const requestedStartOnlyDate = requestedStart ? requestedStart.substring(0, 10) : null
   const requestedStartIndex = requestedStartOnlyDate ? getDayIndexFromDateString(requestedStartOnlyDate) : null
@@ -936,6 +945,9 @@ export default function SimulationPage() {
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
                 selectedShipmentRoute={selectedShipmentRoute}
+                shipmentSearchError={shipmentSearchError}
+                onSearchShipment={handleSearchShipment}
+                onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
                 onAirportDetailRequest={handleMapAirportDetailRequest}
                 onFlightPreview={handleMapFlightPreview}

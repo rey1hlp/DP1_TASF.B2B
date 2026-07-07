@@ -20,6 +20,10 @@ export type PasoRutaDto = {
 
 export type RespuestaRutaEnvioDto = {
   codigoPedido: string
+  codigoMaleta?: string
+  numeroMaleta?: number
+  totalMaletas?: number
+  consultaMaleta?: boolean
   estado: string
   tiempoTotalHoras: number
   ruta: PasoRutaDto[]

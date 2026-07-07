@@ -19,6 +19,7 @@ import {
   resolveSemaphoreLevel,
 } from '../utils/semaphore'
 import MapFloatingCard from './MapFloatingCard'
+import ShipmentRouteTracker, { type TrackerShipmentRoute } from './ShipmentRouteTracker'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 import type { CancelledFlightTrace } from '../utils/cancelledFlightTraces'
 
@@ -42,7 +43,8 @@ export type MapViewProps = {
   ranges: { greenMax: number; amberMax: number }
   selectedFlightId: number | null
   selectedAirportCode: string | null
-  selectedShipmentRoute?: { ruta: Array<{ origen: string; destino: string; vueloId?: number | string }> } | null
+  selectedShipmentRoute?: TrackerShipmentRoute | null
+  shipmentSearchError?: string | null
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
   timeLabel?: string
@@ -52,6 +54,8 @@ export type MapViewProps = {
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
   onFlightPreview?: (flightId: number | null) => void
+  onSearchShipment?: (codigo: string) => void | Promise<void>
+  onClearShipmentRoute?: () => void
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -69,6 +73,26 @@ const SELECTED_ROUTE_STYLE = {
   weight: 5,
   dashArray: '8, 8',
   opacity: 0.95,
+  pane: MAP_PANES.route,
+} satisfies L.PolylineOptions
+const SHIPMENT_ROUTE_DONE_STYLE = {
+  color: '#64748b',
+  weight: 4,
+  dashArray: '5, 7',
+  opacity: 0.65,
+  pane: MAP_PANES.route,
+} satisfies L.PolylineOptions
+const SHIPMENT_ROUTE_ACTIVE_STYLE = {
+  color: '#14b8a6',
+  weight: 7,
+  opacity: 1,
+  pane: MAP_PANES.route,
+} satisfies L.PolylineOptions
+const SHIPMENT_ROUTE_PENDING_STYLE = {
+  color: '#0dcaf0',
+  weight: 5,
+  dashArray: '8, 8',
+  opacity: 0.9,
   pane: MAP_PANES.route,
 } satisfies L.PolylineOptions
 const SELECTED_AIRPORT_COLORS = {
@@ -204,12 +228,20 @@ function buildAirportIcon(
   })
 }
 
-function addSelectedRouteToLayer(latlngs: L.LatLngExpression[], layer: L.LayerGroup) {
-  if (latlngs.length < 2) {
-    return
+function getShipmentStepStyle(
+  step: { salidaMin: number; llegadaMin: number },
+  currentMinute: number | null
+) {
+  if (currentMinute == null) {
+    return SHIPMENT_ROUTE_PENDING_STYLE
   }
-
-  L.polyline(latlngs, SELECTED_ROUTE_STYLE).addTo(layer)
+  if (currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin) {
+    return SHIPMENT_ROUTE_ACTIVE_STYLE
+  }
+  if (currentMinute > step.llegadaMin) {
+    return SHIPMENT_ROUTE_DONE_STYLE
+  }
+  return SHIPMENT_ROUTE_PENDING_STYLE
 }
 
 export default function MapView({
@@ -221,6 +253,7 @@ export default function MapView({
   selectedFlightId,
   selectedAirportCode,
   selectedShipmentRoute,
+  shipmentSearchError,
   isPanelCollapsed,
   isToolbarCollapsed,
   timeLabel,
@@ -230,6 +263,8 @@ export default function MapView({
   onAirportPreview,
   onFlightDetailRequest,
   onFlightPreview,
+  onSearchShipment,
+  onClearShipmentRoute,
 }: MapViewProps) {
   const { simulation } = useSimulationContext()
   const simId = simulation.simId
@@ -1066,24 +1101,22 @@ export default function MapView({
 
     // 2) Ruta de un envío/maleta específico: tiene prioridad y se dibuja por encima de todo.
     if (selectedShipmentRoute && selectedShipmentRoute.ruta && selectedShipmentRoute.ruta.length > 0) {
-      const latlngs: L.LatLngExpression[] = []
-
       selectedShipmentRoute.ruta.forEach((paso) => {
         const orig = airports.find((a) => a.codigoOaci === paso.origen)
-        if (orig) {
-          latlngs.push([orig.latitud, orig.longitud])
+        const dest = airports.find((a) => a.codigoOaci === paso.destino)
+
+        if (!orig || !dest) {
+          return
         }
+
+        L.polyline(
+          [
+            [orig.latitud, orig.longitud],
+            [dest.latitud, dest.longitud],
+          ],
+          getShipmentStepStyle(paso, currentMinute)
+        ).addTo(layer)
       })
-
-      const ultPaso = selectedShipmentRoute.ruta[selectedShipmentRoute.ruta.length - 1]
-      const dest = airports.find((a) => a.codigoOaci === ultPaso.destino)
-      if (dest) {
-        latlngs.push([dest.latitud, dest.longitud])
-      }
-
-      if (latlngs.length > 1) {
-        addSelectedRouteToLayer(latlngs, layer)
-      }
       return
     }
 
@@ -1252,6 +1285,13 @@ export default function MapView({
           {secondaryTimeLabel ? <div className="map-time-tab map-time-tab--secondary">{secondaryTimeLabel}</div> : null}
         </div>
       ) : null}
+      <ShipmentRouteTracker
+        selectedShipmentRoute={selectedShipmentRoute}
+        shipmentSearchError={shipmentSearchError}
+        currentMinute={currentMinute}
+        onSearchShipment={onSearchShipment}
+        onClearShipmentRoute={onClearShipmentRoute}
+      />
       {previewFlight && detailStage === 'flight' ? (
         <MapFloatingCard
           actionLabel="Ver detalle completo"

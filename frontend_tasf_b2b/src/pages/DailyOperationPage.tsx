@@ -238,10 +238,10 @@ export default function DailyOperationPage() {
         return
       }
       setSelectedShipmentRoute(null)
-      setShipmentSearchError('No se encontró el envío en operación diaria.')
+      setShipmentSearchError('No se encontro el envio o maleta en operacion diaria.')
     } catch (e) {
       setSelectedShipmentRoute(null)
-      setShipmentSearchError('Error al buscar el envío.')
+      setShipmentSearchError('Error al buscar el envio o maleta.')
     }
   }
 
@@ -743,7 +743,13 @@ export default function DailyOperationPage() {
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}
+            shipmentSearchError={shipmentSearchError}
             isPanelCollapsed={isPanelCollapsed}
+            onSearchShipment={handleSearchShipment}
+            onClearShipmentRoute={() => {
+              setSelectedShipmentRoute(null)
+              setShipmentSearchError(null)
+            }}
             onAirportPreview={handleMapAirportPreview}
             onAirportDetailRequest={handleMapAirportDetailRequest}
             onFlightPreview={handleMapFlightPreview}

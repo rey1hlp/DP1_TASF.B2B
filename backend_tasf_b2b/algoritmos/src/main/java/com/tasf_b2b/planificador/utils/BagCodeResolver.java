@@ -23,10 +23,6 @@ public final class BagCodeResolver {
             return null;
         }
 
-        if (normalized.lastIndexOf('-', separator - 1) <= 0) {
-            return null;
-        }
-
         String suffix = normalized.substring(separator + 1);
         if (!suffix.chars().allMatch(Character::isDigit)) {
             return null;

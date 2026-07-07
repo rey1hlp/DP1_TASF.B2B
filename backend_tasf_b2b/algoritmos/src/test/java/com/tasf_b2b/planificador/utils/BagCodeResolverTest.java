@@ -18,8 +18,17 @@ class BagCodeResolverTest {
     }
 
     @Test
+    void parsesBagCodeForShipmentCodesWithoutOriginPrefix() {
+        BagCodeResolver.ParsedBagCode parsed = BagCodeResolver.parse("00012345-002");
+
+        assertEquals("00012345", parsed.codigoPedido);
+        assertEquals("00012345-002", parsed.codigoMaleta);
+        assertEquals(2, parsed.numeroMaleta);
+    }
+
+    @Test
     void rejectsInvalidBagCodes() {
-        assertNull(BagCodeResolver.parse("SPJC-00012345"));
+        assertNull(BagCodeResolver.parse("00012345"));
         assertNull(BagCodeResolver.parse("SPJC-00012345-0"));
         assertNull(BagCodeResolver.parse("SPJC-00012345-A"));
         assertNull(BagCodeResolver.parse(null));
