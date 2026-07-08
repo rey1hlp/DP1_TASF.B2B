@@ -12,7 +12,7 @@ import EmployeesCrud from './components/EmployeesCrud'
 import FlightsCrud from './components/FlightsCrud'
 import AirportsCrud from './components/AirportsCrud'
 import ShipmentsCrud from './components/ShipmentsCrud'
-import OccupancyReport from './components/OccupancyReport'
+import ReportsDashboard from './components/reports/ReportsDashboard'
 
 import { PlaneIconDebug } from './debug/PlaneIconDebug'
 import { useAuth } from './contexts/AuthContext'
@@ -211,7 +211,7 @@ export const router = createBrowserRouter([
         path: 'reportes',
         element: (
           <RequireRoles allow={['ADMIN']}>
-            <OccupancyReport />
+            <ReportsDashboard />
           </RequireRoles>
         ),
       },

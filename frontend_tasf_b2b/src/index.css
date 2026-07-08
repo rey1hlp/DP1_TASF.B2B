@@ -380,6 +380,10 @@ body {
   color: #f8fafc;
   padding: 1rem;
   overflow-y: auto;
+
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
 }
 
 .app-main {
@@ -732,10 +736,12 @@ body {
 .control-panel {
   background: #ffffff;
   display: flex;
-  flex-direction: row; /* franja + contenido lado a lado */
+  flex-direction: row;
+  /* franja + contenido lado a lado */
   box-shadow: 0 18px 21px rgba(24, 54, 92, 0.12);
   height: 100%;
-  overflow: hidden; /* el scroll lo maneja .control-panel-content */
+  overflow: hidden;
+  /* el scroll lo maneja .control-panel-content */
   position: relative;
   transition: all 0.3s ease;
   border-radius: 0 22px 22px 0;
@@ -765,6 +771,7 @@ body {
 .control-panel:not(.collapsed) .toggle-panel-btn {
   border-right: 1px solid #eef2f8;
 }
+
 .control-panel:not(.collapsed) .toggle-panel-btn:hover {
   background: #e6edf7;
 }
@@ -773,6 +780,7 @@ body {
   width: 100%;
   border-radius: 0 22px 22px 0;
 }
+
 .control-panel.collapsed .toggle-panel-btn:hover {
   background: #eaf0fb;
 }
@@ -797,8 +805,10 @@ body {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: #ffffff; /* opaco, cubre TODO el ancho del scroll container */
-  padding: 18px 18px 8px 12px; /* mismo padding lateral que .control-panel-body */
+  background: #ffffff;
+  /* opaco, cubre TODO el ancho del scroll container */
+  padding: 18px 18px 8px 12px;
+  /* mismo padding lateral que .control-panel-body */
   box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
 }
 
@@ -2541,7 +2551,8 @@ body {
   top: var(--panel-tabs-height);
   z-index: 4;
   background: #ffffff;
-  padding: 8px 18px 8px 12px; /* mismo padding lateral, sin negative margin */
+  padding: 8px 18px 8px 12px;
+  /* mismo padding lateral, sin negative margin */
   box-shadow: 0 2px 4px rgba(24, 54, 92, 0.06);
 }
 
@@ -2744,15 +2755,26 @@ body {
   height: 10px;
   border-radius: var(--border-radius-md, 6px);
   overflow: hidden;
-  gap: 2px; /* separa visualmente los 3 tramos */
+  gap: 2px;
+  /* separa visualmente los 3 tramos */
 }
+
 .range-summary-segment {
   height: 100%;
   transition: width 0.15s ease;
 }
-.range-summary-green { background: #5a9c3f; }
-.range-summary-amber { background: #d99a2b; }
-.range-summary-red   { background: #c2483f; }
+
+.range-summary-green {
+  background: #5a9c3f;
+}
+
+.range-summary-amber {
+  background: #d99a2b;
+}
+
+.range-summary-red {
+  background: #c2483f;
+}
 
 .range-summary-scale {
   display: flex;
@@ -2764,13 +2786,15 @@ body {
 .range-list {
   display: flex;
   flex-direction: column;
-  gap: 14px; /* separación entre filas, antes no existía */
+  gap: 14px;
+  /* separación entre filas, antes no existía */
 }
 
 .range-row {
   display: flex;
   align-items: center;
-  gap: 12px; /* separación dot–slider–valor, antes no existía */
+  gap: 12px;
+  /* separación dot–slider–valor, antes no existía */
 }
 
 .range-dot {
@@ -2779,16 +2803,31 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.range-dot-green { background: #5a9c3f; }
-.range-dot-amber { background: #d99a2b; }
-.range-dot-red   { background: #c2483f; }
+
+.range-dot-green {
+  background: #5a9c3f;
+}
+
+.range-dot-amber {
+  background: #d99a2b;
+}
+
+.range-dot-red {
+  background: #c2483f;
+}
 
 .range-input {
   flex: 1;
   min-width: 0;
 }
-.range-input-green { accent-color: #5a9c3f; }
-.range-input-amber { accent-color: #d99a2b; }
+
+.range-input-green {
+  accent-color: #5a9c3f;
+}
+
+.range-input-amber {
+  accent-color: #d99a2b;
+}
 
 .range-input:focus-visible {
   outline: 2px solid #8a98ad;
@@ -2800,11 +2839,13 @@ body {
 }
 
 .range-value {
-  width: 88px; /* ancho fijo -> los tres valores quedan alineados en columna */
+  width: 88px;
+  /* ancho fijo -> los tres valores quedan alineados en columna */
   flex-shrink: 0;
   text-align: right;
   font-size: 13px;
-  font-variant-numeric: tabular-nums; /* evita que los números "bailen" al cambiar */
+  font-variant-numeric: tabular-nums;
+  /* evita que los números "bailen" al cambiar */
   color: #4a5468;
 }
 
@@ -2812,6 +2853,7 @@ body {
   .range-row {
     flex-wrap: wrap;
   }
+
   .range-value {
     width: auto;
     margin-left: auto;
