@@ -1,4 +1,4 @@
-import type { FlightOccupancyData } from '../components/OccupancyReport';
+import type { FlightOccupancyData } from '../components/reports/FlightOccupancyReport';
 import type {
   AirportDto,
   AirportCrudDto,
@@ -489,12 +489,22 @@ export async function getCancelledDays(id: number): Promise<string[]> {
 }
 
 // Reporte de ocupación histórica por vuelo
-export async function fetchOccupancyReport(): Promise<FlightOccupancyData[]> {
-  const res = await authFetch(`${API_BASE}/api/reports/occupancy`)
-  if (!res.ok) {
-    throw new Error('No se pudo cargar el reporte de ocupación')
+export async function fetchOccupancyReport(date?: string): Promise<FlightOccupancyData[]> {
+  const params = new URLSearchParams();
+
+  if (date) {
+    // 🌟 AGREGA ESTA LÍNEA: Convierte "2026-07-02" en "20260702" para que coincida con tu BD
+    const cleanDate = date.replace(/-/g, '');
+    params.set('date', cleanDate);
   }
-  return res.json()
+
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const res = await authFetch(`${API_BASE}/api/reports/occupancy${queryString}`);
+
+  if (!res.ok) {
+    throw new Error('Error al obtener el reporte de ocupación');
+  }
+  return res.json();
 }
 
 export async function getSimulationShipmentsByFlight(
@@ -571,5 +581,30 @@ export async function fetchCategorizedShipments(
     throw new Error('Error al obtener los envíos categorizados.');
   }
 
+  return res.json();
+}
+
+export interface OperationAlertDto {
+  id: string;
+  // El backend genera dinámicamente estas severidades a partir del snapshot
+  // de almacenes (DailyOperationService.buildWarehouseSnapshot): 80% -> WARNING, 95% -> DANGER.
+  severity: 'INFO' | 'WARNING' | 'CRITICAL' | 'DANGER';
+  message: string;
+  createdAt: string;
+}
+
+export async function fetchOperationAlerts(date?: string): Promise<OperationAlertDto[]> {
+  const params = new URLSearchParams();
+  if (date) {
+    // Si tu backend espera YYYY-MM-DD, lo pasamos tal cual.
+    params.set('date', date);
+  }
+
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const res = await authFetch(`${API_BASE}/api/operation/alerts${queryString}`);
+
+  if (!res.ok) {
+    throw new Error('Error al obtener alertas de colapso operativo');
+  }
   return res.json();
 }

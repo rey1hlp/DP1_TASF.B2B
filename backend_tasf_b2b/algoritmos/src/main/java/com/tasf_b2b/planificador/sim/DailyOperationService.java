@@ -122,6 +122,37 @@ public class DailyOperationService {
         return snapshot;
     }
 
+    // 🌟 NUEVO MÉTODO CONECTADO PARA EL ESCENARIO 3 (Alertas Dinámicas de Colapso)
+    public List<OperationAlertDto> getLiveOperationAlerts(String dateText) {
+        LocalDate selectedDate = parseDate(dateText);
+        
+        // 1. Cargamos todos los aeropuertos activos
+        Map<String, AirportEntity> airportEntities = airportRepository.findAll().stream()
+            .filter(entity -> entity.codigoOaci != null && !entity.codigoOaci.isBlank())
+            .collect(Collectors.toMap(
+                entity -> entity.codigoOaci.trim().toUpperCase(Locale.ROOT),
+                entity -> entity,
+                (left, right) -> left,
+                LinkedHashMap::new
+            ));
+
+        // 2. Filtramos los cargamentos por la fecha seleccionada usando tu misma lógica nativa
+        List<ShipmentEntity> shipmentsForDate = shipmentRepository.findAll().stream()
+            .filter(this::isValidShipment)
+            .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipment.fecha))
+            .collect(Collectors.toList());
+
+        // 3. Calculamos la foto de ocupación de almacenes en base a esos cargamentos
+        Map<String, DailyWarehouseSnapshotDto> warehouseSnapshot = buildWarehouseSnapshot(
+            airportEntities,
+            shipmentsForDate,
+            null
+        );
+
+        // 4. Retornamos la lista de alertas reales calculadas automáticamente (>= 80% o >= 95%)
+        return buildAlerts(warehouseSnapshot);
+    }
+
     private Map<String, DailyWarehouseSnapshotDto> buildWarehouseSnapshot(
         Map<String, AirportEntity> airportEntities,
         List<ShipmentEntity> shipments,
@@ -199,8 +230,6 @@ public class DailyOperationService {
                 continue;
             }
             RespuestaRutaEnvioDto route = dailyPlanningService.getShipmentRoute(shipment.codigoPedido);
-            // Only transition status when the shipment has an active route in the current plan.
-            // Without a route the status is kept as-is, avoiding stale cross-day DELIVERED transitions.
             if (route == null || route.ruta == null || route.ruta.isEmpty()) {
                 log.debug("[DAILY_OP] shipment route missing code={} status={} currentMinute={}", shipment.codigoPedido, shipment.status, currentMinute);
                 continue;

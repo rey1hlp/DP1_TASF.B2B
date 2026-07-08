@@ -16,8 +16,17 @@ public class ReportService {
         this.dailyPlanSegmentRepository = dailyPlanSegmentRepository;
     }
 
-    public List<FlightOccupancyReportDto> getOccupancyData() {
-        List<Object[]> rawData = dailyPlanSegmentRepository.findOccupancyReportData();
+    // Ahora recibe la fecha como parámetro
+    public List<FlightOccupancyReportDto> getOccupancyData(String date) {
+        List<Object[]> rawData;
+        
+        // Si nos pasan una fecha, filtramos por esa fecha. Si no, traemos el cierre de todos los días.
+        if (date != null && !date.trim().isEmpty()) {
+            rawData = dailyPlanSegmentRepository.findDailyClosingReportByDate(date);
+        } else {
+            rawData = dailyPlanSegmentRepository.findDailyClosingReportAll();
+        }
+        
         List<FlightOccupancyReportDto> reportList = new ArrayList<>();
 
         for (Object[] row : rawData) {
@@ -28,8 +37,8 @@ public class ReportService {
             int bagsCount = ((Number) row[4]).intValue();
             String planDate = (String) row[5]; 
             
-            // Construimos dinámicamente el nombre del periodo usando la fecha del plan
-            String simulationPeriod = "Simulación " + planDate;
+            // Construimos dinámicamente el nombre del periodo
+            String simulationPeriod = "Cierre Operaciones " + planDate;
 
             FlightOccupancyReportDto dto = new FlightOccupancyReportDto(
                 flightCode, 

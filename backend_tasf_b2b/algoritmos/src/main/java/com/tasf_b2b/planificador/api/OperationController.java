@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
+import com.tasf_b2b.planificador.api.dto.OperationAlertDto;
 
 @RestController
 @RequestMapping("/api/operation")
@@ -42,5 +44,18 @@ public class OperationController {
             return ResponseEntity.ok(ruta);
         }
         return ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/alerts")
+    public ResponseEntity<List<OperationAlertDto>> getActiveAlerts(
+        @RequestParam(required = false) String date
+    ) {
+        try {
+            // Le pedimos al servicio que calcule y devuelva las alertas operativas
+            List<OperationAlertDto> alerts = dailyOperationService.getLiveOperationAlerts(date);
+            return ResponseEntity.ok(alerts);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 }
