@@ -195,8 +195,36 @@ export default function DailyOperationPage() {
 
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
 
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    const saved = sessionStorage.getItem('ops_panel_width')
+    return saved ? parseInt(saved, 10) : 320
+  })
+
+  useEffect(() => {
+    sessionStorage.setItem('ops_panel_width', panelWidth.toString())
+  }, [panelWidth])
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = panelWidth
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX
+      setPanelWidth(Math.max(250, Math.min(800, startWidth + delta)))
+    }
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    document.body.style.cursor = 'ew-resize'
+  }
+
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({})
+  const [showCancelledDetails, setShowCancelledDetails] = useState(true)
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
   const [entityFocusRequest, setEntityFocusRequest] = useState<EntityFocusRequest | null>(null)
@@ -481,13 +509,17 @@ export default function DailyOperationPage() {
       .slice(0, 10)
   }, [segments, currentMinute])
 
-  const mapSegments = useMemo(() => {
-    return filterFlightSegmentsByMapFilters(segments, mapFilters, ranges)
-  }, [segments, mapFilters, ranges])
-
   const mapAirports = useMemo(() => {
     return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
   }, [airports, warehouseSnapshot, mapFilters, ranges])
+
+  const mapSegments = useMemo(() => {
+    const baseFiltered = filterFlightSegmentsByMapFilters(segments, mapFilters, ranges)
+    const airportCodes = new Set(mapAirports.map(a => a.codigoOaci))
+    return baseFiltered.filter(seg => airportCodes.has(seg.origen) || airportCodes.has(seg.destino))
+  }, [segments, mapFilters, ranges, mapAirports])
+
+
 
   const mapFilterCounts = useMemo(() => ({
     flights: mapSegments.length,
@@ -673,17 +705,18 @@ export default function DailyOperationPage() {
     setSelectedFlightId(null)
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
-  }, [])
 
-  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
     entityFocusRequestIdRef.current += 1
-    handleMapAirportPreview(codigoOaci)
     setIsPanelCollapsed(false)
     setEntityFocusRequest({
       type: 'airport',
       id: codigoOaci,
       requestId: entityFocusRequestIdRef.current,
     })
+  }, [])
+
+  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
+    handleMapAirportPreview(codigoOaci)
   }, [handleMapAirportPreview])
 
   const handleMapFlightPreview = useCallback((flightId: number | null) => {
@@ -696,17 +729,18 @@ export default function DailyOperationPage() {
     setSelectedAirportCode(null)
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
-  }, [])
 
-  const handleMapFlightDetailRequest = useCallback((flightId: number) => {
     entityFocusRequestIdRef.current += 1
-    handleMapFlightPreview(flightId)
     setIsPanelCollapsed(false)
     setEntityFocusRequest({
       type: 'flight',
       id: flightId,
       requestId: entityFocusRequestIdRef.current,
     })
+  }, [])
+
+  const handleMapFlightDetailRequest = useCallback((flightId: number) => {
+    handleMapFlightPreview(flightId)
   }, [handleMapFlightPreview])
 
   return (
@@ -734,6 +768,7 @@ export default function DailyOperationPage() {
 
       <section
         className={`map-area ${isPanelCollapsed ? "panel-collapsed" : ""}`}
+        style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
       >
         <div className="map-placeholder">
           <MapView
@@ -758,6 +793,7 @@ export default function DailyOperationPage() {
             onAirportDetailRequest={handleMapAirportDetailRequest}
             onFlightPreview={handleMapFlightPreview}
             onFlightDetailRequest={handleMapFlightDetailRequest}
+            showCancelledDetails={showCancelledDetails}
           />
 
           {loading ? (
@@ -815,7 +851,10 @@ export default function DailyOperationPage() {
           alerts={alerts}
           isCollapsed={isPanelCollapsed}
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+          onResizeStart={handleResizeStart}
           entityFocusRequest={entityFocusRequest}
+          showCancelledDetails={showCancelledDetails}
+          onShowCancelledDetailsChange={setShowCancelledDetails}
         />
       </section>
     </div>

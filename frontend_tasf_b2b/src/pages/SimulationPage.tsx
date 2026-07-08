@@ -133,6 +133,33 @@ export default function SimulationPage() {
     return saved ? saved === 'true' : true
   })
 
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    const saved = sessionStorage.getItem('sim_panel_width')
+    return saved ? parseInt(saved, 10) : 320
+  })
+
+  useEffect(() => {
+    sessionStorage.setItem('sim_panel_width', panelWidth.toString())
+  }, [panelWidth])
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = panelWidth
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX
+      setPanelWidth(Math.max(250, Math.min(800, startWidth + delta)))
+    }
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    document.body.style.cursor = 'ew-resize'
+  }
+
   const [fullDetailFlightId, setFullDetailFlightId] = useState<number | null>(null)
 
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
@@ -151,6 +178,7 @@ export default function SimulationPage() {
   const [shipmentsEntregados, setShipmentsEntregados] = useState<EnvioDetalleDto[]>([])
   const [shipmentOriginFilter, setShipmentOriginFilter] = useState('')
   const [shipmentDestinationFilter, setShipmentDestinationFilter] = useState('')
+  const [showCancelledDetails, setShowCancelledDetails] = useState(true)
   const [selectedShipmentCategory, setSelectedShipmentCategory] = useState<ShipmentCategory>(() => {
     const saved = sessionStorage.getItem('sim_shipment_category')
     return (saved as ShipmentCategory) || 'EN_VUELO'
@@ -580,9 +608,6 @@ export default function SimulationPage() {
     if (preparingMessage) {
       return preparingMessage
     }
-    if (status === 'PAUSED') {
-      return 'Simulación pausada'
-    }
     if (status === 'READY' && displayMinute === null) {
       return `Preparando simulación hasta ${formatCompactDate(meta.inicio)}...`
     }
@@ -593,12 +618,33 @@ export default function SimulationPage() {
     return `Fecha simulada: ${date} - ${time}`
   })()
 
+  const simDurationMapLabel = (() => {
+    if (!meta || preparingMessage || (status === 'READY' && displayMinute === null)) {
+      return null
+    }
+    const minute = displayMinute ?? meta.diaMin * 1440
+    const startMinute = meta.diaMin * 1440
+    const diff = Math.max(0, minute - startMinute)
+    const hours = Math.floor(diff / 60)
+    const minutes = diff % 60
+    return `Duración simulación: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  })()
+
   const realMapTimeLabel = (() => {
     if (!meta || preparingMessage || (status === 'READY' && displayMinute === null)) {
       return null
     }
 
     return `Fecha actual: ${formatDateTime(new Date())}`
+  })()
+
+  const realDurationMapLabel = (() => {
+    if (!meta || preparingMessage || (status === 'READY' && displayMinute === null)) {
+      return null
+    }
+    const hours = Math.floor(elapsedSeconds / 3600)
+    const minutes = Math.floor((elapsedSeconds % 3600) / 60)
+    return `Duración real: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
   })()
 
   const bannerMessage = (() => {
@@ -637,17 +683,31 @@ export default function SimulationPage() {
     )
   }, [cappedSegments, displayMinute])
 
+  const mapAirports = useMemo(() => {
+    return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
+  }, [airports, warehouseSnapshot, mapFilters, ranges])
+
   const mapSegments = useMemo(() => {
-    return filterFlightSegmentsByMapFilters(
+    let baseFiltered = filterFlightSegmentsByMapFilters(
       localCompleted ? [] : cappedSegments,
       mapFilters,
       ranges
     )
-  }, [cappedSegments, localCompleted, mapFilters, ranges])
 
-  const mapAirports = useMemo(() => {
-    return filterAirportsByMapFilters(airports, warehouseSnapshot, mapFilters, ranges)
-  }, [airports, warehouseSnapshot, mapFilters, ranges])
+    const shipOrig = shipmentOriginFilter.trim().toUpperCase()
+    const shipDest = shipmentDestinationFilter.trim().toUpperCase()
+    if (shipOrig) {
+      baseFiltered = baseFiltered.filter(seg => seg.origen.toUpperCase().includes(shipOrig))
+    }
+    if (shipDest) {
+      baseFiltered = baseFiltered.filter(seg => seg.destino.toUpperCase().includes(shipDest))
+    }
+
+    const airportCodes = new Set(mapAirports.map(a => a.codigoOaci))
+    return baseFiltered.filter(seg => airportCodes.has(seg.origen) || airportCodes.has(seg.destino))
+  }, [cappedSegments, localCompleted, mapFilters, ranges, mapAirports, shipmentOriginFilter, shipmentDestinationFilter])
+
+
 
   const mapFilterCounts = useMemo(() => ({
     flights: mapSegments.length,
@@ -851,6 +911,14 @@ export default function SimulationPage() {
     setSelectedFlightId(null)
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
+
+    entityFocusRequestIdRef.current += 1
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'airport',
+      id: codigoOaci,
+      requestId: entityFocusRequestIdRef.current,
+    })
   }, [])
 
   const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
@@ -874,6 +942,14 @@ export default function SimulationPage() {
     setSelectedAirportCode(null)
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
+
+    entityFocusRequestIdRef.current += 1
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'flight',
+      id: flightId,
+      requestId: entityFocusRequestIdRef.current,
+    })
   }, [])
 
   const handleMapFlightDetailRequest = useCallback((flightId: number) => {
@@ -940,14 +1016,20 @@ export default function SimulationPage() {
             </div>
           </section>
 
-          <section className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
+          <section 
+            className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}
+            style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
+          >
             <div className="map-placeholder">
               <MapView
                 airports={mapAirports}
                 segments={mapSegments}
                 currentMinute={displayMinute}
                 timeLabel={simulatedMapTimeLabel}
+                simDurationLabel={simDurationMapLabel ?? undefined}
                 secondaryTimeLabel={realMapTimeLabel ?? undefined}
+                realDurationLabel={realDurationMapLabel ?? undefined}
+                isPaused={status === 'PAUSED'}
                 cancelledFlightTraces={cancelledFlightTraces}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
@@ -961,6 +1043,7 @@ export default function SimulationPage() {
                 onAirportDetailRequest={handleMapAirportDetailRequest}
                 onFlightPreview={handleMapFlightPreview}
                 onFlightDetailRequest={handleMapFlightDetailRequest}
+                showCancelledDetails={showCancelledDetails}
               />
               {isPreparing && <div className="prep-overlay">{preparingMessage ?? 'Calculando simulación...'}</div>}
               {bannerMessage && <div className="status-banner">{bannerMessage}</div>}
@@ -988,6 +1071,7 @@ export default function SimulationPage() {
               onSelectAirport={handleSelectAirport}
               isCollapsed={isPanelCollapsed}
               onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+              onResizeStart={handleResizeStart}
               selectedShipmentRoute={selectedShipmentRoute}
               onSearchShipment={handleSearchShipment}
               shipmentSearchError={shipmentSearchError}
@@ -1024,6 +1108,8 @@ export default function SimulationPage() {
               onShipmentDestinationFilterChange={setShipmentDestinationFilter}
               selectedShipmentCategory={selectedShipmentCategory}
               onSelectedShipmentCategoryChange={setSelectedShipmentCategory}
+              showCancelledDetails={showCancelledDetails}
+              onShowCancelledDetailsChange={setShowCancelledDetails}
             />
           </section>
           

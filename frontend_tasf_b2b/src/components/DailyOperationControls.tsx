@@ -87,6 +87,8 @@ export type DailyOperationControlsProps = {
   onAirportTextFiltersChange: (filters: AirportTextFilters) => void
   currentMinute: number | null
   entityFocusRequest?: EntityFocusRequest | null
+  showCancelledDetails?: boolean
+  onShowCancelledDetailsChange?: (val: boolean) => void
 }
 
 export default function DailyOperationControls({
@@ -122,7 +124,10 @@ export default function DailyOperationControls({
   onAirportTextFiltersChange,
   currentMinute,
   entityFocusRequest,
-}: DailyOperationControlsProps) {
+  showCancelledDetails,
+  onShowCancelledDetailsChange,
+  onResizeStart,
+}: DailyOperationControlsProps & { onResizeStart?: (e: React.MouseEvent) => void }) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('stats')
 
   const allFlights = useMemo(() => {
@@ -147,6 +152,12 @@ export default function DailyOperationControls({
 
   return (
     <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
+      {!isCollapsed && onResizeStart && (
+        <div 
+          className="panel-resizer" 
+          onMouseDown={onResizeStart}
+        />
+      )}
       <button 
         className="toggle-panel-btn" 
         onClick={onToggleCollapse}
@@ -360,6 +371,8 @@ export default function DailyOperationControls({
           focusRequest={entityFocusRequest}
           listHeight={280}
           shipmentListHeight={150}
+          showCancelledDetails={showCancelledDetails}
+          onShowCancelledDetailsChange={onShowCancelledDetailsChange}
           labels={{
             airportTitle: 'Buscar aeropuerto operativo',
             flightHintNoun: 'vuelos encontrados',

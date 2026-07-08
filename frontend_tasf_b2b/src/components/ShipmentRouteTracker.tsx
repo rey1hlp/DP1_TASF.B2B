@@ -68,6 +68,21 @@ function getEmptyRouteMessage(status?: string) {
   return 'Sin ruta planificada'
 }
 
+function getDynamicShipmentState(route: TrackerShipmentRoute, currentMinute?: number | null): string {
+  if (!route.ruta || route.ruta.length === 0) return route.estado || 'SIN RUTA'
+  if (route.estado?.toUpperCase() === 'CANCELADO' || route.estado?.toUpperCase() === 'CANCELLED') return route.estado
+
+  if (currentMinute == null) return route.estado || 'DESCONOCIDO'
+
+  const firstStep = route.ruta[0]
+  const lastStep = route.ruta[route.ruta.length - 1]
+
+  if (currentMinute < firstStep.salidaMin) return 'PLANIFICADO'
+  if (currentMinute > lastStep.llegadaMin) return 'ENTREGADO'
+  
+  return 'EN TRANSITO'
+}
+
 export default function ShipmentRouteTracker({
   selectedShipmentRoute,
   shipmentSearchError,
@@ -99,7 +114,8 @@ export default function ShipmentRouteTracker({
   const visibleError = submittedCode.length > 0 ? shipmentSearchError : null
   const showClear = Boolean(route || visibleError || localError)
   const displayedCode = route?.codigoMaleta || route?.codigoPedido || 'Sin seleccion'
-  const statusKind = getStatusKind(route?.estado, Boolean(route?.ruta.length))
+  const dynamicState = route ? getDynamicShipmentState(route, currentMinute) : undefined
+  const statusKind = getStatusKind(dynamicState, Boolean(route?.ruta.length))
   const pieceLabel =
     route?.numeroMaleta && route?.totalMaletas
       ? `${route.numeroMaleta} de ${route.totalMaletas}`
@@ -201,7 +217,7 @@ export default function ShipmentRouteTracker({
             <div>
               <span>Estado</span>
               <strong className={`shipment-tracker-state ${statusKind}`}>
-                {route.ruta.length === 0 ? getEmptyRouteMessage(route.estado) : formatStatus(route.estado)}
+                {route.ruta.length === 0 ? getEmptyRouteMessage(dynamicState) : formatStatus(dynamicState)}
               </strong>
             </div>
             <div>

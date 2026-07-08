@@ -71,6 +71,8 @@ export type SimulationControlsProps = {
   onShipmentDestinationFilterChange: (value: string) => void
   selectedShipmentCategory: ShipmentCategory
   onSelectedShipmentCategoryChange: (category: ShipmentCategory) => void
+  showCancelledDetails?: boolean
+  onShowCancelledDetailsChange?: (val: boolean) => void
 }
 
 export default function SimulationControls({
@@ -114,7 +116,10 @@ export default function SimulationControls({
   onShipmentDestinationFilterChange,
   selectedShipmentCategory,
   onSelectedShipmentCategoryChange,
-}: SimulationControlsProps) {
+  showCancelledDetails,
+  onShowCancelledDetailsChange,
+  onResizeStart,
+}: SimulationControlsProps & { onResizeStart?: (e: React.MouseEvent) => void }) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
   const [inicio, setInicio] = useState('2026-02-15T00:00')
   const [dias, setDias] = useState(3)
@@ -127,6 +132,12 @@ export default function SimulationControls({
 
   return (
     <div className={`control-panel ${isCollapsed ? 'collapsed' : ''}`}>
+      {!isCollapsed && onResizeStart && (
+        <div 
+          className="panel-resizer" 
+          onMouseDown={onResizeStart}
+        />
+      )}
       <button
         className="toggle-panel-btn"
         onClick={onToggleCollapse}
@@ -313,6 +324,8 @@ export default function SimulationControls({
                     flightHintNoun: 'vuelos activos',
                     shipmentEmpty: 'No hay envíos en esta categoría',
                   }}
+                  showCancelledDetails={showCancelledDetails}
+                  onShowCancelledDetailsChange={onShowCancelledDetailsChange}
                 />
               </>
             ) : null}

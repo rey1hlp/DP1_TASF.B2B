@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
-import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
+import { Maximize2, Minimize2, RotateCcw, Settings, X } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim'
 import {
   API_BASE,
@@ -12,7 +12,7 @@ import {
   getSimulationShipmentsByFlight,
 } from '../services/api'
 import { useSimulationContext } from '../contexts/SimulationContext'
-import { formatBags, formatDurationHours, formatInteger, formatMinuteRange, formatPercent } from '../utils/time'
+import { formatBags, formatDurationHours, formatInteger, formatMinuteRange, formatPercent, formatDateFromDayIndex, formatClockFromMinute } from '../utils/time'
 import {
   NEUTRAL_SEMAPHORE_COLORS,
   resolveSemaphoreColor,
@@ -60,7 +60,10 @@ export type MapViewProps = {
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
   timeLabel?: string
+  simDurationLabel?: string
   secondaryTimeLabel?: string
+  realDurationLabel?: string
+  isPaused?: boolean
   cancelledFlightTraces?: CancelledFlightTrace[]
   onAirportDetailRequest?: (codigoOaci: string) => void
   onAirportPreview?: (codigoOaci: string | null) => void
@@ -68,6 +71,7 @@ export type MapViewProps = {
   onFlightPreview?: (flightId: number | null) => void
   onSearchShipment?: (codigo: string) => void | Promise<void>
   onClearShipmentRoute?: () => void
+  showCancelledDetails?: boolean
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
@@ -199,10 +203,13 @@ export default function MapView({
   selectedAirportCode,
   selectedShipmentRoute,
   shipmentSearchError,
-  isPanelCollapsed,
-  isToolbarCollapsed,
+  isPanelCollapsed = false,
+  isToolbarCollapsed = false,
   timeLabel,
+  simDurationLabel,
   secondaryTimeLabel,
+  realDurationLabel,
+  isPaused = false,
   cancelledFlightTraces,
   onAirportDetailRequest,
   onAirportPreview,
@@ -210,6 +217,7 @@ export default function MapView({
   onFlightPreview,
   onSearchShipment,
   onClearShipmentRoute,
+  showCancelledDetails = true,
 }: MapViewProps) {
   const { simulation } = useSimulationContext()
   const simId = simulation.simId
@@ -232,6 +240,13 @@ export default function MapView({
   const [selectedAirportShipment, setSelectedAirportShipment] = useState<ShipmentCrudDto | null>(null)
   const [trackerCode, setTrackerCode] = useState<string | null>(null)
   const [isTrackerOpen, setIsTrackerOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [visibleTimeItems, setVisibleTimeItems] = useState({
+    simulatedDate: true,
+    simulatedDuration: true,
+    actualDate: true,
+    actualDuration: true,
+  })
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -948,9 +963,34 @@ export default function MapView({
       nextActiveIds.add(seg.flightId)
       const total = Math.max(1, seg.llegadaMin - seg.salidaMin)
       const progress = Math.min(1, Math.max(0, (currentMinute - seg.salidaMin) / total))
-      const lat = seg.origenLat + (seg.destinoLat - seg.origenLat) * progress
-      const lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
-      const heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
+      
+      let lat = seg.origenLat + (seg.destinoLat - seg.origenLat) * progress
+      let lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
+      let heading = 0
+      const map = mapRef.current
+      if (map) {
+        let destLon = seg.destinoLon
+        if (destLon - seg.origenLon > 180) destLon -= 360
+        else if (destLon - seg.origenLon < -180) destLon += 360
+
+        const p1 = map.project([seg.origenLat, seg.origenLon], 10)
+        const p2 = map.project([seg.destinoLat, destLon], 10)
+        
+        // Interpolate position in projection space (straight line on the map)
+        const currentP = L.point(
+          p1.x + (p2.x - p1.x) * progress,
+          p1.y + (p2.y - p1.y) * progress
+        )
+        const currentLatLng = map.unproject(currentP, 10)
+        lat = currentLatLng.lat
+        lon = currentLatLng.lng
+
+        const dy = p1.y - p2.y // positive dy is upwards on flat map projection
+        const dx = p2.x - p1.x // positive dx is rightwards on flat map projection
+        heading = (Math.atan2(dx, dy) * 180) / Math.PI
+      } else {
+        heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
+      }
       const capacity = seg.capacidad
 
       const isSelectedFlight = selectedFlightId !== null && seg.flightId === selectedFlightId
@@ -1099,8 +1139,25 @@ export default function MapView({
           const total = Math.max(1, selectedSegment.llegadaMin - selectedSegment.salidaMin)
           const progress = Math.min(1, Math.max(0, (currentMinute - selectedSegment.salidaMin) / total))
 
-          const currentLat = selectedSegment.origenLat + (selectedSegment.destinoLat - selectedSegment.origenLat) * progress
-          const currentLon = selectedSegment.origenLon + (selectedSegment.destinoLon - selectedSegment.origenLon) * progress
+          let currentLat = selectedSegment.origenLat + (selectedSegment.destinoLat - selectedSegment.origenLat) * progress
+          let currentLon = selectedSegment.origenLon + (selectedSegment.destinoLon - selectedSegment.origenLon) * progress
+          
+          const map = mapRef.current
+          if (map) {
+            let destLon = selectedSegment.destinoLon
+            if (destLon - selectedSegment.origenLon > 180) destLon -= 360
+            else if (destLon - selectedSegment.origenLon < -180) destLon += 360
+            
+            const p1 = map.project([selectedSegment.origenLat, selectedSegment.origenLon], 10)
+            const p2 = map.project([selectedSegment.destinoLat, destLon], 10)
+            const currentP = L.point(
+              p1.x + (p2.x - p1.x) * progress,
+              p1.y + (p2.y - p1.y) * progress
+            )
+            const currentLatLng = map.unproject(currentP, 10)
+            currentLat = currentLatLng.lat
+            currentLon = currentLatLng.lng
+          }
 
           L.polyline(
             [[selectedSegment.origenLat, selectedSegment.origenLon], [currentLat, currentLon]],
@@ -1148,15 +1205,32 @@ export default function MapView({
         return
       }
 
+      const originAirport = airports.find(a => a.latitud === trace.origenLat && a.longitud === trace.origenLon)?.codigoOaci || 'Desconocido'
+      const destAirport = airports.find(a => a.latitud === trace.destinoLat && a.longitud === trace.destinoLon)?.codigoOaci || 'Desconocido'
+
+      const startDate = formatDateFromDayIndex(Math.floor(trace.salidaMin / 1440))
+      const startTime = formatClockFromMinute(trace.salidaMin)
+      const endDate = formatDateFromDayIndex(Math.floor(trace.llegadaMin / 1440))
+      const endTime = formatClockFromMinute(trace.llegadaMin)
+
       L.polyline(
         [
           [trace.origenLat, trace.origenLon],
           [trace.destinoLat, trace.destinoLon],
         ],
         CANCELLED_ROUTE_STYLE
+      ).bindTooltip(
+        `<div style="text-align: center;">
+          <strong>Vuelo Cancelado</strong><br/>
+          Origen: ${originAirport}<br/>
+          Destino: ${destAirport}<br/>
+          Inicio: ${startDate} - ${startTime}<br/>
+          Fin: ${endDate} - ${endTime}
+        </div>`,
+        { direction: 'auto', sticky: true, permanent: showCancelledDetails, className: 'cancelled-flight-tooltip' }
       ).addTo(layer)
     })
-  }, [cancelledFlightTraces, currentMinute, cancelledFlightIdSet])
+  }, [cancelledFlightTraces, currentMinute, cancelledFlightIdSet, airports, showCancelledDetails])
 
   // 👻 Efecto "fantasma": detecta vuelos que desaparecieron de `segments` porque ya
   // aterrizaron (currentMinute superó su llegadaMin) y los guarda en memoria temporal
@@ -1241,10 +1315,117 @@ export default function MapView({
       >
         <RotateCcw size={17} />
       </button>
+      <button
+        className="map-settings-btn"
+        onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+        title="Configuración de visualización"
+        aria-label="Configuración de visualización"
+      >
+        <Settings size={18} />
+      </button>
+
+      {isSettingsOpen && (
+        <div className="map-settings-panel">
+          <div className="map-settings-panel-header">
+            <strong>Mostrar Tiempos</strong>
+            <button className="map-settings-panel-close" onClick={() => setIsSettingsOpen(false)}>
+              <X size={14} />
+            </button>
+          </div>
+          <div className="map-settings-panel-content">
+            <label className="map-settings-checkbox-label">
+              <input
+                type="checkbox"
+                checked={visibleTimeItems.simulatedDate}
+                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, simulatedDate: e.target.checked }))}
+              />
+              Fecha simulada
+            </label>
+            <label className="map-settings-checkbox-label">
+              <input
+                type="checkbox"
+                checked={visibleTimeItems.simulatedDuration}
+                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, simulatedDuration: e.target.checked }))}
+              />
+              Duración simulación
+            </label>
+            <label className="map-settings-checkbox-label">
+              <input
+                type="checkbox"
+                checked={visibleTimeItems.actualDate}
+                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, actualDate: e.target.checked }))}
+              />
+              Fecha actual
+            </label>
+            <label className="map-settings-checkbox-label">
+              <input
+                type="checkbox"
+                checked={visibleTimeItems.actualDuration}
+                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, actualDuration: e.target.checked }))}
+              />
+              Duración real
+            </label>
+          </div>
+        </div>
+      )}
+
       {timeLabel || secondaryTimeLabel ? (
         <div className="map-time-tabs" aria-label="Fechas de simulación">
-          {timeLabel ? <div className="map-time-tab">{timeLabel}</div> : null}
-          {secondaryTimeLabel ? <div className="map-time-tab map-time-tab--secondary">{secondaryTimeLabel}</div> : null}
+          {timeLabel && visibleTimeItems.simulatedDate ? (
+            <div className="map-time-tab-container">
+              <div className="map-time-tab map-time-tab--secondary">{timeLabel}</div>
+              <button
+                className="map-time-tab-close"
+                onClick={() => setVisibleTimeItems(prev => ({ ...prev, simulatedDate: false }))}
+                title="Ocultar"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
+          {simDurationLabel && visibleTimeItems.simulatedDuration ? (
+            <div className="map-time-tab-container">
+              <div className="map-time-tab map-time-tab--secondary">{simDurationLabel}</div>
+              <button
+                className="map-time-tab-close"
+                onClick={() => setVisibleTimeItems(prev => ({ ...prev, simulatedDuration: false }))}
+                title="Ocultar"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
+          {secondaryTimeLabel && visibleTimeItems.actualDate ? (
+            <div className="map-time-tab-container">
+              <div className="map-time-tab map-time-tab--secondary">{secondaryTimeLabel}</div>
+              <button
+                className="map-time-tab-close"
+                onClick={() => setVisibleTimeItems(prev => ({ ...prev, actualDate: false }))}
+                title="Ocultar"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
+          {realDurationLabel && visibleTimeItems.actualDuration ? (
+            <div className="map-time-tab-container">
+              <div className="map-time-tab map-time-tab--secondary">{realDurationLabel}</div>
+              <button
+                className="map-time-tab-close"
+                onClick={() => setVisibleTimeItems(prev => ({ ...prev, actualDuration: false }))}
+                title="Ocultar"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
+          {isPaused && (
+            <div className="map-time-tab--paused-wrapper">
+              <div className="map-time-tab map-time-tab--paused">
+                Simulación pausada
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
       <ShipmentRouteTracker

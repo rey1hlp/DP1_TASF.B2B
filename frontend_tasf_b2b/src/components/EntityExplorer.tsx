@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
@@ -17,6 +17,7 @@ import {
   formatMinuteRange,
   formatOperationalMinuteRange,
   formatPercent,
+  formatSimMinute,
 } from '../utils/time'
 
 export type EntityTab = 'flights' | 'shipments' | 'airports'
@@ -113,6 +114,8 @@ export type EntityExplorerProps = {
   }
   listHeight?: number
   shipmentListHeight?: number
+  showCancelledDetails?: boolean
+  onShowCancelledDetailsChange?: (val: boolean) => void
 }
 
 type FlightSortKey =
@@ -129,7 +132,7 @@ type SortDirection = 'asc' | 'desc'
 
 const ITEM_HEIGHT = 44
 const FLIGHT_ITEM_HEIGHT = 56
-const AIRPORT_ITEM_HEIGHT = 56
+const AIRPORT_ITEM_HEIGHT = 92
 const AIRPORT_PREVIEW_LIMIT = 30
 
 const FLIGHT_SORT_DEFAULT_DIRECTION: Record<FlightSortKey, SortDirection> = {
@@ -256,6 +259,8 @@ export default function EntityExplorer({
   listHeight = 320,
   shipmentListHeight = 220,
   shipmentsPlanificados = [],
+  showCancelledDetails = true,
+  onShowCancelledDetailsChange,
   shipmentsEnVuelo = [],
   shipmentsEntregados = [],
   selectedShipmentCategory = 'EN_VUELO',
@@ -267,6 +272,10 @@ export default function EntityExplorer({
 }: EntityExplorerProps) {
   void currentMinute
   void getDynamicShipmentStatus
+  const flightListRef = useRef<HTMLDivElement>(null)
+  const airportListRef = useRef<HTMLDivElement>(null)
+  const shipmentListRef = useRef<HTMLDivElement>(null)
+
   const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>("flights");
   const [flightSortKey, setFlightSortKey] = useState<FlightSortKey>('default')
   const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
@@ -598,27 +607,72 @@ export default function EntityExplorer({
     airportSortKey,
   ])
 
+  const processedFocusRequestIdRef = useRef<number>(-1)
+
   useEffect(() => {
-    if (!focusRequest) return
+    if (!focusRequest || focusRequest.requestId === processedFocusRequestIdRef.current) return
+    processedFocusRequestIdRef.current = focusRequest.requestId
 
     if (focusRequest.type === 'airport') {
       setActiveEntityTab('airports')
-      airportList.setScrollTop(0)
+      setTimeout(() => {
+        const index = displayedAirports.findIndex(a => a.codigoOaci === focusRequest.id)
+        if (index !== -1) {
+          const targetScrollTop = index * AIRPORT_ITEM_HEIGHT
+          airportList.setScrollTop(targetScrollTop)
+          if (airportListRef.current) {
+            airportListRef.current.scrollTop = targetScrollTop
+          }
+        } else {
+          airportList.setScrollTop(0)
+          if (airportListRef.current) {
+            airportListRef.current.scrollTop = 0
+          }
+        }
+      }, 50)
       return
     }
 
     if (focusRequest.type === 'flight') {
       setActiveEntityTab('flights')
-      flightList.setScrollTop(0)
+      setTimeout(() => {
+        const index = orderedFlights.findIndex(f => f.flightId === Number(focusRequest.id))
+        if (index !== -1) {
+          const targetScrollTop = index * FLIGHT_ITEM_HEIGHT
+          flightList.setScrollTop(targetScrollTop)
+          if (flightListRef.current) {
+            flightListRef.current.scrollTop = targetScrollTop
+          }
+        } else {
+          flightList.setScrollTop(0)
+          if (flightListRef.current) {
+            flightListRef.current.scrollTop = 0
+          }
+        }
+      }, 50)
       return
     }
 
     if (focusRequest.type === 'shipment') {
       setActiveEntityTab('shipments')
       setShipmentQuery(String(focusRequest.id))
-      shipmentList.setScrollTop(0)
+      setTimeout(() => {
+        const index = filteredShipments.findIndex(s => s === String(focusRequest.id))
+        if (index !== -1) {
+          const targetScrollTop = index * ITEM_HEIGHT
+          shipmentList.setScrollTop(targetScrollTop)
+          if (shipmentListRef.current) {
+            shipmentListRef.current.scrollTop = targetScrollTop
+          }
+        } else {
+          shipmentList.setScrollTop(0)
+          if (shipmentListRef.current) {
+            shipmentListRef.current.scrollTop = 0
+          }
+        }
+      }, 50)
     }
-  }, [focusRequest])
+  }, [focusRequest, displayedAirports, orderedFlights, filteredShipments])
 
   const renderShipmentCategoryTable = (
     title: string,
@@ -814,6 +868,7 @@ export default function EntityExplorer({
         </label>
       </div>
       <div
+        ref={flightListRef}
         className="flight-list"
         onScroll={(event) =>
           flightList.setScrollTop(event.currentTarget.scrollTop)
@@ -919,6 +974,16 @@ export default function EntityExplorer({
         </div>
       )}
       {/* --- FIN NUEVO CÓDIGO --- */}
+      <div className="cancelled-flights-toggle" style={{ marginTop: '12px', padding: '0 4px', borderTop: '1px solid #d9e4f4', paddingTop: '10px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#1e3b67' }}>
+          <input 
+            type="checkbox" 
+            checked={showCancelledDetails} 
+            onChange={(e) => onShowCancelledDetailsChange?.(e.target.checked)}
+          />
+          Mostrar detalles de vuelos cancelados en el mapa
+        </label>
+      </div>
     </>
   );
 
@@ -1030,6 +1095,7 @@ export default function EntityExplorer({
       </label>
 
       <div
+        ref={shipmentListRef}
         className="flight-list"
         onScroll={(event) =>
           shipmentList.setScrollTop(event.currentTarget.scrollTop)
@@ -1135,7 +1201,7 @@ export default function EntityExplorer({
             }}
           >
             <strong>Estado:</strong>{" "}
-            {getShipmentStatusLabel(selectedShipmentRoute.estado)}{" "}
+            {getDynamicShipmentStatus(selectedShipmentRoute, currentMinute)}{" "}
             <br />
             <strong>Tiempo total:</strong>{" "}
             {formatDurationHours(selectedShipmentRoute.tiempoTotalHoras)}
@@ -1241,6 +1307,7 @@ export default function EntityExplorer({
         </label>
       </div>
       <div
+        ref={airportListRef}
         className="flight-list"
         onScroll={(event) =>
           airportList.setScrollTop(event.currentTarget.scrollTop)
@@ -1273,6 +1340,12 @@ export default function EntityExplorer({
                   <div>
                     <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
                     <div className="flight-meta">{`${airport.pais} · ${occupancyLabel}`}</div>
+                    <div className="flight-meta" style={{ marginTop: '2px' }}>
+                      Próx. Salida: {formatSimMinute(airport.nextDepartureMin, true)}
+                    </div>
+                    <div className="flight-meta">
+                      Próx. Llegada: {formatSimMinute(airport.nextArrivalMin, true)}
+                    </div>
                   </div>
                   {airport.porcentaje !== undefined ? (
                     <div className="entity-airport-status">
