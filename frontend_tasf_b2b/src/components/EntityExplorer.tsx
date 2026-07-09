@@ -1,5 +1,5 @@
-import { RotateCcw } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { ArrowUpDown, Clock3, Filter, Search } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
@@ -20,6 +20,7 @@ import {
   formatPercent,
   formatSimMinute,
 } from '../utils/time'
+import { resolveSemaphoreColor, type SemaphoreRanges } from '../utils/semaphore'
 
 export type EntityTab = 'flights' | 'shipments' | 'airports'
 
@@ -81,6 +82,7 @@ export type EntityExplorerProps = {
   onSelectAirport: (codigoOaci: string) => void
   flightFilters: FlightTextFilters
   onFlightFiltersChange: (filters: FlightTextFilters) => void
+  ranges: SemaphoreRanges
   airportFilters: AirportTextFilters
   onAirportFiltersChange: (filters: AirportTextFilters) => void
   onSearchShipment: (codigo: string) => void
@@ -132,7 +134,7 @@ type AirportSortKey = 'occupancy' | 'departure' | 'arrival'
 type SortDirection = 'asc' | 'desc'
 
 const ITEM_HEIGHT = 44
-const FLIGHT_ITEM_HEIGHT = 56
+const FLIGHT_ITEM_HEIGHT = 96
 const AIRPORT_ITEM_HEIGHT = 92
 const AIRPORT_PREVIEW_LIMIT = 30
 
@@ -249,6 +251,7 @@ export default function EntityExplorer({
   onSelectAirport,
   flightFilters,
   onFlightFiltersChange,
+  ranges,
   airportFilters,
   onAirportFiltersChange,
   onSearchShipment,
@@ -280,6 +283,8 @@ export default function EntityExplorer({
   const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>("flights");
   const [flightSortKey, setFlightSortKey] = useState<FlightSortKey>('default')
   const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
+  const [isFlightFilterMenuOpen, setIsFlightFilterMenuOpen] = useState(false)
+  const [isFlightSortMenuOpen, setIsFlightSortMenuOpen] = useState(false)
   const [airportSortKey, setAirportSortKey] = useState<AirportSortKey>('occupancy')
   const [airportSortDirection, setAirportSortDirection] = useState<SortDirection>('desc')
   const [shipmentQuery, setShipmentQuery] = useState("");
@@ -515,6 +520,30 @@ export default function EntityExplorer({
         : null
     )
 
+  const hasActiveFlightFilters =
+    Boolean(flightFilters.codeQuery.trim()) ||
+    Boolean(flightFilters.originQuery.trim()) ||
+    Boolean(flightFilters.destinationQuery.trim())
+  const hasActiveFlightSort = flightSortKey !== 'default'
+
+  const getFlightCapacityPercent = (flight: EntityFlightItem) => {
+    if (typeof flight.porcentaje === 'number') return flight.porcentaje
+    if (
+      typeof flight.carga === 'number' &&
+      typeof flight.capacidad === 'number' &&
+      flight.capacidad > 0
+    ) {
+      return (flight.carga * 100) / flight.capacidad
+    }
+
+    return null
+  }
+
+  const getFlightCapacityColor = (flight: EntityFlightItem) => {
+    const percent = getFlightCapacityPercent(flight)
+    return resolveSemaphoreColor(percent, ranges).fill
+  }
+
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     const target = orderedFlights[0];
@@ -540,9 +569,10 @@ export default function EntityExplorer({
     flightList.setScrollTop(0)
   }
 
-  const handleFlightSortChange = (value: FlightSortKey) => {
+  const handleFlightSortPreset = (value: FlightSortKey, direction?: SortDirection) => {
     setFlightSortKey(value)
-    setFlightSortDirection(FLIGHT_SORT_DEFAULT_DIRECTION[value])
+    setFlightSortDirection(direction ?? FLIGHT_SORT_DEFAULT_DIRECTION[value])
+    setIsFlightSortMenuOpen(false)
     flightList.setScrollTop(0)
   }
 
@@ -774,100 +804,160 @@ export default function EntityExplorer({
 
   const renderFlights = () => (
     <>
-      <div className="entity-filter-panel">
-        <div className="entity-filter-header">
-          <span className="entity-toolbar-label">Filtros de vuelos</span>
+      <div className="flight-control-row">
+        <label className="flight-search-field" aria-label="Buscar vuelo por código">
+          <Search size={16} />
+          <input
+            type="text"
+            placeholder="Buscar código..."
+            value={flightFilters.codeQuery}
+            onChange={(event) => handleFlightFilterChange('codeQuery', event.target.value)}
+            onKeyDown={handleFlightKeyDown}
+          />
+        </label>
+
+        <div className="flight-tool-wrap">
           <button
             type="button"
-            className="entity-filter-clear"
-            onClick={clearFlightFilters}
-            disabled={
-              !flightFilters.codeQuery &&
-              !flightFilters.originQuery &&
-              !flightFilters.destinationQuery
-            }
-            title="Limpiar filtros"
+            className={`flight-tool-button ${hasActiveFlightFilters ? 'active' : ''}`}
+            onClick={() => {
+              setIsFlightFilterMenuOpen((current) => !current)
+              setIsFlightSortMenuOpen(false)
+            }}
+            title="Filtros avanzados"
+            aria-label="Filtros avanzados"
+            aria-expanded={isFlightFilterMenuOpen}
           >
-            <span>Limpiar</span>
+            <Filter size={18} />
+            {hasActiveFlightFilters ? <span className="flight-tool-indicator" /> : null}
           </button>
+
+          {isFlightFilterMenuOpen && (
+            <div className="flight-popover flight-filter-popover">
+              <div className="flight-popover-title">Filtros avanzados</div>
+              <label className="flight-popover-field">
+                <span>Origen</span>
+                <input
+                  type="text"
+                  list="flight-origin-options"
+                  placeholder="Buscar origen..."
+                  value={flightFilters.originQuery}
+                  onChange={(event) => handleFlightFilterChange('originQuery', event.target.value)}
+                />
+              </label>
+              <label className="flight-popover-field">
+                <span>Destino</span>
+                <input
+                  type="text"
+                  list="flight-destination-options"
+                  placeholder="Buscar destino..."
+                  value={flightFilters.destinationQuery}
+                  onChange={(event) => handleFlightFilterChange('destinationQuery', event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="flight-popover-clear"
+                onClick={clearFlightFilters}
+                disabled={!hasActiveFlightFilters}
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
         </div>
-        <div className="entity-filter-grid">
-          <label className="field">
-            <span className="entity-filter-label">Código</span>
-            <input
-              type="text"
-              placeholder={labels?.flightPlaceholder ?? "Ej. 1024"}
-              value={flightFilters.codeQuery}
-              onChange={(event) => handleFlightFilterChange('codeQuery', event.target.value)}
-              onKeyDown={handleFlightKeyDown}
-            />
-          </label>
-          <label className="field">
-            <span className="entity-filter-label">Origen</span>
-            <select
-              value={flightFilters.originQuery}
-              onChange={(event) => handleFlightFilterChange('originQuery', event.target.value)}
-            >
-              <option value="">Todos</option>
-              {flightFilterAirportOptions.map((airport) => (
-                <option key={`origin-${airport.codigoOaci}`} value={airport.codigoOaci}>
-                  {`${airport.codigoOaci} · ${airport.nombre}`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span className="entity-filter-label">Destino</span>
-            <select
-              value={flightFilters.destinationQuery}
-              onChange={(event) => handleFlightFilterChange('destinationQuery', event.target.value)}
-            >
-              <option value="">Todos</option>
-              {flightFilterAirportOptions.map((airport) => (
-                <option key={`destination-${airport.codigoOaci}`} value={airport.codigoOaci}>
-                  {`${airport.codigoOaci} · ${airport.nombre}`}
-                </option>
-              ))}
-            </select>
-          </label>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button ${hasActiveFlightSort ? 'active' : ''}`}
+            onClick={() => {
+              setIsFlightSortMenuOpen((current) => !current)
+              setIsFlightFilterMenuOpen(false)
+            }}
+            title="Ordenamiento"
+            aria-label="Ordenamiento"
+            aria-expanded={isFlightSortMenuOpen}
+          >
+            <ArrowUpDown size={18} />
+            {hasActiveFlightSort ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isFlightSortMenuOpen && (
+            <div className="flight-popover flight-sort-popover">
+              <div className="flight-popover-title">Ordenar vuelos</div>
+              <button
+                type="button"
+                className={flightSortKey === 'default' ? 'active' : ''}
+                onClick={() => handleFlightSortPreset('default')}
+              >
+                Orden actual
+              </button>
+              <button
+                type="button"
+                className={flightSortKey === 'occupancy' && flightSortDirection === 'desc' ? 'active' : ''}
+                onClick={() => handleFlightSortPreset('occupancy', 'desc')}
+              >
+                Capacidad (Mayor a Menor)
+              </button>
+              <button
+                type="button"
+                className={flightSortKey === 'departure' ? 'active' : ''}
+                onClick={() => handleFlightSortPreset('departure', 'asc')}
+              >
+                Hora de salida
+              </button>
+              <button
+                type="button"
+                className={flightSortKey === 'arrival' ? 'active' : ''}
+                onClick={() => handleFlightSortPreset('arrival', 'asc')}
+              >
+                Hora de llegada
+              </button>
+              <button
+                type="button"
+                className={flightSortKey === 'origin' ? 'active' : ''}
+                onClick={() => handleFlightSortPreset('origin', 'asc')}
+              >
+                Origen
+              </button>
+              <button
+                type="button"
+                className={flightSortKey === 'destination' ? 'active' : ''}
+                onClick={() => handleFlightSortPreset('destination', 'asc')}
+              >
+                Destino
+              </button>
+              <button
+                type="button"
+                className="flight-sort-direction-action"
+                onClick={handleFlightSortDirectionToggle}
+                disabled={flightSortKey === 'default'}
+              >
+                Dirección: {flightSortDirection === 'asc' ? 'Ascendente' : 'Descendente'}
+              </button>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="entity-toolbar">
-        <label className="field entity-sort-field">
-          <span className="entity-toolbar-label">Ordenar por</span>
-          <div className="entity-sort-row">
-            <select
-              value={flightSortKey}
-              onChange={(event) => handleFlightSortChange(event.target.value as FlightSortKey)}
-            >
-              <option value="default">Orden actual</option>
-              <option value="occupancy">Nivel de ocupación</option>
-              <option value="departure">Hora de salida</option>
-              <option value="arrival">Hora de llegada</option>
-              <option value="origin">Origen</option>
-              <option value="destination">Destino</option>
-            </select>
-            <button
-              type="button"
-              className="entity-sort-direction"
-              onClick={handleFlightSortDirectionToggle}
-              disabled={flightSortKey === 'default'}
-              title={
-                flightSortKey === 'default'
-                  ? 'Selecciona un criterio para activar el orden'
-                  : flightSortDirection === 'asc'
-                    ? 'Cambiar a descendente'
-                    : 'Cambiar a ascendente'
-              }
-            >
-              {flightSortDirection === 'asc' ? '↑' : '↓'}
-            </button>
-          </div>
-        </label>
+
+        <datalist id="flight-origin-options">
+          {flightFilterAirportOptions.map((airport) => (
+            <option key={`origin-${airport.codigoOaci}`} value={airport.codigoOaci}>
+              {airport.nombre}
+            </option>
+          ))}
+        </datalist>
+        <datalist id="flight-destination-options">
+          {flightFilterAirportOptions.map((airport) => (
+            <option key={`destination-${airport.codigoOaci}`} value={airport.codigoOaci}>
+              {airport.nombre}
+            </option>
+          ))}
+        </datalist>
       </div>
       <div
         ref={flightListRef}
-        className="flight-list"
+        className="flight-list flight-card-list"
         onScroll={(event) =>
           flightList.setScrollTop(event.currentTarget.scrollTop)
         }
@@ -883,37 +973,39 @@ export default function EntityExplorer({
           >
             {flightList.visibleItems.map((flight) => {
               const hasCargo = flight.carga !== undefined && flight.capacidad !== undefined
-              const cargoLabel = hasCargo
-                ? `${formatBags(flight.carga)} / ${formatBags(flight.capacidad)}`
+              const capacityPercent = getFlightCapacityPercent(flight)
+              const capacityPercentLabel = capacityPercent !== null ? formatPercent(capacityPercent, 0) : 'Sin dato'
+              const capacityDetail = hasCargo
+                ? `Capacidad: ${capacityPercentLabel} (${formatBags(flight.carga)} / ${formatBags(flight.capacidad)} maletas)`
                 : flight.capacidad !== undefined
-                  ? `Cap. ${formatBags(flight.capacidad)}`
-                  : null
+                  ? `Capacidad total: ${formatBags(flight.capacidad)} maletas`
+                  : 'Capacidad: sin dato'
+              const capacityColor = getFlightCapacityColor(flight)
 
               return (
                 <button
                   key={flight.flightId}
-                  className={`flight-item entity-flight-item ${selectedFlightId === flight.flightId ? "active" : ""}`}
+                  className={`flight-item entity-flight-card ${selectedFlightId === flight.flightId ? "active" : ""}`}
                   onClick={() => onSelectFlight(flight.flightId)}
-                  style={{ height: `${FLIGHT_ITEM_HEIGHT}px` }}
+                  style={{
+                    height: `${FLIGHT_ITEM_HEIGHT}px`,
+                    '--capacity-color': capacityColor,
+                  } as CSSProperties}
                 >
-                  <div>
-                    <div className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</div>
-                    <div className="flight-meta">
-                      {`${flight.estado ? `${flight.estado} · ` : ""} ${formatMinuteRange(flight.salidaMin, flight.llegadaMin)}`}
+                  <span className="flight-capacity-bar" aria-hidden="true" />
+                  <div className="flight-card-content">
+                    <div className="flight-card-header">
+                      <span className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</span>
+                      {flight.estado ? <span className="flight-status-pill">{flight.estado}</span> : null}
                     </div>
-                    <div className="flight-meta">
-                      {cargoLabel ? cargoLabel : ""}
+                    <div className="flight-card-time flight-meta">
+                      <Clock3 size={13} />
+                      <span>{formatMinuteRange(flight.salidaMin, flight.llegadaMin)}</span>
+                    </div>
+                    <div className="flight-card-capacity">
+                      {capacityDetail}
                     </div>
                   </div>
-                  {flight.porcentaje !== undefined ? (
-                    <div className="entity-airport-status">
-                      <span>{formatPercent(flight.porcentaje, 0)}</span>
-                      <span
-                        className="warehouse-dot"
-                        style={{ background: flight.color }}
-                      />
-                    </div>
-                  ) : null}
                 </button>
               )
             })}

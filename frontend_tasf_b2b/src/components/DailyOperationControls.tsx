@@ -357,10 +357,11 @@ export default function DailyOperationControls({
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}
             onSelectFlight={onSelectFlight}
-            onSelectAirport={onSelectAirport}
-            flightFilters={flightTextFilters}
-            onFlightFiltersChange={onFlightTextFiltersChange}
-            airportFilters={airportTextFilters}
+	            onSelectAirport={onSelectAirport}
+	            flightFilters={flightTextFilters}
+	            onFlightFiltersChange={onFlightTextFiltersChange}
+	            ranges={ranges}
+	            airportFilters={airportTextFilters}
             onAirportFiltersChange={onAirportTextFiltersChange}
             onSearchShipment={onSearchShipment}
             shipmentSearchError={shipmentSearchError}
