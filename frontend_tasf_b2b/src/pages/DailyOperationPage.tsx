@@ -780,6 +780,8 @@ export default function DailyOperationPage() {
             cancelledFlightTraces={cancelledFlightTraces}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}
+            mapFilters={mapFilters}
+            onMapFiltersChange={setMapFilters}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}

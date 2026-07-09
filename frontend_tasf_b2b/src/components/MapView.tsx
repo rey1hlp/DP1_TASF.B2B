@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
-import { Calendar, CalendarClock, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
+import { Calendar, CalendarClock, Layers, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim'
+import type { MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
 import {
   API_BASE,
   authFetch,
@@ -40,6 +41,14 @@ type FlightDetailsStage = 'flight' | 'shipments' | 'shipmentDetails'
 type AirportDetailsStage = 'airport' | 'shipments' | 'shipmentDetails'
 
 type TimeChipTone = 'simulated' | 'real'
+
+const MAP_SEMAPHORE_OPTIONS: Array<{ value: SemaphoreFilterLevel; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'green', label: 'Verde' },
+  { value: 'amber', label: 'Ámbar' },
+  { value: 'red', label: 'Rojo' },
+  { value: 'unknown', label: 'Sin datos' },
+]
 
 type TimeChipProps = {
   icon: LucideIcon
@@ -89,6 +98,8 @@ export type MapViewProps = {
   currentMinute: number | null
   warehouseSnapshot: Record<string, { capacidad: number; ocupacion: number; porcentaje: number; libre: number }>
   ranges: { greenMax: number; amberMax: number }
+  mapFilters: MapSemaphoreFilters
+  onMapFiltersChange: (filters: MapSemaphoreFilters) => void
   selectedFlightId: number | null
   selectedAirportCode: string | null
   selectedShipmentRoute?: TrackerShipmentRoute | null
@@ -119,6 +130,17 @@ const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/019f2fff-a937-7733-b3f
 const SELECTED_AIRPORT_COLORS = {
   stroke: '#2f62b5',
   fill: '#d7e5fb',
+}
+
+function getSemaphoreFilterPercent(value: SemaphoreFilterLevel, ranges: { greenMax: number; amberMax: number }) {
+  if (value === 'green') return 0
+  if (value === 'amber') return ranges.greenMax + 1
+  if (value === 'red') return ranges.amberMax + 1
+  return null
+}
+
+function getSemaphoreFilterColor(value: SemaphoreFilterLevel, ranges: { greenMax: number; amberMax: number }) {
+  return resolveSemaphoreColor(getSemaphoreFilterPercent(value, ranges), ranges)
 }
 
 function getPlaneIconVisualSize(zoom: number) {
@@ -306,6 +328,8 @@ export default function MapView({
   currentMinute,
   warehouseSnapshot,
   ranges,
+  mapFilters,
+  onMapFiltersChange,
   selectedFlightId,
   selectedAirportCode,
   selectedShipmentRoute,
@@ -349,6 +373,7 @@ export default function MapView({
   const [trackerCode, setTrackerCode] = useState<string | null>(null)
   const [isTrackerOpen, setIsTrackerOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isMapLayerFiltersOpen, setIsMapLayerFiltersOpen] = useState(false)
   const [visibleTimeItems, setVisibleTimeItems] = useState({
     simulatedDate: true,
     simulatedDuration: true,
@@ -1391,6 +1416,47 @@ export default function MapView({
     ((secondaryTimeLabel || hasRealOnlyTime) && visibleTimeItems.actualDate) ||
     (realDurationLabel && visibleTimeItems.actualDuration),
   )
+  const hasActiveMapLayerFilter =
+    mapFilters.flights.semaphore !== 'all' ||
+    mapFilters.warehouses.semaphore !== 'all'
+  const hasMixedMapLayerFilter =
+    mapFilters.flights.semaphore !== 'all' &&
+    mapFilters.warehouses.semaphore !== 'all' &&
+    mapFilters.flights.semaphore !== mapFilters.warehouses.semaphore
+  const mapLayerFilterColor = hasMixedMapLayerFilter
+    ? { fill: '#dbeafe', stroke: '#2f62b5' }
+    : getSemaphoreFilterColor(
+        mapFilters.flights.semaphore !== 'all'
+          ? mapFilters.flights.semaphore
+          : mapFilters.warehouses.semaphore,
+        ranges,
+      )
+  const mapLayerFilterButtonStyle = hasActiveMapLayerFilter
+    ? ({
+        '--map-layer-filter-bg': mapLayerFilterColor.fill,
+        '--map-layer-filter-border': mapLayerFilterColor.stroke,
+      } as CSSProperties)
+    : undefined
+
+  const handleMapFlightSemaphoreChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      flights: {
+        ...mapFilters.flights,
+        semaphore: value,
+      },
+    })
+  }
+
+  const handleMapWarehouseSemaphoreChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      warehouses: {
+        ...mapFilters.warehouses,
+        semaphore: value,
+      },
+    })
+  }
 
   return (
     <div ref={wrapperRef} className="map-wrapper">
@@ -1410,13 +1476,87 @@ export default function MapView({
         <RotateCcw size={17} />
       </button>
       <button
+        className={`map-layer-filter-btn ${hasActiveMapLayerFilter ? 'active' : ''}`}
+        style={mapLayerFilterButtonStyle}
+        onClick={() => {
+          setIsMapLayerFiltersOpen((current) => !current)
+          setIsSettingsOpen(false)
+        }}
+        title="Filtros rápidos del mapa"
+        aria-label="Filtros rápidos del mapa"
+        aria-expanded={isMapLayerFiltersOpen}
+      >
+        <Layers size={18} />
+        {hasActiveMapLayerFilter ? <span className="map-layer-filter-indicator" /> : null}
+      </button>
+      <button
         className="map-settings-btn"
-        onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+        onClick={() => {
+          setIsSettingsOpen(!isSettingsOpen)
+          setIsMapLayerFiltersOpen(false)
+        }}
         title="Configuración de visualización"
         aria-label="Configuración de visualización"
       >
         <Settings size={18} />
       </button>
+
+      {isMapLayerFiltersOpen && (
+        <div className="map-layer-filter-panel">
+          <div className="map-layer-filter-panel-header">
+            <strong>Filtros rápidos</strong>
+            <button className="map-settings-panel-close" onClick={() => setIsMapLayerFiltersOpen(false)}>
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="map-layer-filter-section">
+            <span>Vuelos</span>
+            <div className="map-layer-filter-options">
+              {MAP_SEMAPHORE_OPTIONS.map((option) => {
+                const colors = getSemaphoreFilterColor(option.value, ranges)
+                return (
+                  <button
+                    key={`flight-${option.value}`}
+                    type="button"
+                    className={mapFilters.flights.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleMapFlightSemaphoreChange(option.value)}
+                  >
+                    <span
+                      className="map-layer-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="map-layer-filter-section">
+            <span>Aeropuertos</span>
+            <div className="map-layer-filter-options">
+              {MAP_SEMAPHORE_OPTIONS.map((option) => {
+                const colors = getSemaphoreFilterColor(option.value, ranges)
+                return (
+                  <button
+                    key={`warehouse-${option.value}`}
+                    type="button"
+                    className={mapFilters.warehouses.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleMapWarehouseSemaphoreChange(option.value)}
+                  >
+                    <span
+                      className="map-layer-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isSettingsOpen && (
         <div className="map-settings-panel">

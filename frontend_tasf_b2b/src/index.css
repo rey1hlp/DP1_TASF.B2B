@@ -2072,7 +2072,8 @@ body {
 }
 
 .map-fullscreen-btn,
-.map-reset-view-btn {
+.map-reset-view-btn,
+.map-layer-filter-btn {
   position: absolute;
   right: 15px;
   z-index: 1001;
@@ -2096,6 +2097,115 @@ body {
 
 .map-reset-view-btn {
   top: 57px;
+}
+
+.map-layer-filter-btn {
+  right: auto;
+  left: 15px;
+  top: 57px;
+}
+
+.map-layer-filter-btn.active {
+  border-color: var(--map-layer-filter-border, #2f62b5);
+  background: color-mix(in srgb, var(--map-layer-filter-bg, #edf4ff) 28%, #ffffff);
+  color: var(--map-layer-filter-border, #2f62b5);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--map-layer-filter-bg, #2f62b5) 22%, transparent),
+    0 1px 5px rgba(0, 0, 0, 0.25);
+}
+
+.map-layer-filter-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--map-layer-filter-border, #2f62b5);
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.map-layer-filter-panel {
+  position: absolute;
+  right: auto;
+  left: 15px;
+  top: 99px;
+  z-index: 1001;
+  width: min(280px, calc(100% - 30px));
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.map-layer-filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+}
+
+.map-layer-filter-panel-header strong {
+  color: #1e3b67;
+  font-size: 13px;
+}
+
+.map-layer-filter-section {
+  display: grid;
+  gap: 7px;
+}
+
+.map-layer-filter-section > span {
+  color: #60728d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.map-layer-filter-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.map-layer-filter-options button {
+  min-height: 30px;
+  border: 1px solid #d4deec;
+  border-radius: 7px;
+  background: #f8fbff;
+  color: #304866;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.map-layer-filter-options button:hover,
+.map-layer-filter-options button.active {
+  border-color: #9db7df;
+  background: #edf4ff;
+  color: #214f92;
+}
+
+.map-layer-filter-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px rgba(148, 163, 184, 0.25);
 }
 
 .map-time-tabs {
