@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
-import { Maximize2, Minimize2, RotateCcw, Settings, X } from 'lucide-react'
+import { Calendar, CalendarClock, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim'
 import {
   API_BASE,
@@ -39,13 +39,49 @@ import type { CancelledFlightTrace } from '../utils/cancelledFlightTraces'
 type FlightDetailsStage = 'flight' | 'shipments' | 'shipmentDetails'
 type AirportDetailsStage = 'airport' | 'shipments' | 'shipmentDetails'
 
+type TimeChipTone = 'simulated' | 'real'
+
+type TimeChipProps = {
+  icon: LucideIcon
+  label: string
+  value: string
+  tone: TimeChipTone
+  onClose: () => void
+}
+
+function MapTimeChip({ icon: Icon, label, value, tone, onClose }: TimeChipProps) {
+  return (
+    <div className={`map-time-tab-container map-time-tab-container--${tone}`}>
+      <div className={`map-time-tab map-time-tab--${tone}`}>
+        <Icon className="map-time-tab-icon" size={16} strokeWidth={2} />
+        <span className="map-time-tab-text">
+          <span className="map-time-tab-label">{label}</span>
+          <span className="map-time-tab-value">{value}</span>
+        </span>
+      </div>
+      <button
+        className="map-time-tab-close"
+        onClick={onClose}
+        title="Ocultar"
+      >
+        <X size={12} />
+      </button>
+    </div>
+  )
+}
+
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 
 // Ícono profesional de "Avión Despegando / Aeropuerto"
 const AIRPORT_PATHS = [
-  "M2 22h20",
-  "M6.36 13.4 22 9c.59-.15 1 .37.84.95l-1.35 4.86c-.16.58-.75.96-1.35.88l-5.63-.78-5.32 4.19A1.55 1.55 0 0 1 8 19V14.6L4.35 14a1.6 1.6 0 0 1-1.32-1.85L3.4 9.6a.6.6 0 0 1 1.08-.2l2.36 3.1z"
+  "M18.2 12.27 20 6H4l1.8 6.27a1 1 0 0 0 .95.73h10.5a1 1 0 0 0 .96-.73Z",
+  "M8 13v9",
+  "M16 22v-9",
+  "m9 6 1 7",
+  "m15 6-1 7",
+  "M12 6V2",
+  "M13 2h-2",
 ]
 
 export type MapViewProps = {
@@ -58,6 +94,7 @@ export type MapViewProps = {
   selectedAirportCode: string | null
   selectedShipmentRoute?: TrackerShipmentRoute | null
   shipmentSearchError?: string | null
+  isFullscreen: boolean
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
   timeLabel?: string
@@ -72,6 +109,7 @@ export type MapViewProps = {
   onFlightPreview?: (flightId: number | null) => void
   onSearchShipment?: (codigo: string) => void | Promise<void>
   onClearShipmentRoute?: () => void
+  onToggleFullscreen: () => void
   showCancelledDetails?: boolean
 }
 
@@ -203,14 +241,13 @@ function buildAirportIcon(
   isSelected: boolean
 ) {
   const markerSize = isSelected ? 42 : 34
-  const iconSize = isSelected ? 22 : 18 // ✅ Ligeramente más pequeño para que respire dentro del círculo
+  const iconSize = isSelected ? 22 : 20
   const displayColors = isSelected ? SELECTED_AIRPORT_COLORS : colors
 
-  // ✅ Recorremos los paths del nuevo ícono y le aplicamos el color dinámico
   const svgPaths = AIRPORT_PATHS.map(path => `<path d="${path}"/>`).join('')
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
-    fill="${displayColors.fill}" stroke="${displayColors.stroke}" stroke-width="1.8"
+    fill="none" stroke="${displayColors.stroke}" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
     ${svgPaths}
   </svg>`
@@ -263,6 +300,7 @@ export default function MapView({
   selectedAirportCode,
   selectedShipmentRoute,
   shipmentSearchError,
+  isFullscreen,
   isPanelCollapsed = false,
   isToolbarCollapsed = false,
   timeLabel,
@@ -277,6 +315,7 @@ export default function MapView({
   onFlightPreview,
   onSearchShipment,
   onClearShipmentRoute,
+  onToggleFullscreen,
   showCancelledDetails = true,
 }: MapViewProps) {
   const { simulation } = useSimulationContext()
@@ -284,7 +323,6 @@ export default function MapView({
   const mapRef = useRef<L.Map | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [previewAirportCode, setPreviewAirportCode] = useState<string | null>(null)
   const [previewFlightId, setPreviewFlightId] = useState<number | null>(null)
   const [detailStage, setDetailStage] = useState<FlightDetailsStage>('flight')
@@ -1325,11 +1363,23 @@ export default function MapView({
     return () => window.clearInterval(intervalId)
   }, [])
 
+  const hasRealOnlyTime = Boolean(timeLabel && !simDurationLabel && !secondaryTimeLabel && !realDurationLabel)
+  const hasSimulationTimeGroup = Boolean(timeLabel && !hasRealOnlyTime)
+  const hasRealTimeGroup = Boolean(secondaryTimeLabel || realDurationLabel || hasRealOnlyTime)
+  const hasVisibleSimulationTimeGroup = Boolean(
+    (timeLabel && hasSimulationTimeGroup && visibleTimeItems.simulatedDate) ||
+    (simDurationLabel && visibleTimeItems.simulatedDuration),
+  )
+  const hasVisibleRealTimeGroup = Boolean(
+    ((secondaryTimeLabel || hasRealOnlyTime) && visibleTimeItems.actualDate) ||
+    (realDurationLabel && visibleTimeItems.actualDuration),
+  )
+
   return (
-    <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>
+    <div ref={wrapperRef} className="map-wrapper">
       <button
         className="map-fullscreen-btn"
-        onClick={() => setIsFullscreen(!isFullscreen)}
+        onClick={onToggleFullscreen}
         title={isFullscreen ? "Salir" : "Expandir"}
       >
         {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -1360,90 +1410,97 @@ export default function MapView({
             </button>
           </div>
           <div className="map-settings-panel-content">
-            <label className="map-settings-checkbox-label">
-              <input
-                type="checkbox"
-                checked={visibleTimeItems.simulatedDate}
-                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, simulatedDate: e.target.checked }))}
-              />
-              Fecha simulada
-            </label>
-            <label className="map-settings-checkbox-label">
-              <input
-                type="checkbox"
-                checked={visibleTimeItems.simulatedDuration}
-                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, simulatedDuration: e.target.checked }))}
-              />
-              Duración simulación
-            </label>
-            <label className="map-settings-checkbox-label">
-              <input
-                type="checkbox"
-                checked={visibleTimeItems.actualDate}
-                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, actualDate: e.target.checked }))}
-              />
-              Fecha actual
-            </label>
-            <label className="map-settings-checkbox-label">
-              <input
-                type="checkbox"
-                checked={visibleTimeItems.actualDuration}
-                onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, actualDuration: e.target.checked }))}
-              />
-              Duración real
-            </label>
+            {hasSimulationTimeGroup ? (
+              <label className="map-settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={visibleTimeItems.simulatedDate}
+                  onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, simulatedDate: e.target.checked }))}
+                />
+                Momento simulado
+              </label>
+            ) : null}
+            {simDurationLabel ? (
+              <label className="map-settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={visibleTimeItems.simulatedDuration}
+                  onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, simulatedDuration: e.target.checked }))}
+                />
+                Ventana mostrada
+              </label>
+            ) : null}
+            {secondaryTimeLabel || hasRealOnlyTime ? (
+              <label className="map-settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={visibleTimeItems.actualDate}
+                  onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, actualDate: e.target.checked }))}
+                />
+                Hoy
+              </label>
+            ) : null}
+            {realDurationLabel ? (
+              <label className="map-settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={visibleTimeItems.actualDuration}
+                  onChange={(e) => setVisibleTimeItems(prev => ({ ...prev, actualDuration: e.target.checked }))}
+                />
+                Corriendo hace
+              </label>
+            ) : null}
           </div>
         </div>
       )}
 
       {timeLabel || secondaryTimeLabel ? (
-        <div className="map-time-tabs" aria-label="Fechas de simulación">
-          {timeLabel && visibleTimeItems.simulatedDate ? (
-            <div className="map-time-tab-container">
-              <div className="map-time-tab map-time-tab--secondary">{timeLabel}</div>
-              <button
-                className="map-time-tab-close"
-                onClick={() => setVisibleTimeItems(prev => ({ ...prev, simulatedDate: false }))}
-                title="Ocultar"
-              >
-                <X size={12} />
-              </button>
+        <div className="map-time-tabs" aria-label="Tiempos del mapa">
+          {hasSimulationTimeGroup ? (
+            <div className="map-time-group map-time-group--simulated">
+              {timeLabel && visibleTimeItems.simulatedDate ? (
+                <MapTimeChip
+                  icon={PlayCircle}
+                  label="Momento simulado"
+                  value={timeLabel}
+                  tone="simulated"
+                  onClose={() => setVisibleTimeItems(prev => ({ ...prev, simulatedDate: false }))}
+                />
+              ) : null}
+              {simDurationLabel && visibleTimeItems.simulatedDuration ? (
+                <MapTimeChip
+                  icon={CalendarClock}
+                  label="Ventana mostrada"
+                  value={simDurationLabel}
+                  tone="simulated"
+                  onClose={() => setVisibleTimeItems(prev => ({ ...prev, simulatedDuration: false }))}
+                />
+              ) : null}
             </div>
           ) : null}
-          {simDurationLabel && visibleTimeItems.simulatedDuration ? (
-            <div className="map-time-tab-container">
-              <div className="map-time-tab map-time-tab--secondary">{simDurationLabel}</div>
-              <button
-                className="map-time-tab-close"
-                onClick={() => setVisibleTimeItems(prev => ({ ...prev, simulatedDuration: false }))}
-                title="Ocultar"
-              >
-                <X size={12} />
-              </button>
-            </div>
+          {hasVisibleSimulationTimeGroup && hasVisibleRealTimeGroup ? (
+            <div className="map-time-divider" aria-hidden="true" />
           ) : null}
-          {secondaryTimeLabel && visibleTimeItems.actualDate ? (
-            <div className="map-time-tab-container">
-              <div className="map-time-tab map-time-tab--secondary">{secondaryTimeLabel}</div>
-              <button
-                className="map-time-tab-close"
-                onClick={() => setVisibleTimeItems(prev => ({ ...prev, actualDate: false }))}
-                title="Ocultar"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ) : null}
-          {realDurationLabel && visibleTimeItems.actualDuration ? (
-            <div className="map-time-tab-container">
-              <div className="map-time-tab map-time-tab--secondary">{realDurationLabel}</div>
-              <button
-                className="map-time-tab-close"
-                onClick={() => setVisibleTimeItems(prev => ({ ...prev, actualDuration: false }))}
-                title="Ocultar"
-              >
-                <X size={12} />
-              </button>
+          {hasRealTimeGroup ? (
+            <div className="map-time-group map-time-group--real">
+              {(secondaryTimeLabel || (hasRealOnlyTime ? timeLabel : null)) && visibleTimeItems.actualDate ? (
+                <MapTimeChip
+                  icon={Calendar}
+                  label="Hoy"
+                  value={secondaryTimeLabel ?? timeLabel ?? ''}
+                  tone="real"
+                  onClose={() => setVisibleTimeItems(prev => ({ ...prev, actualDate: false }))}
+                />
+              ) : null}
+              {realDurationLabel && visibleTimeItems.actualDuration ? (
+                <MapTimeChip
+                  icon={Timer}
+                  label="Corriendo hace"
+                  value={realDurationLabel}
+                  tone="real"
+                  onClose={() => setVisibleTimeItems(prev => ({ ...prev, actualDuration: false }))}
+                />
+              ) : null}
             </div>
           ) : null}
           {isPaused && (

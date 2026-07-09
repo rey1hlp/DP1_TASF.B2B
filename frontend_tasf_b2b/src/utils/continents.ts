@@ -1,10 +1,10 @@
 export type ContinentName =
-  | 'America'
+  | 'América'
   | 'Europa'
-  | 'Africa'
+  | 'África'
   | 'Asia'
-  | 'Oceania'
-  | 'Antartida'
+  | 'Oceanía'
+  | 'Antártida'
 
 export function deriveContinentFromCoordinates(
   latitude: number | null | undefined,
@@ -20,11 +20,11 @@ export function deriveContinentFromCoordinates(
   }
 
   if (latitude <= -60) {
-    return 'Antartida'
+    return 'Antártida'
   }
 
   if (longitude >= -170 && longitude <= -25 && latitude >= -60 && latitude <= 85) {
-    return 'America'
+    return 'América'
   }
 
   if (longitude >= -25 && longitude <= 60 && latitude >= 34 && latitude <= 72) {
@@ -32,11 +32,11 @@ export function deriveContinentFromCoordinates(
   }
 
   if (longitude >= -20 && longitude <= 55 && latitude >= -35 && latitude < 34) {
-    return 'Africa'
+    return 'África'
   }
 
   if (longitude >= 110 && longitude <= 180 && latitude >= -50 && latitude < 10) {
-    return 'Oceania'
+    return 'Oceanía'
   }
 
   if (longitude >= 60 && longitude <= 180 && latitude >= -10 && latitude <= 80) {
@@ -48,11 +48,11 @@ export function deriveContinentFromCoordinates(
   }
 
   if (longitude >= 95 && longitude <= 180 && latitude >= -50 && latitude < -10) {
-    return 'Oceania'
+    return 'Oceanía'
   }
 
   if (longitude >= -30 && longitude < 25 && latitude >= 0 && latitude < 35) {
-    return 'Africa'
+    return 'África'
   }
 
   return ''

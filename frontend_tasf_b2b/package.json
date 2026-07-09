@@ -14,7 +14,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:time": "node --experimental-strip-types tests/time.test.ts"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.21",

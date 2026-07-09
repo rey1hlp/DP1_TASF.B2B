@@ -22,14 +22,14 @@ import SimulationReportModal from '../components/SimulationReportModal'
 
 import {
   formatDurationHours,
-  formatClockFromMinute,
   formatCompactDate,
-  formatDateFromDayIndex,
   formatDateTime,
+  formatElapsedReal,
   formatIsoDateFromDayIndex,
   formatInteger,
   formatBags,
   formatPercent,
+  formatSimSpan,
   getDayIndexFromDateString,
   getInclusiveDaySpan,
 } from '../utils/time'
@@ -132,6 +132,7 @@ export default function SimulationPage() {
     // Si ya existe un registro lo usamos; de lo contrario por defecto empieza en true (cerrado)
     return saved ? saved === 'true' : true
   })
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false)
 
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     const saved = sessionStorage.getItem('sim_panel_width')
@@ -356,9 +357,11 @@ export default function SimulationPage() {
   const handleStart = async ({ inicio, dias }: { inicio: string; dias: number }) => {
     setError(null)
     setIsStartingSimulation(true)
+    setElapsedSeconds(0)
     setSimulation((prev) => (
       {
         ...prev,
+        simId: null,
         requestedStart: inicio,
         requestedDays: simulationMode === 'period' ? dias : null,
         displayOffset: null,
@@ -613,9 +616,7 @@ export default function SimulationPage() {
     }
 
     const minute = displayMinute ?? meta.diaMin * 1440
-    const date = formatDateFromDayIndex(Math.floor(minute / 1440))
-    const time = formatClockFromMinute(minute)
-    return `Fecha simulada: ${date} - ${time}`
+    return formatDateTime(minute * 60 * 1000)
   })()
 
   const simDurationMapLabel = (() => {
@@ -623,11 +624,9 @@ export default function SimulationPage() {
       return null
     }
     const minute = displayMinute ?? meta.diaMin * 1440
-    const startMinute = meta.diaMin * 1440
+    const startMinute = requestedStartMinute ?? meta.diaMin * 1440
     const diff = Math.max(0, minute - startMinute)
-    const hours = Math.floor(diff / 60)
-    const minutes = diff % 60
-    return `Duración simulación: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    return formatSimSpan(diff)
   })()
 
   const realMapTimeLabel = (() => {
@@ -635,16 +634,14 @@ export default function SimulationPage() {
       return null
     }
 
-    return `Fecha actual: ${formatDateTime(new Date())}`
+    return formatDateTime(new Date())
   })()
 
   const realDurationMapLabel = (() => {
     if (!meta || preparingMessage || (status === 'READY' && displayMinute === null)) {
       return null
     }
-    const hours = Math.floor(elapsedSeconds / 3600)
-    const minutes = Math.floor((elapsedSeconds % 3600) / 60)
-    return `Duración real: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    return formatElapsedReal(elapsedSeconds)
   })()
 
   const bannerMessage = (() => {
@@ -1017,7 +1014,7 @@ export default function SimulationPage() {
           </section>
 
           <section 
-            className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}
+            className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''} ${isMapFullscreen ? 'is-fullscreen' : ''}`}
             style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
           >
             <div className="map-placeholder">
@@ -1037,6 +1034,9 @@ export default function SimulationPage() {
                 selectedAirportCode={selectedAirportCode}
                 selectedShipmentRoute={selectedShipmentRoute}
                 shipmentSearchError={shipmentSearchError}
+                isFullscreen={isMapFullscreen}
+                isPanelCollapsed={isPanelCollapsed}
+                onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
                 onSearchShipment={handleSearchShipment}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
@@ -1118,6 +1118,7 @@ export default function SimulationPage() {
             onClose={() => {
               setIsReportModalOpen(false)
               if (localCompleted || status === 'COMPLETED') {
+                setElapsedSeconds(0)
                 resetSimulation()
               }
             }}
