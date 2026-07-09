@@ -24,14 +24,14 @@ test('formatSimSpan handles multiple days with remaining hours', () => {
   assert.equal(formatSimSpan(2940), '2 d 1 h')
 })
 
-test('formatElapsedReal handles early seconds precisely', () => {
-  assert.equal(formatElapsedReal(75), '1 min 15 s')
+test('formatElapsedReal uses mm:ss min for early seconds', () => {
+  assert.equal(formatElapsedReal(9), '00:09 min')
 })
 
-test('formatElapsedReal handles one hour exactly', () => {
-  assert.equal(formatElapsedReal(3600), '1 h')
+test('formatElapsedReal uses mm:ss min for minutes and seconds', () => {
+  assert.equal(formatElapsedReal(75), '01:15 min')
 })
 
-test('formatElapsedReal handles hours and minutes', () => {
-  assert.equal(formatElapsedReal(7380), '2 h 3 min')
+test('formatElapsedReal keeps total minutes after one hour', () => {
+  assert.equal(formatElapsedReal(7380), '123:00 min')
 })

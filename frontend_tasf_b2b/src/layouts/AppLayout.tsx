@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import AppTopbar from '../components/layout/AppTopbar'
 import AppSidebar from '../components/layout/AppSidebar'
 
@@ -10,9 +10,13 @@ export type AppLayoutContext = {
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [topbarMain, setTopbarMain] = useState<ReactNode>(null)
+  const { pathname } = useLocation()
+  const isDenseMapView = pathname === '/simulacion' || pathname === '/operacion-diaria'
 
   return (
-    <div className={`app-shell ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+    <div
+      className={`app-shell ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'} ${isDenseMapView ? 'app-shell--dense-map' : ''}`}
+    >
       <AppTopbar
         topbarMain={topbarMain}
         onToggleSidebar={() => setSidebarOpen((current) => !current)}

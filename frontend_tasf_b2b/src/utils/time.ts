@@ -121,21 +121,10 @@ export function formatSimSpan(totalMinutes: number): string {
 
 export function formatElapsedReal(totalSeconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
 
-  if (safeSeconds < 3600) {
-    const minutes = Math.floor(safeSeconds / 60)
-    const seconds = safeSeconds % 60
-
-    if (safeSeconds < 300 && seconds > 0) {
-      return minutes > 0 ? `${minutes} min ${seconds} s` : `${seconds} s`
-    }
-
-    return `${Math.round(safeSeconds / 60)} min`
-  }
-
-  const hours = Math.floor(safeSeconds / 3600)
-  const minutes = Math.floor((safeSeconds % 3600) / 60)
-  return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} min`
 }
 
 export function getInclusiveDaySpan(start?: string | null, end?: string | null): number | null {

@@ -1608,6 +1608,129 @@ body {
   gap: 8px;
 }
 
+/* ─── Dense map workspace ───────────────────────────────────────── */
+.app-shell--dense-map .app-topbar {
+  height: 48px;
+  grid-template-columns: 248px minmax(0, 1fr) 148px;
+  gap: 0.75rem;
+  padding: 0 1rem;
+}
+
+.app-shell--dense-map .app-body {
+  min-height: calc(100vh - 48px);
+}
+
+.app-shell--dense-map .app-sidebar {
+  top: 48px;
+  height: calc(100vh - 48px);
+}
+
+.app-shell--dense-map .app-main {
+  height: calc(100vh - 48px);
+  padding: 8px 10px;
+}
+
+.app-shell--dense-map .topbar-left {
+  gap: 0.75rem;
+}
+
+.app-shell--dense-map .topbar-icon-button,
+.app-shell--dense-map .topbar-user-button {
+  width: 34px;
+  height: 34px;
+}
+
+.app-shell--dense-map .topbar-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  font-size: 0.82rem;
+}
+
+.app-shell--dense-map .topbar-brand {
+  gap: 0.55rem;
+}
+
+.app-shell--dense-map .topbar-brand-title {
+  font-size: 0.98rem;
+}
+
+.app-shell--dense-map .topbar-brand-subtitle {
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+}
+
+.app-shell--dense-map .topbar-simulation-mode {
+  padding: 2px;
+}
+
+.app-shell--dense-map .topbar-simulation-option {
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.app-shell--dense-map .topbar-user-meta span {
+  font-size: 0.78rem;
+}
+
+.app-shell--dense-map .topbar-user-meta small {
+  font-size: 0.62rem;
+}
+
+.app-shell--dense-map .daily-operation-page,
+.app-shell--dense-map .simulation-page {
+  gap: 0;
+}
+
+.app-shell--dense-map .daily-operation-page > .toolbar,
+.app-shell--dense-map .simulation-page > .toolbar {
+  border: 1px solid #dbe5f1;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  box-shadow: none;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.app-shell--dense-map .simulation-summary-toolbar {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.app-shell--dense-map .status {
+  gap: 8px 14px;
+  font-size: 12px;
+}
+
+.app-shell--dense-map .map-placeholder {
+  border: 1px solid #dbe5f1;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  box-shadow: none;
+  padding: 8px;
+}
+
+.app-shell--dense-map .map {
+  border-radius: 6px;
+}
+
+.app-shell--dense-map .control-panel {
+  border: 1px solid #dbe5f1;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  box-shadow: none;
+}
+
+.app-shell--dense-map .control-panel.collapsed {
+  border-left: 1px solid #dbe5f1;
+  border-radius: 0 8px 8px 0;
+}
+
+.app-shell--dense-map .control-panel.collapsed .toggle-panel-btn {
+  border-radius: 0 8px 8px 0;
+}
+
 /* ─── Responsive breakpoints ────────────────────────────────────── */
 
 /* Tablet landscape: collapse map + control panel to single column */

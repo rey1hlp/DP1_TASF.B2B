@@ -75,8 +75,13 @@ const PLANE_PATH =
 
 // Ícono profesional de "Avión Despegando / Aeropuerto"
 const AIRPORT_PATHS = [
-  "M2 22h20",
-  "M6.36 13.4 22 9c.59-.15 1 .37.84.95l-1.35 4.86c-.16.58-.75.96-1.35.88l-5.63-.78-5.32 4.19A1.55 1.55 0 0 1 8 19V14.6L4.35 14a1.6 1.6 0 0 1-1.32-1.85L3.4 9.6a.6.6 0 0 1 1.08-.2l2.36 3.1z"
+  "M18.2 12.27 20 6H4l1.8 6.27a1 1 0 0 0 .95.73h10.5a1 1 0 0 0 .96-.73Z",
+  "M8 13v9",
+  "M16 22v-9",
+  "m9 6 1 7",
+  "m15 6-1 7",
+  "M12 6V2",
+  "M13 2h-2",
 ]
 
 export type MapViewProps = {
@@ -236,14 +241,13 @@ function buildAirportIcon(
   isSelected: boolean
 ) {
   const markerSize = isSelected ? 42 : 34
-  const iconSize = isSelected ? 22 : 18 // ✅ Ligeramente más pequeño para que respire dentro del círculo
+  const iconSize = isSelected ? 22 : 20
   const displayColors = isSelected ? SELECTED_AIRPORT_COLORS : colors
 
-  // ✅ Recorremos los paths del nuevo ícono y le aplicamos el color dinámico
   const svgPaths = AIRPORT_PATHS.map(path => `<path d="${path}"/>`).join('')
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
-    fill="${displayColors.fill}" stroke="${displayColors.stroke}" stroke-width="1.8"
+    fill="none" stroke="${displayColors.stroke}" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
     ${svgPaths}
   </svg>`
@@ -1362,6 +1366,14 @@ export default function MapView({
   const hasRealOnlyTime = Boolean(timeLabel && !simDurationLabel && !secondaryTimeLabel && !realDurationLabel)
   const hasSimulationTimeGroup = Boolean(timeLabel && !hasRealOnlyTime)
   const hasRealTimeGroup = Boolean(secondaryTimeLabel || realDurationLabel || hasRealOnlyTime)
+  const hasVisibleSimulationTimeGroup = Boolean(
+    (timeLabel && hasSimulationTimeGroup && visibleTimeItems.simulatedDate) ||
+    (simDurationLabel && visibleTimeItems.simulatedDuration),
+  )
+  const hasVisibleRealTimeGroup = Boolean(
+    ((secondaryTimeLabel || hasRealOnlyTime) && visibleTimeItems.actualDate) ||
+    (realDurationLabel && visibleTimeItems.actualDuration),
+  )
 
   return (
     <div ref={wrapperRef} className="map-wrapper">
@@ -1466,7 +1478,7 @@ export default function MapView({
               ) : null}
             </div>
           ) : null}
-          {hasSimulationTimeGroup && hasRealTimeGroup ? (
+          {hasVisibleSimulationTimeGroup && hasVisibleRealTimeGroup ? (
             <div className="map-time-divider" aria-hidden="true" />
           ) : null}
           {hasRealTimeGroup ? (
