@@ -471,6 +471,202 @@
   line-height: 1.25;
 }
 
+.shipment-category-selector {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.shipment-category-button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #d4deec;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #52647d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.shipment-category-button:hover:not(.active) {
+  border-color: #9db7df;
+  background: #f0f6ff;
+  color: #2f62b5;
+}
+
+.shipment-category-button.active {
+  border-color: #2f62b5;
+  background: #2f62b5;
+  color: #ffffff;
+}
+
+.shipment-control-row {
+  grid-template-columns: minmax(0, 1fr) 38px 38px;
+}
+
+.shipment-card-list {
+  border: none;
+  border-radius: 12px;
+  background: #f3f7fc;
+}
+
+.entity-shipment-card {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  border: 5px solid #f3f7fc;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 7px 18px rgba(24, 54, 92, 0.08);
+  display: flex;
+  align-items: stretch;
+  padding: 11px 12px;
+  overflow: hidden;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.entity-shipment-card:hover {
+  background: #fbfdff;
+  box-shadow: 0 11px 24px rgba(24, 54, 92, 0.12);
+}
+
+.entity-shipment-card.active {
+  background: #f7fbff;
+  box-shadow: 0 0 0 1px rgba(47, 98, 181, 0.2), 0 12px 26px rgba(24, 54, 92, 0.14);
+}
+
+.shipment-card-content {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.shipment-card-header,
+.shipment-card-metrics,
+.shipment-card-footer {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.shipment-card-header {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shipment-card-header .flight-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 800;
+  color: #173763;
+}
+
+.shipment-status-pill {
+  flex: 0 0 auto;
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #2f62b5;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 7px;
+}
+
+.shipment-card-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #52647d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shipment-card-route svg,
+.shipment-card-metrics svg {
+  flex: 0 0 auto;
+  color: #748299;
+}
+
+.shipment-card-route span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-card-metrics {
+  justify-content: space-between;
+  gap: 8px;
+  color: #374151;
+  font-size: 12px;
+}
+
+.shipment-card-metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.shipment-card-bag-toggle {
+  min-height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid #c9d7eb;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #21436f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.shipment-card-bag-toggle:hover {
+  border-color: #2f62b5;
+  background: #eef6ff;
+}
+
+.shipment-card-footer {
+  justify-content: space-between;
+  gap: 8px;
+  color: #6a7a95;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.shipment-card-footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-empty-card {
+  padding: 12px;
+  color: #60728d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @keyframes flightCapacityConfirm {
   0% {
     opacity: 0.45;

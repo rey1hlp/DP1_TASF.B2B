@@ -60,6 +60,16 @@ function formatDateTimeParts(year: number, monthIndex: number, day: number, hour
   return `${day} ${month} ${year}, ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+function formatUtcDateTime(value: Date): string {
+  return formatDateTimeParts(
+    value.getUTCFullYear(),
+    value.getUTCMonth(),
+    value.getUTCDate(),
+    value.getUTCHours(),
+    value.getUTCMinutes(),
+  )
+}
+
 export function formatDateTime(value?: string | Date | number | null): string {
   if (value === null || value === undefined || value === '') {
     return '--'
@@ -181,6 +191,70 @@ export function formatSimMinute(minute?: number | null, includeDate = false): st
   }
   const date = formatDateFromDayIndex(Math.floor(roundedMinute / 1440))
   return `${date} ${clock}`
+}
+
+export function formatSimDateTimeFromMinute(minute?: number | null): string {
+  if (minute === null || minute === undefined || !Number.isFinite(minute)) {
+    return '--'
+  }
+
+  const roundedMinute = Math.max(0, Math.floor(minute))
+  const dayIndex = Math.floor(roundedMinute / 1440)
+  const ms = dayIndex * MS_PER_DAY
+  const d = new Date(ms)
+  const hours = Math.floor((roundedMinute / 60) % 24)
+  const minutes = roundedMinute % 60
+
+  return formatDateTimeParts(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    hours,
+    minutes,
+  )
+}
+
+export function parseShipmentDepartureMinute(value?: string | number | null): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  const trimmed = value.trim()
+  const minuteMatch = trimmed.match(/^min(?:uto)?\.?\s*(\d+)$/i)
+  if (minuteMatch) {
+    return Number(minuteMatch[1])
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed)
+  }
+
+  return null
+}
+
+export function formatShipmentDepartureTime(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') {
+    return '--'
+  }
+
+  const minute = parseShipmentDepartureMinute(value)
+  if (minute !== null) {
+    return formatSimDateTimeFromMinute(minute)
+  }
+
+  const raw = String(value).trim()
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)
+  const parsed = new Date(raw)
+  if (hasTimezone && !Number.isNaN(parsed.getTime())) {
+    return `${formatUtcDateTime(parsed)} UTC`
+  }
+
+  const formattedDateTime = formatDateTime(raw)
+  return formattedDateTime === raw ? raw : formattedDateTime
 }
 
 export function formatMinuteRange(start?: number | null, end?: number | null): string {
