@@ -30,6 +30,7 @@ import {
   SHIPMENT_ROUTE_DONE_STYLE,
   SHIPMENT_ROUTE_PENDING_STYLE,
 } from '../utils/mapRouteStyles'
+import { buildGeodesicArcPoints, getGeodesicPointAtProgress, type MapLatLng } from '../utils/mapGeodesic'
 import MapFloatingCard from './MapFloatingCard'
 import ShipmentRouteTracker, { type TrackerShipmentRoute } from './ShipmentRouteTracker'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
@@ -95,6 +96,65 @@ function computeBearing(lat1: number, lon1: number, lat2: number, lon2: number) 
   const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(delta)
   const bearing = Math.atan2(y, x)
   return (bearing * 180) / Math.PI
+}
+
+function buildRouteArc(startLat: number, startLon: number, endLat: number, endLon: number): MapLatLng[] {
+  return buildGeodesicArcPoints([startLat, startLon], [endLat, endLon])
+}
+
+function unwrapLongitudeForProjection(longitude: number, reference: number) {
+  let adjusted = longitude
+
+  while (adjusted - reference > 180) {
+    adjusted -= 360
+  }
+
+  while (adjusted - reference < -180) {
+    adjusted += 360
+  }
+
+  return adjusted
+}
+
+function computeMapHeading(map: L.Map, from: MapLatLng, to: MapLatLng) {
+  const [fromLat, fromLon] = from
+  const [toLat, toLon] = to
+  const adjustedToLon = unwrapLongitudeForProjection(toLon, fromLon)
+  const p1 = map.project([fromLat, fromLon], 10)
+  const p2 = map.project([toLat, adjustedToLon], 10)
+  const dy = p1.y - p2.y
+  const dx = p2.x - p1.x
+  return (Math.atan2(dx, dy) * 180) / Math.PI
+}
+
+function getFlightArcPosition(
+  startLat: number,
+  startLon: number,
+  endLat: number,
+  endLon: number,
+  progress: number,
+  map: L.Map | null
+) {
+  const start: MapLatLng = [startLat, startLon]
+  const end: MapLatLng = [endLat, endLon]
+  const current = getGeodesicPointAtProgress(start, end, progress)
+  const lookDelta = 0.01
+  const lookAheadProgress = Math.min(1, progress + lookDelta)
+  const lookBehindProgress = Math.max(0, progress - lookDelta)
+  const reference =
+    lookAheadProgress > progress
+      ? getGeodesicPointAtProgress(start, end, lookAheadProgress)
+      : getGeodesicPointAtProgress(start, end, lookBehindProgress)
+
+  const heading = map
+    ? computeMapHeading(map, current, reference)
+    : computeBearing(current[0], current[1], reference[0], reference[1])
+
+  return {
+    lat: current[0],
+    lon: current[1],
+    heading,
+  }
 }
 
 function buildPlaneIcon(
@@ -963,34 +1023,15 @@ export default function MapView({
       nextActiveIds.add(seg.flightId)
       const total = Math.max(1, seg.llegadaMin - seg.salidaMin)
       const progress = Math.min(1, Math.max(0, (currentMinute - seg.salidaMin) / total))
-      
-      let lat = seg.origenLat + (seg.destinoLat - seg.origenLat) * progress
-      let lon = seg.origenLon + (seg.destinoLon - seg.origenLon) * progress
-      let heading = 0
       const map = mapRef.current
-      if (map) {
-        let destLon = seg.destinoLon
-        if (destLon - seg.origenLon > 180) destLon -= 360
-        else if (destLon - seg.origenLon < -180) destLon += 360
-
-        const p1 = map.project([seg.origenLat, seg.origenLon], 10)
-        const p2 = map.project([seg.destinoLat, destLon], 10)
-        
-        // Interpolate position in projection space (straight line on the map)
-        const currentP = L.point(
-          p1.x + (p2.x - p1.x) * progress,
-          p1.y + (p2.y - p1.y) * progress
-        )
-        const currentLatLng = map.unproject(currentP, 10)
-        lat = currentLatLng.lat
-        lon = currentLatLng.lng
-
-        const dy = p1.y - p2.y // positive dy is upwards on flat map projection
-        const dx = p2.x - p1.x // positive dx is rightwards on flat map projection
-        heading = (Math.atan2(dx, dy) * 180) / Math.PI
-      } else {
-        heading = computeBearing(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon)
-      }
+      const { lat, lon, heading } = getFlightArcPosition(
+        seg.origenLat,
+        seg.origenLon,
+        seg.destinoLat,
+        seg.destinoLon,
+        progress,
+        map
+      )
       const capacity = seg.capacidad
 
       const isSelectedFlight = selectedFlightId !== null && seg.flightId === selectedFlightId
@@ -1093,10 +1134,7 @@ export default function MapView({
       //const colors = percent === null ? NEUTRAL_SEMAPHORE_COLORS : resolveSemaphoreColor(percent, ranges)
 
       L.polyline(
-        [
-          [seg.origenLat, seg.origenLon],
-          [seg.destinoLat, seg.destinoLon],
-        ],
+        buildRouteArc(seg.origenLat, seg.origenLon, seg.destinoLat, seg.destinoLon),
         { ...ALL_FLIGHTS_ROUTE_BASE_STYLE, color: '#000000' }
       ).addTo(layer)
     })
@@ -1112,10 +1150,7 @@ export default function MapView({
         }
 
         L.polyline(
-          [
-            [orig.latitud, orig.longitud],
-            [dest.latitud, dest.longitud],
-          ],
+          buildRouteArc(orig.latitud, orig.longitud, dest.latitud, dest.longitud),
           getShipmentStepStyle(paso, currentMinute)
         ).addTo(layer)
       })
@@ -1138,45 +1173,43 @@ export default function MapView({
           // 1. El avión está en el aire: calculamos su posición exacta
           const total = Math.max(1, selectedSegment.llegadaMin - selectedSegment.salidaMin)
           const progress = Math.min(1, Math.max(0, (currentMinute - selectedSegment.salidaMin) / total))
-
-          let currentLat = selectedSegment.origenLat + (selectedSegment.destinoLat - selectedSegment.origenLat) * progress
-          let currentLon = selectedSegment.origenLon + (selectedSegment.destinoLon - selectedSegment.origenLon) * progress
-          
-          const map = mapRef.current
-          if (map) {
-            let destLon = selectedSegment.destinoLon
-            if (destLon - selectedSegment.origenLon > 180) destLon -= 360
-            else if (destLon - selectedSegment.origenLon < -180) destLon += 360
-            
-            const p1 = map.project([selectedSegment.origenLat, selectedSegment.origenLon], 10)
-            const p2 = map.project([selectedSegment.destinoLat, destLon], 10)
-            const currentP = L.point(
-              p1.x + (p2.x - p1.x) * progress,
-              p1.y + (p2.y - p1.y) * progress
-            )
-            const currentLatLng = map.unproject(currentP, 10)
-            currentLat = currentLatLng.lat
-            currentLon = currentLatLng.lng
-          }
+          const { lat: currentLat, lon: currentLon } = getFlightArcPosition(
+            selectedSegment.origenLat,
+            selectedSegment.origenLon,
+            selectedSegment.destinoLat,
+            selectedSegment.destinoLon,
+            progress,
+            mapRef.current
+          )
 
           L.polyline(
-            [[selectedSegment.origenLat, selectedSegment.origenLon], [currentLat, currentLon]],
+            buildRouteArc(selectedSegment.origenLat, selectedSegment.origenLon, currentLat, currentLon),
             TRAVERSED_STYLE
           ).addTo(layer)
 
           L.polyline(
-            [[currentLat, currentLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
+            buildRouteArc(currentLat, currentLon, selectedSegment.destinoLat, selectedSegment.destinoLon),
             REMAINING_STYLE
           ).addTo(layer)
 
         } else if (isLanded) {
           L.polyline(
-            [[selectedSegment.origenLat, selectedSegment.origenLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
+            buildRouteArc(
+              selectedSegment.origenLat,
+              selectedSegment.origenLon,
+              selectedSegment.destinoLat,
+              selectedSegment.destinoLon
+            ),
             LANDED_ROUTE_STYLE
           ).addTo(layer)
         } else {
           L.polyline(
-            [[selectedSegment.origenLat, selectedSegment.origenLon], [selectedSegment.destinoLat, selectedSegment.destinoLon]],
+            buildRouteArc(
+              selectedSegment.origenLat,
+              selectedSegment.origenLon,
+              selectedSegment.destinoLat,
+              selectedSegment.destinoLon
+            ),
             REMAINING_STYLE
           ).addTo(layer)
         }
@@ -1214,10 +1247,7 @@ export default function MapView({
       const endTime = formatClockFromMinute(trace.llegadaMin)
 
       L.polyline(
-        [
-          [trace.origenLat, trace.origenLon],
-          [trace.destinoLat, trace.destinoLon],
-        ],
+        buildRouteArc(trace.origenLat, trace.origenLon, trace.destinoLat, trace.destinoLon),
         CANCELLED_ROUTE_STYLE
       ).bindTooltip(
         `<div style="text-align: center;">
@@ -1258,10 +1288,7 @@ export default function MapView({
 
       if (!stillPresent && !alreadyGhost && currentMinute > prevSeg.llegadaMin) {
         const polyline = L.polyline(
-          [
-            [prevSeg.origenLat, prevSeg.origenLon],
-            [prevSeg.destinoLat, prevSeg.destinoLon],
-          ],
+          buildRouteArc(prevSeg.origenLat, prevSeg.origenLon, prevSeg.destinoLat, prevSeg.destinoLon),
           GHOST_ROUTE_STYLE
         ).addTo(layer)
 
