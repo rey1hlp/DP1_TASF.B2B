@@ -6,6 +6,7 @@ import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
 import type { ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
 import { getShipmentsByFlight, getSimulationShipmentsByFlight, type EnvioDetalleDto } from '../services/api'
+import './EntityExplorer.css'
 
 // 2. Importa el hook del contexto de simulación
 import { useSimulationContext } from '../contexts/SimulationContext'
@@ -287,7 +288,6 @@ export default function EntityExplorer({
   const { simulation } = useSimulationContext();
   const simId = simulation.simId;
 
-  // --- NUEVO CÓDIGO: ESTADOS PARA MALETAS DEL VUELO ---
   const [flightShipments, setFlightShipments] = useState<ShipmentCrudDto[] | null>(null);
   const [loadingShipments, setLoadingShipments] = useState(false);
   const [errorShipments, setErrorShipments] = useState<string | null>(null);
@@ -774,7 +774,6 @@ export default function EntityExplorer({
 
   const renderFlights = () => (
     <>
-      <h3>{labels?.flightTitle ?? "Buscar vuelo"}</h3>
       <div className="entity-filter-panel">
         <div className="entity-filter-header">
           <span className="entity-toolbar-label">Filtros de vuelos</span>
@@ -789,13 +788,12 @@ export default function EntityExplorer({
             }
             title="Limpiar filtros"
           >
-            <RotateCcw size={15} />
             <span>Limpiar</span>
           </button>
         </div>
         <div className="entity-filter-grid">
           <label className="field">
-            <span className="entity-filter-label">Codigo</span>
+            <span className="entity-filter-label">Código</span>
             <input
               type="text"
               placeholder={labels?.flightPlaceholder ?? "Ej. 1024"}
@@ -843,7 +841,7 @@ export default function EntityExplorer({
               onChange={(event) => handleFlightSortChange(event.target.value as FlightSortKey)}
             >
               <option value="default">Orden actual</option>
-              <option value="occupancy">Nivel de ocupacion</option>
+              <option value="occupancy">Nivel de ocupación</option>
               <option value="departure">Hora de salida</option>
               <option value="arrival">Hora de llegada</option>
               <option value="origin">Origen</option>
@@ -862,7 +860,7 @@ export default function EntityExplorer({
                     : 'Cambiar a ascendente'
               }
             >
-              {flightSortDirection === 'asc' ? '↑ Asc.' : '↓ Desc.'}
+              {flightSortDirection === 'asc' ? '↑' : '↓'}
             </button>
           </div>
         </label>
@@ -989,9 +987,6 @@ export default function EntityExplorer({
 
   const renderShipments = () => (
     <>
-      <h3>Envíos por estado (minuto actual)</h3>
-
-      {/* Selector de categoría de envíos */}
       {onSelectedShipmentCategoryChange && (
         <div className="shipment-category-selector" style={{ marginBottom: '15px', display: 'flex' }}>
           <button
@@ -1235,7 +1230,6 @@ export default function EntityExplorer({
 
   const renderAirports = () => (
     <>
-      <h3>{labels?.airportTitle ?? "Buscar aeropuerto"}</h3>
       <div className="entity-filter-panel">
         <div className="entity-filter-header">
           <span className="entity-toolbar-label">Filtros de almacenes</span>
@@ -1246,13 +1240,12 @@ export default function EntityExplorer({
             disabled={!airportFilters.codeQuery && !airportFilters.continentQuery}
             title="Limpiar filtros"
           >
-            <RotateCcw size={15} />
             <span>Limpiar</span>
           </button>
         </div>
         <div className="entity-filter-grid entity-filter-grid-airports">
           <label className="field">
-            <span className="entity-filter-label">Codigo</span>
+            <span className="entity-filter-label">Código</span>
             <input
               type="text"
               placeholder={labels?.airportPlaceholder ?? 'Ej. LIM'}
@@ -1262,7 +1255,7 @@ export default function EntityExplorer({
             />
           </label>
           <label className="field">
-            <span className="entity-filter-label">Region continental</span>
+            <span className="entity-filter-label">Región continental</span>
             <select
               value={selectedAirportContinentValue}
               onChange={(event) =>
@@ -1287,9 +1280,9 @@ export default function EntityExplorer({
               value={airportSortKey}
               onChange={(event) => handleAirportSortChange(event.target.value as AirportSortKey)}
             >
-              <option value="occupancy">Nivel de ocupacion</option>
-              <option value="departure">Proxima salida</option>
-              <option value="arrival">Proxima llegada</option>
+              <option value="occupancy">Nivel de ocupación</option>
+              <option value="departure">Próxima salida</option>
+              <option value="arrival">Próxima llegada</option>
             </select>
             <button
               type="button"
@@ -1301,7 +1294,7 @@ export default function EntityExplorer({
                   : 'Cambiar a ascendente'
               }
             >
-              {airportSortDirection === 'asc' ? '↑ Asc.' : '↓ Desc.'}
+              {airportSortDirection === 'asc' ? '↑' : '↓'}
             </button>
           </div>
         </label>
