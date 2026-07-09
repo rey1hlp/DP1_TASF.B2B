@@ -58,6 +58,7 @@ export type MapViewProps = {
   selectedAirportCode: string | null
   selectedShipmentRoute?: TrackerShipmentRoute | null
   shipmentSearchError?: string | null
+  isFullscreen: boolean
   isPanelCollapsed?: boolean
   isToolbarCollapsed?: boolean
   timeLabel?: string
@@ -72,6 +73,7 @@ export type MapViewProps = {
   onFlightPreview?: (flightId: number | null) => void
   onSearchShipment?: (codigo: string) => void | Promise<void>
   onClearShipmentRoute?: () => void
+  onToggleFullscreen: () => void
   showCancelledDetails?: boolean
 }
 
@@ -263,6 +265,7 @@ export default function MapView({
   selectedAirportCode,
   selectedShipmentRoute,
   shipmentSearchError,
+  isFullscreen,
   isPanelCollapsed = false,
   isToolbarCollapsed = false,
   timeLabel,
@@ -277,6 +280,7 @@ export default function MapView({
   onFlightPreview,
   onSearchShipment,
   onClearShipmentRoute,
+  onToggleFullscreen,
   showCancelledDetails = true,
 }: MapViewProps) {
   const { simulation } = useSimulationContext()
@@ -284,7 +288,6 @@ export default function MapView({
   const mapRef = useRef<L.Map | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [previewAirportCode, setPreviewAirportCode] = useState<string | null>(null)
   const [previewFlightId, setPreviewFlightId] = useState<number | null>(null)
   const [detailStage, setDetailStage] = useState<FlightDetailsStage>('flight')
@@ -1326,10 +1329,10 @@ export default function MapView({
   }, [])
 
   return (
-    <div ref={wrapperRef} className={`map-wrapper ${isFullscreen ? 'is-fullscreen' : ''}`}>
+    <div ref={wrapperRef} className="map-wrapper">
       <button
         className="map-fullscreen-btn"
-        onClick={() => setIsFullscreen(!isFullscreen)}
+        onClick={onToggleFullscreen}
         title={isFullscreen ? "Salir" : "Expandir"}
       >
         {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}

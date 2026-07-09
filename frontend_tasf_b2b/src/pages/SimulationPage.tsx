@@ -132,6 +132,7 @@ export default function SimulationPage() {
     // Si ya existe un registro lo usamos; de lo contrario por defecto empieza en true (cerrado)
     return saved ? saved === 'true' : true
   })
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false)
 
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     const saved = sessionStorage.getItem('sim_panel_width')
@@ -1017,7 +1018,7 @@ export default function SimulationPage() {
           </section>
 
           <section 
-            className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''}`}
+            className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''} ${isMapFullscreen ? 'is-fullscreen' : ''}`}
             style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
           >
             <div className="map-placeholder">
@@ -1037,6 +1038,9 @@ export default function SimulationPage() {
                 selectedAirportCode={selectedAirportCode}
                 selectedShipmentRoute={selectedShipmentRoute}
                 shipmentSearchError={shipmentSearchError}
+                isFullscreen={isMapFullscreen}
+                isPanelCollapsed={isPanelCollapsed}
+                onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
                 onSearchShipment={handleSearchShipment}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}

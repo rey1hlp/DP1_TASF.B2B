@@ -194,6 +194,7 @@ export default function DailyOperationPage() {
   const [selectedAirportCode, setSelectedAirportCode] = useState<string | null>(null)
 
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(true)
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false)
 
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     const saved = sessionStorage.getItem('ops_panel_width')
@@ -767,7 +768,7 @@ export default function DailyOperationPage() {
       </section>
 
       <section
-        className={`map-area ${isPanelCollapsed ? "panel-collapsed" : ""}`}
+        className={`map-area ${isPanelCollapsed ? "panel-collapsed" : ""} ${isMapFullscreen ? "is-fullscreen" : ""}`}
         style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
       >
         <div className="map-placeholder">
@@ -783,7 +784,9 @@ export default function DailyOperationPage() {
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}
             shipmentSearchError={shipmentSearchError}
+            isFullscreen={isMapFullscreen}
             isPanelCollapsed={isPanelCollapsed}
+            onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
             onSearchShipment={handleSearchShipment}
             onClearShipmentRoute={() => {
               setSelectedShipmentRoute(null)

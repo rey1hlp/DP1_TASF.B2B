@@ -2048,13 +2048,19 @@ body {
   min-height: 0;
 }
 
-.map-wrapper.is-fullscreen {
+.map-area.is-fullscreen {
   position: fixed !important;
   inset: 0 !important;
   z-index: 10000 !important;
   /* Por encima de todo */
   background: #fff;
   padding: 10px;
+  grid-template-columns: 1fr var(--panel-width, 320px);
+  min-height: 0;
+}
+
+.map-area.is-fullscreen.panel-collapsed {
+  grid-template-columns: 1fr 28px;
 }
 
 .map-fullscreen-btn,
