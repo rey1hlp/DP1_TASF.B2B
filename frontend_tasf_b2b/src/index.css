@@ -1983,31 +1983,95 @@ body {
   z-index: 1001;
   display: flex;
   justify-content: center;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
   pointer-events: none;
 }
 
+.map-time-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.map-time-divider {
+  width: 1px;
+  height: 34px;
+  background: rgba(100, 116, 139, 0.35);
+}
+
 .map-time-tab {
   max-width: 100%;
-  padding: 8px 10px;
-  border: 1px solid rgba(190, 207, 232, 0.92);
+  min-height: 42px;
+  padding: 7px 12px;
+  border: 1px solid #d6e1f2;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 10px 24px rgba(18, 36, 68, 0.16);
+  background: #f8fafc;
   color: #173763;
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.1;
+}
+
+.map-time-tab--simulated {
+  border-color: #c7d8f6;
+  background: #edf4ff;
+  color: #173763;
+}
+
+.map-time-tab--real {
+  border-color: #d8dee8;
+  background: #f6f8fb;
+  color: #334155;
+}
+
+.map-time-tab-icon {
+  flex: 0 0 auto;
+}
+
+.map-time-tab--simulated .map-time-tab-icon {
+  color: #2f62b5;
+}
+
+.map-time-tab--real .map-time-tab-icon {
+  color: #64748b;
+}
+
+.map-time-tab-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.map-time-tab-label {
+  color: #64748b;
+  font-size: 10px;
   font-weight: 800;
-  line-height: 1.2;
-  text-align: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.map-time-tab--simulated .map-time-tab-label {
+  color: #436aa4;
+}
+
+.map-time-tab-value {
+  color: #102a4c;
+  font-size: 13px;
+  font-weight: 800;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.map-time-tab--secondary {
-  background: rgba(235, 242, 251, 0.98);
-  color: #21436f;
+.map-time-tab--real .map-time-tab-value {
+  color: #1e293b;
 }
 
 .map-time-tab--paused-wrapper {
@@ -2112,8 +2176,9 @@ body {
 
 .map-time-tab-container {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
   pointer-events: auto;
+  min-width: 0;
 }
 
 .map-time-tab-close {
@@ -2137,6 +2202,29 @@ body {
 
 .map-time-tab-container:hover .map-time-tab-close {
   display: flex;
+}
+
+@media (max-width: 768px) {
+  .map-time-tabs {
+    left: 56px;
+    right: 56px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-items: center;
+  }
+
+  .map-time-group {
+    width: 100%;
+  }
+
+  .map-time-divider {
+    display: none;
+  }
+
+  .map-time-tab {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 

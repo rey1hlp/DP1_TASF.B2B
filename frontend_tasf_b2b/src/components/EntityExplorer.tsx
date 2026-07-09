@@ -898,7 +898,7 @@ export default function EntityExplorer({
                 className={flightSortKey === 'occupancy' && flightSortDirection === 'desc' ? 'active' : ''}
                 onClick={() => handleFlightSortPreset('occupancy', 'desc')}
               >
-                Capacidad (Mayor a Menor)
+                Capacidad
               </button>
               <button
                 type="button"

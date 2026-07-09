@@ -776,7 +776,7 @@ export default function DailyOperationPage() {
             airports={mapAirports}
             segments={mapSegments}
             currentMinute={currentMinute}
-            timeLabel={`Hora actual: ${formatDateTime(now)}`}
+            timeLabel={formatDateTime(now)}
             cancelledFlightTraces={cancelledFlightTraces}
             warehouseSnapshot={warehouseSnapshot}
             ranges={ranges}

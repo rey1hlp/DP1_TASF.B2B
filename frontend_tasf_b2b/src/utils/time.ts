@@ -1,5 +1,6 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const LOCALE = 'es-PE'
+const MONTH_SHORT_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
 const integerFormatter = new Intl.NumberFormat(LOCALE, {
   maximumFractionDigits: 0,
@@ -54,15 +55,33 @@ export function formatDate(value?: string | null): string {
   return value
 }
 
-export function formatDateTime(value?: string | Date | null): string {
-  if (!value) {
+function formatDateTimeParts(year: number, monthIndex: number, day: number, hours: number, minutes: number): string {
+  const month = MONTH_SHORT_ES[Math.max(0, Math.min(11, monthIndex))]
+  return `${day} ${month} ${year}, ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+export function formatDateTime(value?: string | Date | number | null): string {
+  if (value === null || value === undefined || value === '') {
     return '--'
   }
+  if (typeof value === 'number') {
+    const d = new Date(value)
+    return formatDateTimeParts(
+      d.getUTCFullYear(),
+      d.getUTCMonth(),
+      d.getUTCDate(),
+      d.getUTCHours(),
+      d.getUTCMinutes(),
+    )
+  }
   if (value instanceof Date) {
-    return new Intl.DateTimeFormat(LOCALE, {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    }).format(value)
+    return formatDateTimeParts(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      value.getHours(),
+      value.getMinutes(),
+    )
   }
 
   const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value)
@@ -71,7 +90,7 @@ export function formatDateTime(value?: string | Date | null): string {
     : value.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/)
   if (match) {
     const [, yyyy, mm, dd, hh, min] = match
-    return `${dd}/${mm}/${yyyy} ${hh}:${min}`
+    return formatDateTimeParts(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min))
   }
 
   const parsed = new Date(value)
@@ -80,6 +99,43 @@ export function formatDateTime(value?: string | Date | null): string {
   }
 
   return value
+}
+
+export function formatSimSpan(totalMinutes: number): string {
+  const safeMinutes = Math.max(0, Math.floor(totalMinutes))
+  const days = Math.floor(safeMinutes / 1440)
+  const remainingMinutes = safeMinutes % 1440
+  const hours = Math.floor(remainingMinutes / 60)
+  const minutes = remainingMinutes % 60
+
+  if (days > 0) {
+    return hours > 0 ? `${days} d ${hours} h` : `${days} d`
+  }
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`
+  }
+
+  return `${minutes} min`
+}
+
+export function formatElapsedReal(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+
+  if (safeSeconds < 3600) {
+    const minutes = Math.floor(safeSeconds / 60)
+    const seconds = safeSeconds % 60
+
+    if (safeSeconds < 300 && seconds > 0) {
+      return minutes > 0 ? `${minutes} min ${seconds} s` : `${seconds} s`
+    }
+
+    return `${Math.round(safeSeconds / 60)} min`
+  }
+
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`
 }
 
 export function getInclusiveDaySpan(start?: string | null, end?: string | null): number | null {
