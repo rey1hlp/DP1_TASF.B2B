@@ -587,10 +587,12 @@ body {
 */
 .map-area {
   display: grid;
-  grid-template-columns: 1fr var(--panel-width, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--panel-width, 320px));
   flex: 1;
+  min-width: 0;
   min-height: 0;
   align-items: stretch;
+  overflow: hidden;
   transition: grid-template-columns 0.3s ease, gap 0.3s ease;
 }
 
@@ -609,6 +611,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
   /* fill the grid cell */
   min-height: 0;
   /* allow shrinking below content size */
@@ -741,7 +744,9 @@ body {
   /* franja + contenido lado a lado */
   box-shadow: 0 18px 21px rgba(24, 54, 92, 0.12);
   height: 100%;
-  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   /* el scroll lo maneja .control-panel-content */
   position: relative;
   z-index: 20;
@@ -805,6 +810,7 @@ body {
   flex: 1;
   min-width: 0;
   padding: 0;
+  overflow-x: auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -812,6 +818,7 @@ body {
 
 .control-panel-body {
   padding: 12px 18px 18px 12px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1933,7 +1940,7 @@ body {
   /* Por encima de todo */
   background: #fff;
   padding: 10px;
-  grid-template-columns: 1fr var(--panel-width, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--panel-width, 320px));
   min-height: 0;
 }
 
