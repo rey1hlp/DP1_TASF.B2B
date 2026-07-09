@@ -1,8 +1,8 @@
-import { ArrowUpDown, Clock3, Filter, Search } from 'lucide-react'
+import { ArrowUpDown, CircleDot, Clock3, Filter, MapPin, PlaneLanding, PlaneTakeoff, Search } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
-import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
+import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
 import type { ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
 import { getShipmentsByFlight, getSimulationShipmentsByFlight, type EnvioDetalleDto } from '../services/api'
@@ -20,7 +20,7 @@ import {
   formatPercent,
   formatSimMinute,
 } from '../utils/time'
-import { resolveSemaphoreColor, type SemaphoreRanges } from '../utils/semaphore'
+import { resolveSemaphoreColor, resolveSemaphoreLevel, type SemaphoreRanges } from '../utils/semaphore'
 
 export type EntityTab = 'flights' | 'shipments' | 'airports'
 
@@ -83,6 +83,9 @@ export type EntityExplorerProps = {
   flightFilters: FlightTextFilters
   onFlightFiltersChange: (filters: FlightTextFilters) => void
   ranges: SemaphoreRanges
+  mapFilters: MapSemaphoreFilters
+  onMapFiltersChange: (filters: MapSemaphoreFilters) => void
+  mapFilterCounts?: { flights: number; warehouses: number }
   airportFilters: AirportTextFilters
   onAirportFiltersChange: (filters: AirportTextFilters) => void
   onSearchShipment: (codigo: string) => void
@@ -135,7 +138,7 @@ type SortDirection = 'asc' | 'desc'
 
 const ITEM_HEIGHT = 44
 const FLIGHT_ITEM_HEIGHT = 96
-const AIRPORT_ITEM_HEIGHT = 92
+const AIRPORT_ITEM_HEIGHT = 106
 const AIRPORT_PREVIEW_LIMIT = 30
 
 const FLIGHT_SORT_DEFAULT_DIRECTION: Record<FlightSortKey, SortDirection> = {
@@ -153,6 +156,14 @@ const AIRPORT_SORT_DEFAULT_DIRECTION: Record<AirportSortKey, SortDirection> = {
   arrival: 'asc',
 }
 
+const SEMAPHORE_OPTIONS: Array<{ value: SemaphoreFilterLevel; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'green', label: 'Verde' },
+  { value: 'amber', label: 'Ámbar' },
+  { value: 'red', label: 'Rojo' },
+  { value: 'unknown', label: 'Sin datos' },
+]
+
 function getFlightOccupancyValue(flight: EntityFlightItem) {
   if (typeof flight.porcentaje === 'number') return flight.porcentaje
   if (
@@ -163,6 +174,23 @@ function getFlightOccupancyValue(flight: EntityFlightItem) {
     return (flight.carga * 100) / flight.capacidad
   }
 
+  return null
+}
+
+function getSemaphoreOptionPercent(
+  option: (typeof SEMAPHORE_OPTIONS)[number],
+  ranges: SemaphoreRanges,
+) {
+  return getSemaphoreFilterPercent(option.value, ranges)
+}
+
+function getSemaphoreFilterPercent(
+  value: SemaphoreFilterLevel,
+  ranges: SemaphoreRanges,
+) {
+  if (value === 'green') return 0
+  if (value === 'amber') return ranges.greenMax + 1
+  if (value === 'red') return ranges.amberMax + 1
   return null
 }
 
@@ -252,6 +280,9 @@ export default function EntityExplorer({
   flightFilters,
   onFlightFiltersChange,
   ranges,
+  mapFilters,
+  onMapFiltersChange,
+  mapFilterCounts,
   airportFilters,
   onAirportFiltersChange,
   onSearchShipment,
@@ -285,8 +316,12 @@ export default function EntityExplorer({
   const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
   const [isFlightFilterMenuOpen, setIsFlightFilterMenuOpen] = useState(false)
   const [isFlightSortMenuOpen, setIsFlightSortMenuOpen] = useState(false)
+  const [isFlightSemaphoreMenuOpen, setIsFlightSemaphoreMenuOpen] = useState(false)
   const [airportSortKey, setAirportSortKey] = useState<AirportSortKey>('occupancy')
   const [airportSortDirection, setAirportSortDirection] = useState<SortDirection>('desc')
+  const [isAirportFilterMenuOpen, setIsAirportFilterMenuOpen] = useState(false)
+  const [isAirportSortMenuOpen, setIsAirportSortMenuOpen] = useState(false)
+  const [isAirportSemaphoreMenuOpen, setIsAirportSemaphoreMenuOpen] = useState(false)
   const [shipmentQuery, setShipmentQuery] = useState("");
   const [expandedShipmentCode, setExpandedShipmentCode] = useState<string | null>(null);
 
@@ -335,6 +370,7 @@ export default function EntityExplorer({
     const codeQuery = flightFilters.codeQuery.trim().toLowerCase()
     const originQuery = flightFilters.originQuery.trim().toLowerCase()
     const destinationQuery = flightFilters.destinationQuery.trim().toLowerCase()
+    const semaphoreFilter = mapFilters.flights.semaphore
 
     return flights.filter((flight) => {
       if (codeQuery && !String(flight.flightId).toLowerCase().includes(codeQuery)) {
@@ -349,9 +385,16 @@ export default function EntityExplorer({
         return false
       }
 
+      if (
+        semaphoreFilter !== 'all' &&
+        resolveSemaphoreLevel(getFlightOccupancyValue(flight), ranges) !== semaphoreFilter
+      ) {
+        return false
+      }
+
       return true
     })
-  }, [flightFilters.codeQuery, flightFilters.destinationQuery, flightFilters.originQuery, flights]);
+  }, [flightFilters.codeQuery, flightFilters.destinationQuery, flightFilters.originQuery, flights, mapFilters.flights.semaphore, ranges]);
 
   const orderedFlights = useMemo(() => {
     if (flightSortKey === 'default') {
@@ -409,6 +452,8 @@ export default function EntityExplorer({
   const airportContinentQuery = airportFilters.continentQuery.trim().toLowerCase()
 
   const filteredAirports = useMemo(() => {
+    const semaphoreFilter = mapFilters.warehouses.semaphore
+
     return airports.filter((airport) => {
       if (airportCodeQuery && !airport.codigoOaci.toLowerCase().includes(airportCodeQuery)) {
         return false
@@ -416,14 +461,21 @@ export default function EntityExplorer({
 
       if (
         airportContinentQuery &&
-        (airport.continente ?? '').trim().toLowerCase() !== airportContinentQuery
+        !(airport.continente ?? '').trim().toLowerCase().includes(airportContinentQuery)
+      ) {
+        return false
+      }
+
+      if (
+        semaphoreFilter !== 'all' &&
+        resolveSemaphoreLevel(airport.porcentaje ?? null, ranges) !== semaphoreFilter
       ) {
         return false
       }
 
       return true
     })
-  }, [airportCodeQuery, airportContinentQuery, airports]);
+  }, [airportCodeQuery, airportContinentQuery, airports, mapFilters.warehouses.semaphore, ranges]);
 
   const orderedAirports = useMemo(() => {
     return [...filteredAirports].sort((left, right) => {
@@ -525,6 +577,20 @@ export default function EntityExplorer({
     Boolean(flightFilters.originQuery.trim()) ||
     Boolean(flightFilters.destinationQuery.trim())
   const hasActiveFlightSort = flightSortKey !== 'default'
+  const hasActiveFlightSemaphoreFilter = mapFilters.flights.semaphore !== 'all'
+  const activeFlightSemaphoreColor = resolveSemaphoreColor(
+    getSemaphoreFilterPercent(mapFilters.flights.semaphore, ranges),
+    ranges,
+  )
+  const hasActiveAirportFilters =
+    Boolean(airportFilters.codeQuery.trim()) ||
+    Boolean(airportFilters.continentQuery.trim())
+  const hasActiveAirportSort = airportSortKey !== 'occupancy' || airportSortDirection !== 'desc'
+  const hasActiveAirportSemaphoreFilter = mapFilters.warehouses.semaphore !== 'all'
+  const activeAirportSemaphoreColor = resolveSemaphoreColor(
+    getSemaphoreFilterPercent(mapFilters.warehouses.semaphore, ranges),
+    ranges,
+  )
 
   const getFlightCapacityPercent = (flight: EntityFlightItem) => {
     if (typeof flight.porcentaje === 'number') return flight.porcentaje
@@ -542,6 +608,10 @@ export default function EntityExplorer({
   const getFlightCapacityColor = (flight: EntityFlightItem) => {
     const percent = getFlightCapacityPercent(flight)
     return resolveSemaphoreColor(percent, ranges).fill
+  }
+
+  const getAirportOccupancyColor = (airport: EntityAirportItem) => {
+    return resolveSemaphoreColor(airport.porcentaje ?? null, ranges).fill
   }
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -566,6 +636,18 @@ export default function EntityExplorer({
       originQuery: '',
       destinationQuery: '',
     })
+    flightList.setScrollTop(0)
+  }
+
+  const handleFlightSemaphoreFilterChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      flights: {
+        ...mapFilters.flights,
+        semaphore: value,
+      },
+    })
+    setIsFlightSemaphoreMenuOpen(false)
     flightList.setScrollTop(0)
   }
 
@@ -607,9 +689,22 @@ export default function EntityExplorer({
     airportList.setScrollTop(0)
   }
 
-  const handleAirportSortChange = (value: AirportSortKey) => {
+  const handleAirportSemaphoreFilterChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      warehouses: {
+        ...mapFilters.warehouses,
+        semaphore: value,
+      },
+    })
+    setIsAirportSemaphoreMenuOpen(false)
+    airportList.setScrollTop(0)
+  }
+
+  const handleAirportSortPreset = (value: AirportSortKey, direction?: SortDirection) => {
     setAirportSortKey(value)
-    setAirportSortDirection(AIRPORT_SORT_DEFAULT_DIRECTION[value])
+    setAirportSortDirection(direction ?? AIRPORT_SORT_DEFAULT_DIRECTION[value])
+    setIsAirportSortMenuOpen(false)
     airportList.setScrollTop(0)
   }
 
@@ -624,6 +719,7 @@ export default function EntityExplorer({
     flightFilters.codeQuery,
     flightFilters.destinationQuery,
     flightFilters.originQuery,
+    mapFilters.flights.semaphore,
     flightSortDirection,
     flightSortKey,
   ])
@@ -633,6 +729,7 @@ export default function EntityExplorer({
   }, [
     airportFilters.codeQuery,
     airportFilters.continentQuery,
+    mapFilters.warehouses.semaphore,
     airportSortDirection,
     airportSortKey,
   ])
@@ -823,6 +920,7 @@ export default function EntityExplorer({
             onClick={() => {
               setIsFlightFilterMenuOpen((current) => !current)
               setIsFlightSortMenuOpen(false)
+              setIsFlightSemaphoreMenuOpen(false)
             }}
             title="Filtros avanzados"
             aria-label="Filtros avanzados"
@@ -870,10 +968,65 @@ export default function EntityExplorer({
         <div className="flight-tool-wrap">
           <button
             type="button"
+            className={`flight-tool-button semaphore-tool-button ${hasActiveFlightSemaphoreFilter ? 'active' : ''}`}
+            style={
+              hasActiveFlightSemaphoreFilter
+                ? ({
+                    '--semaphore-active-bg': activeFlightSemaphoreColor.fill,
+                    '--semaphore-active-border': activeFlightSemaphoreColor.stroke,
+                  } as CSSProperties)
+                : undefined
+            }
+            onClick={() => {
+              setIsFlightSemaphoreMenuOpen((current) => !current)
+              setIsFlightFilterMenuOpen(false)
+              setIsFlightSortMenuOpen(false)
+            }}
+            title="Filtrar por semáforo"
+            aria-label="Filtrar por semáforo"
+            aria-expanded={isFlightSemaphoreMenuOpen}
+          >
+            <CircleDot size={18} />
+            {hasActiveFlightSemaphoreFilter ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isFlightSemaphoreMenuOpen && (
+            <div className="flight-popover flight-sort-popover semaphore-filter-popover">
+              <div className="flight-popover-title">Semáforo de vuelos</div>
+              {SEMAPHORE_OPTIONS.map((option) => {
+                const colors = resolveSemaphoreColor(getSemaphoreOptionPercent(option, ranges), ranges)
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={mapFilters.flights.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleFlightSemaphoreFilterChange(option.value)}
+                  >
+                    <span
+                      className="semaphore-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+              {mapFilterCounts ? (
+                <div className="semaphore-filter-count">
+                  {formatInteger(mapFilterCounts.flights)} vuelos visibles en mapa
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
             className={`flight-tool-button ${hasActiveFlightSort ? 'active' : ''}`}
             onClick={() => {
               setIsFlightSortMenuOpen((current) => !current)
               setIsFlightFilterMenuOpen(false)
+              setIsFlightSemaphoreMenuOpen(false)
             }}
             title="Ordenamiento"
             aria-label="Ordenamiento"
@@ -1322,78 +1475,182 @@ export default function EntityExplorer({
 
   const renderAirports = () => (
     <>
-      <div className="entity-filter-panel">
-        <div className="entity-filter-header">
-          <span className="entity-toolbar-label">Filtros de almacenes</span>
+      <div className="flight-control-row airport-control-row">
+        <label className="flight-search-field" aria-label="Buscar aeropuerto por código">
+          <Search size={16} />
+          <input
+            type="text"
+            placeholder={labels?.airportPlaceholder ?? 'Buscar código...'}
+            value={airportFilters.codeQuery}
+            onChange={(event) => handleAirportFilterChange('codeQuery', event.target.value)}
+            onKeyDown={handleAirportKeyDown}
+          />
+        </label>
+
+        <div className="flight-tool-wrap">
           <button
             type="button"
-            className="entity-filter-clear"
-            onClick={clearAirportFilters}
-            disabled={!airportFilters.codeQuery && !airportFilters.continentQuery}
-            title="Limpiar filtros"
+            className={`flight-tool-button ${hasActiveAirportFilters ? 'active' : ''}`}
+            onClick={() => {
+              setIsAirportFilterMenuOpen((current) => !current)
+              setIsAirportSortMenuOpen(false)
+              setIsAirportSemaphoreMenuOpen(false)
+            }}
+            title="Filtros avanzados"
+            aria-label="Filtros avanzados"
+            aria-expanded={isAirportFilterMenuOpen}
           >
-            <span>Limpiar</span>
+            <Filter size={18} />
+            {hasActiveAirportFilters ? <span className="flight-tool-indicator" /> : null}
           </button>
+
+          {isAirportFilterMenuOpen && (
+            <div className="flight-popover airport-filter-popover">
+              <div className="flight-popover-title">Filtros avanzados</div>
+              <label className="flight-popover-field">
+                <span>Región continental</span>
+                <input
+                  type="text"
+                  list="airport-continent-options"
+                  placeholder="Buscar región..."
+                  value={selectedAirportContinentValue || airportFilters.continentQuery}
+                  onChange={(event) => handleAirportFilterChange('continentQuery', event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="flight-popover-clear"
+                onClick={clearAirportFilters}
+                disabled={!hasActiveAirportFilters}
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
         </div>
-        <div className="entity-filter-grid entity-filter-grid-airports">
-          <label className="field">
-            <span className="entity-filter-label">Código</span>
-            <input
-              type="text"
-              placeholder={labels?.airportPlaceholder ?? 'Ej. LIM'}
-              value={airportFilters.codeQuery}
-              onChange={(event) => handleAirportFilterChange('codeQuery', event.target.value)}
-              onKeyDown={handleAirportKeyDown}
-            />
-          </label>
-          <label className="field">
-            <span className="entity-filter-label">Región continental</span>
-            <select
-              value={selectedAirportContinentValue}
-              onChange={(event) =>
-                handleAirportFilterChange('continentQuery', event.target.value)
-              }
-            >
-              <option value="">Todas</option>
-              {airportContinentOptions.map((continent) => (
-                <option key={continent} value={continent}>
-                  {continent}
-                </option>
-              ))}
-            </select>
-          </label>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button semaphore-tool-button ${hasActiveAirportSemaphoreFilter ? 'active' : ''}`}
+            style={
+              hasActiveAirportSemaphoreFilter
+                ? ({
+                    '--semaphore-active-bg': activeAirportSemaphoreColor.fill,
+                    '--semaphore-active-border': activeAirportSemaphoreColor.stroke,
+                  } as CSSProperties)
+                : undefined
+            }
+            onClick={() => {
+              setIsAirportSemaphoreMenuOpen((current) => !current)
+              setIsAirportFilterMenuOpen(false)
+              setIsAirportSortMenuOpen(false)
+            }}
+            title="Filtrar por semáforo"
+            aria-label="Filtrar por semáforo"
+            aria-expanded={isAirportSemaphoreMenuOpen}
+          >
+            <CircleDot size={18} />
+            {hasActiveAirportSemaphoreFilter ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isAirportSemaphoreMenuOpen && (
+            <div className="flight-popover flight-sort-popover semaphore-filter-popover">
+              <div className="flight-popover-title">Semáforo de aeropuertos</div>
+              {SEMAPHORE_OPTIONS.map((option) => {
+                const colors = resolveSemaphoreColor(getSemaphoreOptionPercent(option, ranges), ranges)
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={mapFilters.warehouses.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleAirportSemaphoreFilterChange(option.value)}
+                  >
+                    <span
+                      className="semaphore-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+              {mapFilterCounts ? (
+                <div className="semaphore-filter-count">
+                  {formatInteger(mapFilterCounts.warehouses)} aeropuertos visibles en mapa
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
-      </div>
-      <div className="entity-toolbar">
-        <label className="field entity-sort-field">
-          <span className="entity-toolbar-label">Ordenar por</span>
-          <div className="entity-sort-row">
-            <select
-              value={airportSortKey}
-              onChange={(event) => handleAirportSortChange(event.target.value as AirportSortKey)}
-            >
-              <option value="occupancy">Nivel de ocupación</option>
-              <option value="departure">Próxima salida</option>
-              <option value="arrival">Próxima llegada</option>
-            </select>
-            <button
-              type="button"
-              className="entity-sort-direction"
-              onClick={handleAirportSortDirectionToggle}
-              title={
-                airportSortDirection === 'asc'
-                  ? 'Cambiar a descendente'
-                  : 'Cambiar a ascendente'
-              }
-            >
-              {airportSortDirection === 'asc' ? '↑' : '↓'}
-            </button>
-          </div>
-        </label>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button ${hasActiveAirportSort ? 'active' : ''}`}
+            onClick={() => {
+              setIsAirportSortMenuOpen((current) => !current)
+              setIsAirportFilterMenuOpen(false)
+              setIsAirportSemaphoreMenuOpen(false)
+            }}
+            title="Ordenamiento"
+            aria-label="Ordenamiento"
+            aria-expanded={isAirportSortMenuOpen}
+          >
+            <ArrowUpDown size={18} />
+            {hasActiveAirportSort ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isAirportSortMenuOpen && (
+            <div className="flight-popover flight-sort-popover airport-sort-popover">
+              <div className="flight-popover-title">Ordenar aeropuertos</div>
+              <button
+                type="button"
+                className={!hasActiveAirportSort ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('occupancy', 'desc')}
+              >
+                Orden actual
+              </button>
+              <button
+                type="button"
+                className={hasActiveAirportSort && airportSortKey === 'occupancy' ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('occupancy', 'desc')}
+              >
+                Ocupación
+              </button>
+              <button
+                type="button"
+                className={airportSortKey === 'departure' ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('departure', 'asc')}
+              >
+                Próxima salida
+              </button>
+              <button
+                type="button"
+                className={airportSortKey === 'arrival' ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('arrival', 'asc')}
+              >
+                Próxima llegada
+              </button>
+              <button
+                type="button"
+                className="flight-sort-direction-action"
+                onClick={handleAirportSortDirectionToggle}
+              >
+                Dirección: {airportSortDirection === 'asc' ? 'Ascendente' : 'Descendente'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <datalist id="airport-continent-options">
+          {airportContinentOptions.map((continent) => (
+            <option key={continent} value={continent} />
+          ))}
+        </datalist>
       </div>
       <div
         ref={airportListRef}
-        className="flight-list"
+        className="flight-list airport-card-list"
         onScroll={(event) =>
           airportList.setScrollTop(event.currentTarget.scrollTop)
         }
@@ -1409,38 +1666,52 @@ export default function EntityExplorer({
           >
             {airportList.visibleItems.map((airport) => {
               const hasOccupancy = airport.ocupacion !== undefined && airport.capacidad !== undefined
-              const occupancyLabel = hasOccupancy
-                ? `${formatInteger(airport.ocupacion)} / ${formatInteger(airport.capacidad)}`
+              const occupancyPercentLabel = airport.porcentaje !== undefined
+                ? formatPercent(airport.porcentaje, 0)
+                : 'Sin dato'
+              const occupancyDetail = hasOccupancy
+                ? `Ocupación: ${occupancyPercentLabel} (${formatInteger(airport.ocupacion)} / ${formatInteger(airport.capacidad)} maletas)`
                 : airport.capacidad !== undefined
-                  ? `Cap. ${formatInteger(airport.capacidad)}`
-                  : 'Capacidad n/d'
+                  ? `Capacidad total: ${formatInteger(airport.capacidad)} maletas`
+                  : 'Ocupación: sin dato'
+              const occupancyColor = getAirportOccupancyColor(airport)
 
               return (
                 <button
                   key={airport.codigoOaci}
-                  className={`flight-item entity-airport-item ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
+                  className={`flight-item entity-airport-card ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
                   onClick={() => onSelectAirport(airport.codigoOaci)}
-                  style={{ height: `${AIRPORT_ITEM_HEIGHT}px` }}
+                  style={{
+                    height: `${AIRPORT_ITEM_HEIGHT}px`,
+                    '--airport-occupancy-color': occupancyColor,
+                  } as CSSProperties}
                 >
-                  <div>
-                    <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
-                    <div className="flight-meta">{`${airport.pais} · ${occupancyLabel}`}</div>
-                    <div className="flight-meta" style={{ marginTop: '2px' }}>
-                      Próx. Salida: {formatSimMinute(airport.nextDepartureMin, true)}
+                  <span className="airport-occupancy-bar" aria-hidden="true" />
+                  <div className="airport-card-content">
+                    <div className="airport-card-header">
+                      <span className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</span>
+                      {airport.porcentaje !== undefined ? (
+                        <span className="airport-status-pill">{occupancyPercentLabel}</span>
+                      ) : null}
                     </div>
-                    <div className="flight-meta">
-                      Próx. Llegada: {formatSimMinute(airport.nextArrivalMin, true)}
+                    <div className="airport-card-location flight-meta">
+                      <MapPin size={13} />
+                      <span>{[airport.pais, airport.continente].filter(Boolean).join(' · ')}</span>
+                    </div>
+                    <div className="airport-card-timings">
+                      <span>
+                        <PlaneTakeoff size={13} />
+                        {formatSimMinute(airport.nextDepartureMin, true)}
+                      </span>
+                      <span>
+                        <PlaneLanding size={13} />
+                        {formatSimMinute(airport.nextArrivalMin, true)}
+                      </span>
+                    </div>
+                    <div className="airport-card-capacity">
+                      {occupancyDetail}
                     </div>
                   </div>
-                  {airport.porcentaje !== undefined ? (
-                    <div className="entity-airport-status">
-                      <span>{formatPercent(airport.porcentaje, 0)}</span>
-                      <span
-                        className="warehouse-dot"
-                        style={{ background: airport.color }}
-                      />
-                    </div>
-                  ) : null}
                 </button>
               )
             })}

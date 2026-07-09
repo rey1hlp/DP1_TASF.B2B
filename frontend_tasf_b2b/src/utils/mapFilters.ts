@@ -144,7 +144,7 @@ export function matchesAirportTextFilters(
     return false
   }
 
-  if (continentQuery && resolvedContinent !== continentQuery) {
+  if (continentQuery && !resolvedContinent.includes(continentQuery)) {
     return false
   }
 

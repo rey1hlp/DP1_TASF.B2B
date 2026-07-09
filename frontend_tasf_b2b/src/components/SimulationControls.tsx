@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
-import MapFiltersPanel from './MapFiltersPanel'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
@@ -178,20 +177,20 @@ export default function SimulationControls({
                     Cantidad de días a simular
                     <div className="chip-row">
                       <button className={`chip ${dias === 3 ? 'active' : ''}`} onClick={() => setDias(3)}>
-                        3 dias
+                        3 días
                       </button>
                       <button className={`chip ${dias === 5 ? 'active' : ''}`} onClick={() => setDias(5)}>
-                        5 dias
+                        5 días
                       </button>
                       <button className={`chip ${dias === 7 ? 'active' : ''}`} onClick={() => setDias(7)}>
-                        7 dias
+                        7 días
                       </button>
                     </div>
                   </label>
                 ) : (
                   <div style={{ marginBottom: '12px', fontSize: '13px', color: '#4b5f7a' }}>
                     La simulación hasta el colapso se ejecuta desde la fecha seleccionada y sigue
-                    hasta que no haya mas capacidad o datos disponibles.
+                    hasta que no haya más capacidad o datos disponibles.
                   </div>
                 )}
 
@@ -205,11 +204,6 @@ export default function SimulationControls({
                 </label>
 
                 <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
-                <MapFiltersPanel
-                  filters={mapFilters}
-                  onChange={onMapFiltersChange}
-                  visibleCounts={mapFilterCounts}
-                />
 
                 <div className="buttons">
                   <button className="btn primary" onClick={() => onStart({ inicio, dias })} disabled={isRunning}>
@@ -306,6 +300,9 @@ export default function SimulationControls({
 	                  flightFilters={flightTextFilters}
 	                  onFlightFiltersChange={onFlightTextFiltersChange}
 	                  ranges={ranges}
+                    mapFilters={mapFilters}
+                    onMapFiltersChange={onMapFiltersChange}
+                    mapFilterCounts={mapFilterCounts}
 	                  airportFilters={airportTextFilters}
                   onAirportFiltersChange={onAirportTextFiltersChange}
                   onSearchShipment={onSearchShipment}
