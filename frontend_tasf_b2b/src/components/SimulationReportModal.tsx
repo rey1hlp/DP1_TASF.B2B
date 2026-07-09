@@ -1,5 +1,4 @@
-import { formatCompactDate } from '../utils/time'
-import { formatInteger } from '../utils/time'
+import { formatCompactDate, formatDateFromDayIndex, formatInteger, getDayIndexFromDateString } from '../utils/time'
 import './SimulationReportModal.css'
 
 interface SimulationReportModalProps {
@@ -9,6 +8,15 @@ interface SimulationReportModalProps {
   meta: any
   statusMessage: string | null
   stats: any
+}
+
+function formatReportPeriodDate(value?: string | null): string {
+  const dayIndex = getDayIndexFromDateString(value)
+  if (dayIndex === null) {
+    return formatCompactDate(value)
+  }
+
+  return formatDateFromDayIndex(dayIndex + 1)
 }
 
 export default function SimulationReportModal({
@@ -46,7 +54,7 @@ export default function SimulationReportModal({
               <div className="report-item">
                 <span className="report-label">Periodo:</span>
                 <span className="report-value">
-                  {formatCompactDate(meta.inicio)} - {formatCompactDate(meta.fin)}
+                  {formatReportPeriodDate(meta.inicio)} - {formatReportPeriodDate(meta.fin)}
                 </span>
               </div>
               <div className="report-item">
