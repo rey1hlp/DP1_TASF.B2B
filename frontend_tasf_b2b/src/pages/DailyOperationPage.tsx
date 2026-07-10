@@ -57,31 +57,31 @@ type DailyOperationSnapshot = {
 
 type DailyOperationEvent =
   | {
-      type: 'SNAPSHOT'
-      payload: DailyOperationSnapshot
-    }
+    type: 'SNAPSHOT'
+    payload: DailyOperationSnapshot
+  }
   | {
-      type: 'FLIGHTS_UPDATED'
-      payload: {
-        segments: MapSegment[]
-      }
+    type: 'FLIGHTS_UPDATED'
+    payload: {
+      segments: MapSegment[]
     }
+  }
   | {
-      type: 'WAREHOUSE_UPDATED'
-      payload: {
-        warehouseSnapshot: WarehouseSnapshot
-      }
+    type: 'WAREHOUSE_UPDATED'
+    payload: {
+      warehouseSnapshot: WarehouseSnapshot
     }
+  }
   | {
-      type: 'SHIPMENTS_UPDATED'
-      payload: {
-        shipmentSummary: ShipmentSummary
-      }
+    type: 'SHIPMENTS_UPDATED'
+    payload: {
+      shipmentSummary: ShipmentSummary
     }
+  }
   | {
-      type: 'ALERT_CREATED'
-      payload: OperationAlert
-    }
+    type: 'ALERT_CREATED'
+    payload: OperationAlert
+  }
 
 function getCurrentMinuteOfDay(date: Date) {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
@@ -205,6 +205,19 @@ export default function DailyOperationPage() {
     sessionStorage.setItem('ops_panel_width', panelWidth.toString())
   }, [panelWidth])
 
+
+  const [liveShipments, setLiveShipments] = useState<ShipmentCrudDto[]>([])
+  const [shipmentOriginFilter, setShipmentOriginFilter] = useState('')
+  const [shipmentDestinationFilter, setShipmentDestinationFilter] = useState('')
+  const [selectedShipmentCategory, setSelectedShipmentCategory] = useState<'PLANIFICADOS' | 'EN_VUELO' | 'ENTREGADOS'>(() => {
+    const saved = sessionStorage.getItem('ops_shipment_category')
+    return (saved as 'PLANIFICADOS' | 'EN_VUELO' | 'ENTREGADOS') || 'EN_VUELO'
+  })
+
+  useEffect(() => {
+    sessionStorage.setItem('ops_shipment_category', selectedShipmentCategory)
+  }, [selectedShipmentCategory])
+
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
     const startX = e.clientX
@@ -232,7 +245,12 @@ export default function DailyOperationPage() {
   const entityFocusRequestIdRef = useRef(0)
 
   const handleSearchShipment = async (codigo: string) => {
-    setShipmentSearchError(null)
+    //setShipmentSearchError(null)
+    if (selectedShipmentRoute && selectedShipmentRoute.codigoPedido === codigo) {
+      setSelectedShipmentRoute(null);
+      setShipmentSearchError(null); // Limpia errores si los hubiera
+      return; // Salimos de la función inmediatamente para no volver a cargarlo
+    }
     try {
       // Intentar primero obtener la ruta real del endpoint de operación diaria
       const routeRes = await authFetch(`${API_BASE}/api/operation/daily/shipments/${encodeURIComponent(codigo)}/route`)
@@ -306,6 +324,7 @@ export default function DailyOperationPage() {
     }
 
     if (snapshot.envios) {
+      setLiveShipments(snapshot.envios)
       setSampleShipments(snapshot.envios.map((shipment) => shipment.codigoPedido))
       setShipmentQuantities(Object.fromEntries(
         snapshot.envios.map((shipment) => [shipment.codigoPedido, shipment.cantidad])
@@ -449,53 +468,53 @@ export default function DailyOperationPage() {
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-      // ✅ Si ya hay conexión abierta, no crear otra
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        return
-      }
+    // ✅ Si ya hay conexión abierta, no crear otra
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      return
+    }
 
-      const socketUrl = buildDailyOperationWsUrl()
-      console.log('[WS] Connecting to:', socketUrl)
-      const socket = new WebSocket(socketUrl)
-      socketRef.current = socket
+    const socketUrl = buildDailyOperationWsUrl()
+    console.log('[WS] Connecting to:', socketUrl)
+    const socket = new WebSocket(socketUrl)
+    socketRef.current = socket
 
-      socket.onopen = () => {
-        console.log('[WS] ✅ Connected')
-        setSocketConnected(true)
-      }
+    socket.onopen = () => {
+      console.log('[WS] ✅ Connected')
+      setSocketConnected(true)
+    }
 
-      socket.onclose = (event) => {
-        console.log('[WS] ❌ Closed:', event.code, event.reason)
-        setSocketConnected(false)
-      }
+    socket.onclose = (event) => {
+      console.log('[WS] ❌ Closed:', event.code, event.reason)
+      setSocketConnected(false)
+    }
 
-      socket.onerror = (error) => {
-        console.error('[WS] ⚠️ Error:', error)
-        setSocketConnected(false)
-      }
+    socket.onerror = (error) => {
+      console.error('[WS] ⚠️ Error:', error)
+      setSocketConnected(false)
+    }
 
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as DailyOperationEvent
-          console.log('[WS] Message received:', message.type)
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as DailyOperationEvent
+        console.log('[WS] Message received:', message.type)
 
-          if (message.type === 'SNAPSHOT') {
-            applySnapshot(message.payload)
-            return
-          }
-          // ... resto igual
-        } catch (err) {
-          console.error('[WS] Parse error:', err)
-          setError('Se recibió un evento inválido desde operación diaria.')
+        if (message.type === 'SNAPSHOT') {
+          applySnapshot(message.payload)
+          return
         }
+        // ... resto igual
+      } catch (err) {
+        console.error('[WS] Parse error:', err)
+        setError('Se recibió un evento inválido desde operación diaria.')
       }
+    }
 
-      return () => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.close()
-        }
+    return () => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close()
       }
-    }, [applySnapshot])
+    }
+  }, [applySnapshot])
 
   const activeSegments = useMemo(() => {
     return segments.filter(
@@ -556,15 +575,15 @@ export default function DailyOperationPage() {
       (acc, segment) => acc + (segment.capacidad ?? 0),
       0
     )
-  
+
     const capacityPct = totalCapacity > 0 ? (totalCargo * 100) / totalCapacity : 0
     const activePct = totalFlights > 0 ? (totalActive * 100) / totalFlights : 0
-  
+
     const shipmentProgressPct = shipmentSummary?.total
       ? ((shipmentSummary.delivered + shipmentSummary.inTransit + shipmentSummary.assigned) * 100) /
-        shipmentSummary.total
+      shipmentSummary.total
       : 0
-  
+
     let totalWarehouseOcupacion = 0
     let totalWarehouseCapacidad = 0
     Object.values(warehouseSnapshot).forEach((w) => {
@@ -629,7 +648,7 @@ export default function DailyOperationPage() {
           : undefined,
     }))
   }, [activeSegments, currentMinute, ranges])
-  
+
   const upcomingFlightItems = useMemo(() => {
     return upcomingSegments.map((segment) => ({
       flightId: segment.flightId,
@@ -650,7 +669,7 @@ export default function DailyOperationPage() {
           : undefined,
     }))
   }, [upcomingSegments, currentMinute, ranges])
-  
+
   const airportItems = useMemo(() => {
     const airportFlightTimings = buildAirportFlightTimings(segments, currentMinute)
 
@@ -673,7 +692,7 @@ export default function DailyOperationPage() {
         : undefined,
     }))
   }, [airports, currentMinute, ranges, segments, warehouseSnapshot])
-  
+
   const lastSyncLabel = formatDateTime(lastSyncAt)
 
   const handleSelectFlight = (flightId: number) => {
@@ -743,6 +762,43 @@ export default function DailyOperationPage() {
   const handleMapFlightDetailRequest = useCallback((flightId: number) => {
     handleMapFlightPreview(flightId)
   }, [handleMapFlightPreview])
+
+  // Filtramos y mapeamos los envíos de la operación diaria
+  const filterShipmentsByOriginDestino = useCallback(
+    (items: ShipmentCrudDto[]) => {
+      const originQuery = shipmentOriginFilter.trim().toLowerCase()
+      const destinoQuery = shipmentDestinationFilter.trim().toLowerCase()
+
+      return items.filter((item) => {
+        const matchesOrigin = !originQuery || (item.origen ?? '').toLowerCase().includes(originQuery)
+        const matchesDestino = !destinoQuery || (item.destino ?? '').toLowerCase().includes(destinoQuery)
+        return matchesOrigin && matchesDestino
+      }).map(item => ({
+        // Mapeamos para que coincida con lo que espera EntityExplorer (EnvioDetalleDto)
+        codigoPedido: item.codigoPedido,
+        origen: item.origen,
+        destino: item.destino,
+        cantidadMaletas: item.cantidad,
+        estado: item.status
+      }))
+    },
+    [shipmentOriginFilter, shipmentDestinationFilter]
+  )
+
+  const shipmentsPlanificados = useMemo(
+    () => filterShipmentsByOriginDestino(liveShipments.filter(s => s.status === 'PENDING' || s.status === 'ASSIGNED')),
+    [filterShipmentsByOriginDestino, liveShipments]
+  )
+
+  const shipmentsEnVuelo = useMemo(
+    () => filterShipmentsByOriginDestino(liveShipments.filter(s => s.status === 'IN_TRANSIT')),
+    [filterShipmentsByOriginDestino, liveShipments]
+  )
+
+  const shipmentsEntregados = useMemo(
+    () => filterShipmentsByOriginDestino(liveShipments.filter(s => s.status === 'DELIVERED')),
+    [filterShipmentsByOriginDestino, liveShipments]
+  )
 
   return (
     <div className="daily-operation-page">
@@ -858,6 +914,15 @@ export default function DailyOperationPage() {
           entityFocusRequest={entityFocusRequest}
           showCancelledDetails={showCancelledDetails}
           onShowCancelledDetailsChange={setShowCancelledDetails}
+          shipmentsPlanificados={shipmentsPlanificados}
+          shipmentsEnVuelo={shipmentsEnVuelo}
+          shipmentsEntregados={shipmentsEntregados}
+          shipmentOriginFilter={shipmentOriginFilter}
+          onShipmentOriginFilterChange={setShipmentOriginFilter}
+          shipmentDestinationFilter={shipmentDestinationFilter}
+          onShipmentDestinationFilterChange={setShipmentDestinationFilter}
+          selectedShipmentCategory={selectedShipmentCategory}
+          onSelectedShipmentCategoryChange={setSelectedShipmentCategory}
         />
       </section>
     </div>

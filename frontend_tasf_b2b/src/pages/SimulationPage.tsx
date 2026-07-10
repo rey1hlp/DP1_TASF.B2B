@@ -434,6 +434,11 @@ export default function SimulationPage() {
 
   const handleSearchShipment = async (codigo: string) => {
     if (!codigo || !simId) return
+    if (selectedShipmentRoute && selectedShipmentRoute.codigoPedido === codigo) {
+      setSelectedShipmentRoute(null);
+      setShipmentSearchError(null);
+      return; // Corta la ejecución aquí
+    }
     try {
       setShipmentSearchError(null)
       const route = await fetchShipmentRoute(simId, codigo)
@@ -1013,7 +1018,7 @@ export default function SimulationPage() {
             </div>
           </section>
 
-          <section 
+          <section
             className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''} ${isMapFullscreen ? 'is-fullscreen' : ''}`}
             style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
           >
@@ -1112,7 +1117,7 @@ export default function SimulationPage() {
               onShowCancelledDetailsChange={setShowCancelledDetails}
             />
           </section>
-          
+
           <SimulationReportModal
             isOpen={isReportModalOpen}
             onClose={() => {
