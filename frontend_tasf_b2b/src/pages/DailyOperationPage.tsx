@@ -842,6 +842,9 @@ export default function DailyOperationPage() {
             shipmentSearchError={shipmentSearchError}
             isFullscreen={isMapFullscreen}
             isPanelCollapsed={isPanelCollapsed}
+
+            selectedContinent={mapFilters.warehouses.text.continentQuery}
+
             onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
             onSearchShipment={handleSearchShipment}
             onClearShipmentRoute={() => {

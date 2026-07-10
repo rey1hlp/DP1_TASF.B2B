@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+// [NUEVO] Importamos el tipo de GeoJSON de TypeScript para tipar correctamente el estado del continente.
+// Si no tienes @types/geojson instalado, ejecuta: npm install -D @types/geojson
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
 import { Calendar, CalendarClock, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
@@ -103,6 +105,9 @@ export type MapViewProps = {
   realDurationLabel?: string
   isPaused?: boolean
   cancelledFlightTraces?: CancelledFlightTrace[]
+  // [NUEVO] Continente seleccionado desde los filtros externos.
+  // Puede ser un nombre de continente (ej. 'South America'), 'ALL' para mostrar todos, o null para ninguno.
+  selectedContinent?: string | null
   onAirportDetailRequest?: (codigoOaci: string) => void
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
@@ -309,6 +314,8 @@ export default function MapView({
   realDurationLabel,
   isPaused = false,
   cancelledFlightTraces,
+  // [NUEVO] Prop recibida desde el padre con el continente activo en los filtros.
+  selectedContinent,
   onAirportDetailRequest,
   onAirportPreview,
   onFlightDetailRequest,
@@ -350,6 +357,9 @@ export default function MapView({
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const cancelledRouteLayerRef = useRef<L.LayerGroup | null>(null)
   const ghostLayerRef = useRef<L.LayerGroup | null>(null)
+  // [NUEVO] Ref para la capa GeoJSON del continente seleccionado.
+  // Guardamos la referencia para poder limpiarla/reemplazarla al cambiar de continente.
+  const continentLayerRef = useRef<L.GeoJSON | null>(null)
   const planeMarkersRef = useRef<Map<number, L.Marker>>(new Map())
   // 👻 Memoria temporal de vuelos recién aterrizados (para el efecto "fantasma")
   const prevSegmentsMapRef = useRef<Map<number, FlightSegmentDto>>(new Map())
@@ -363,6 +373,59 @@ export default function MapView({
     () => new Set((cancelledFlightTraces ?? []).map((trace) => trace.flightId)),
     [cancelledFlightTraces],
   )
+
+  // [NUEVO] Filtra el archivo continents.json para extraer solo el/los feature(s) que coincidan
+  // con el continente seleccionado. Retorna null si no hay selección activa o si es 'ALL'.
+  //
+  // IMPORTANTE: este hook asume que tienes un archivo en tu proyecto en:
+  //   src/data/continents.json  (o la ruta que uses en tu proyecto)
+  // con la estructura GeoJSON estándar donde cada feature tiene:
+  //   feature.properties.CONTINENT  (string con el nombre del continente en inglés)
+  //
+  // Ejemplo de uso del import estático (recomendado con Vite/Webpack):
+  //   import continentsData from '../data/continents.json'
+  // y luego pasarlo como parámetro al useMemo.
+  //
+  // Aquí el dato se importa dinámicamente para que el módulo sea autocontenido,
+  // pero puedes cambiar a import estático si tu bundler lo soporta.
+  const [continentsGeoJSON, setContinentsGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null)
+
+  useEffect(() => {
+    // Carga el archivo GeoJSON una sola vez al montar el componente.
+    // Ajusta la ruta según dónde coloques tu archivo continents.json.
+    import('../data/continents.json')
+      .then((module) => {
+        setContinentsGeoJSON(module.default as GeoJSON.FeatureCollection)
+      })
+      .catch((err) => {
+        console.warn('[MapView] No se pudo cargar continents.json:', err)
+      })
+  }, [])
+
+  // Filtra los features del GeoJSON para obtener solo el polígono del continente activo.
+  // Devuelve null cuando:
+  //   - No hay dato cargado todavía
+  //   - selectedContinent es null o 'ALL' (sin resaltado)
+  const continentFeatureCollection = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!continentsGeoJSON || !selectedContinent || selectedContinent === 'ALL') {
+      return null
+    }
+
+    const matchingFeatures = continentsGeoJSON.features.filter(
+      (feature) =>
+        feature.properties?.CONTINENT?.toLowerCase() === selectedContinent.toLowerCase()
+    )
+
+    if (matchingFeatures.length === 0) {
+      return null
+    }
+
+    // Devolvemos un FeatureCollection válido con solo los features del continente elegido.
+    return {
+      type: 'FeatureCollection',
+      features: matchingFeatures,
+    }
+  }, [continentsGeoJSON, selectedContinent])
 
   useEffect(() => {
     if (!selectedShipmentRoute?.consultaMaleta || !selectedShipmentRoute.codigoMaleta) {
@@ -536,9 +599,9 @@ export default function MapView({
       try {
         const result = simId
           ? await getSimulationShipmentsByFlight(simId, activeFlightId, {
-              planId: previewFlight?.planId,
-              salidaMin: previewFlight?.salidaMin,
-            })
+            planId: previewFlight?.planId,
+            salidaMin: previewFlight?.salidaMin,
+          })
           : await getShipmentsByFlight(activeFlightId)
 
         if (!cancelled) {
@@ -858,6 +921,10 @@ export default function MapView({
       }
     }, 0)
 
+    // [NUEVO] El continentLayerRef NO se inicializa aquí porque la capa GeoJSON se crea y destruye
+    // dinámicamente en su propio useEffect (ver abajo). Al no añadirla aquí primero,
+    // se garantiza que quede por debajo de los aeropuertos y aviones en el orden de capas de Leaflet.
+
     airportLayerRef.current = L.layerGroup().addTo(map)
     planeLayerRef.current = L.layerGroup().addTo(map)
     routeLayerRef.current = L.layerGroup().addTo(map)
@@ -866,6 +933,54 @@ export default function MapView({
 
     mapRef.current = map
   }, [])
+
+  // [NUEVO] Efecto que dibuja o limpia la capa de resaltado del continente en el mapa.
+  //
+  // Se ejecuta cada vez que cambia `continentFeatureCollection` (lo que ocurre cuando el usuario
+  // cambia el filtro de continente en la UI).
+  //
+  // Estrategia de re-renderizado:
+  //   1. Eliminamos la capa GeoJSON anterior del mapa si existe.
+  //   2. Si hay un feature collection válido, creamos una nueva capa L.geoJSON y la añadimos.
+  //   3. Guardamos la referencia en continentLayerRef para poder limpiarla en el siguiente render.
+  //
+  // La capa se inserta DEBAJO de los aeropuertos y aviones (zIndex del pane por defecto: ~200)
+  // para no tapar los marcadores existentes.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) {
+      return
+    }
+
+    // Limpiamos la capa anterior para evitar polígonos duplicados al cambiar de continente.
+    if (continentLayerRef.current) {
+      continentLayerRef.current.remove()
+      continentLayerRef.current = null
+    }
+
+    // Si no hay continente seleccionado (null o 'ALL'), simplemente no dibujamos nada.
+    if (!continentFeatureCollection) {
+      return
+    }
+
+    // Creamos la nueva capa GeoJSON con estilo semitransparente.
+    // fillOpacity: 0.12  → relleno azul muy sutil para no opacar el mapa base.
+    // weight: 1.5        → borde fino pero visible.
+    // dashArray          → guión para distinguirlo de rutas de vuelo sólidas.
+    const layer = L.geoJSON(continentFeatureCollection, {
+      style: {
+        color: '#3b82f6',        // Azul (Tailwind blue-500) para el borde
+        weight: 1.5,
+        opacity: 0.7,
+        fillColor: '#3b82f6',   // Mismo azul para el relleno
+        fillOpacity: 0.12,       // 12% de opacidad → efecto muy suave, no invasivo
+        dashArray: '4 4',        // Borde punteado sutil
+      },
+    }).addTo(map)
+
+    // Guardamos referencia para poder limpiarlo en el próximo ciclo.
+    continentLayerRef.current = layer
+  }, [continentFeatureCollection])
 
   useEffect(() => {
     const map = mapRef.current
