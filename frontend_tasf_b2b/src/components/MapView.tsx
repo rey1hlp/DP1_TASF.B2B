@@ -91,6 +91,16 @@ const PLANE_MARKER_HITBOX_SIZE = 40
 const AIRPORT_ICON_VIEWBOX = '10 12 80 76'
 const AIRPORT_PATH =
   'm75.652 25.203c0 0.046875-0.003906 0.097656-0.015625 0.14062h3.4453l1.9688 5.0156h-12.297l1.9688-5.0156h3.4453c-0.007813-0.046875-0.015625-0.09375-0.015625-0.14062v-9.9727c0-0.41406 0.33594-0.75 0.75-0.75 0.41406 0 0.75 0.33594 0.75 0.75zm-26.406 39.086h12.051v-4.6992h-46.461v4.6992zm0.75 1.5v9.1172h9.6797v-9.1172zm-11.18 0v9.1172h9.6797v-9.1172zm-11.18 0v9.1172h9.6797v-9.1172zm-11.184 9.1133h9.6797v-9.1172h-9.6797zm9.6797 10.617v-9.1172h-9.6797v9.1172zm11.184 0v-9.1172h-9.6797v9.1172zm11.18 0v-9.1172h-9.6797v9.1172zm11.18 0v-9.1172h-9.6797v9.1172zm22.809-4.6992c-4.9414 0.007813-10.562 0.26953-15.391 0h-5.918v4.6992h26.574v-4.6992zm-3.1133-37.637h-8.9336l-2.5469 36.137h14.023zm6.5039-5.6602h-21.941l0.89453 4.1602h20.156zm-3.7227-5.6641h-19.438l0.89453 4.1641h22.586l0.89453-4.1641zm-53.438 2.1836 6.6719-2.9805c-1.2266-0.57422-3.457-1.6289-6.6641-3.2031-0.10156-0.050781-0.20703-0.074219-0.30469-0.074219-0.085938 0-0.17578 0.023438-0.26172 0.0625l-3.7656 1.9648zm10.324 15.359c-0.015624 0.09375-0.050781 0.17969-0.10156 0.24219s-0.11719 0.11719-0.20703 0.15625l-1.7344 0.79297-1.9375 0.89062c-0.13672-0.71875-0.24219-1.3359-0.35547-1.9961-0.25391-1.4727-0.54688-3.1875-1.5391-8.0391-0.082031-0.40625-0.47656-0.66406-0.88281-0.58203l-0.089844 0.023437-4.0625 1.3828c-5.2773 1.7969-6.1875 2.1055-9.25 3.0938-0.48438 0.15625-0.98047 0.14844-1.4297-0.003907-0.44531-0.15234-0.83984-0.44531-1.125-0.86719l-0.24219-0.35547-3.75-5.8359c-0.046875-0.074219-0.078125-0.14844-0.085937-0.21875-0.007813-0.070313 0-0.15234 0.023437-0.23438l0.007813-0.027343c0.023437-0.070313 0.0625-0.13281 0.10547-0.17969 0.050782-0.054687 0.11719-0.097656 0.19531-0.13281l2.1602-0.89844c0.09375-0.039062 0.18359-0.054687 0.26562-0.042969 0.082032 0.007813 0.16797 0.039063 0.25 0.097657l4.1016 2.8008c0.23438 0.16016 0.52344 0.16797 0.76172 0.050781l24.48-10.934c1.125-0.50391 2.1172-0.68359 3.0039-0.57422 0.875 0.10156 1.6641 0.48828 2.4062 1.1211 0.15234 0.12891 0.34375 0.1875 0.52734 0.17969 0.78906-0.011719 1.4414 0.17188 1.9336 0.47656 0.39453 0.24609 0.67969 0.56641 0.83984 0.92578 0.15234 0.34375 0.19141 0.73047 0.10156 1.1172l-0.007812 0.027344c-0.09375 0.36719-0.30469 0.74219-0.65234 1.0938-0.42969 0.18359-0.90625 0.375-1.4219 0.57422-0.60156 0.23047-1.3164 0.49609-2.1367 0.78906l-7.6211 2.8906c-0.25781 0.097657-0.42969 0.32031-0.47656 0.57031z'
+const AIRPORT_MARKER_BASE_SIZE = 34
+const AIRPORT_MARKER_MIN_SIZE = 28
+const AIRPORT_MARKER_MAX_SIZE = 54
+const AIRPORT_MARKER_SELECTED_EXTRA_SIZE = 8
+const AIRPORT_ICON_BASE_VISUAL_SIZE = 20
+const AIRPORT_ICON_MIN_VISUAL_SIZE = 16
+const AIRPORT_ICON_MAX_VISUAL_SIZE = 34
+const AIRPORT_ICON_SELECTED_EXTRA_SIZE = 6
+const AIRPORT_ICON_BASE_ZOOM = 3
+const AIRPORT_ICON_ZOOM_SCALE_STEP = 0.12
 
 export type MapViewProps = {
   airports: AirportDto[]
@@ -148,6 +158,33 @@ function getPlaneIconVisualSize(zoom: number) {
   const scale = 1 + (safeZoom - PLANE_ICON_BASE_ZOOM) * PLANE_ICON_ZOOM_SCALE_STEP
   const size = Math.round(PLANE_ICON_BASE_VISUAL_SIZE * scale)
   return Math.max(PLANE_ICON_MIN_VISUAL_SIZE, Math.min(PLANE_ICON_MAX_VISUAL_SIZE, size))
+}
+
+function getAirportScaledSize(baseSize: number, minSize: number, maxSize: number, zoom: number) {
+  const safeZoom = Number.isFinite(zoom) ? zoom : AIRPORT_ICON_BASE_ZOOM
+  const scale = 1 + (safeZoom - AIRPORT_ICON_BASE_ZOOM) * AIRPORT_ICON_ZOOM_SCALE_STEP
+  const size = Math.round(baseSize * scale)
+  return Math.max(minSize, Math.min(maxSize, size))
+}
+
+function getAirportMarkerSize(zoom: number, isSelected: boolean) {
+  const baseSize = getAirportScaledSize(
+    AIRPORT_MARKER_BASE_SIZE,
+    AIRPORT_MARKER_MIN_SIZE,
+    AIRPORT_MARKER_MAX_SIZE,
+    zoom,
+  )
+  return baseSize + (isSelected ? AIRPORT_MARKER_SELECTED_EXTRA_SIZE : 0)
+}
+
+function getAirportIconVisualSize(zoom: number, isSelected: boolean) {
+  const baseSize = getAirportScaledSize(
+    AIRPORT_ICON_BASE_VISUAL_SIZE,
+    AIRPORT_ICON_MIN_VISUAL_SIZE,
+    AIRPORT_ICON_MAX_VISUAL_SIZE,
+    zoom,
+  )
+  return baseSize + (isSelected ? AIRPORT_ICON_SELECTED_EXTRA_SIZE : 0)
 }
 
 function toRad(value: number) {
@@ -268,10 +305,11 @@ function buildPlaneIcon(
 
 function buildAirportIcon(
   colors: { stroke: string; fill: string },
-  isSelected: boolean
+  isSelected: boolean,
+  zoom: number,
 ) {
-  const markerSize = isSelected ? 42 : 34
-  const iconSize = isSelected ? 26 : 20
+  const markerSize = getAirportMarkerSize(zoom, isSelected)
+  const iconSize = getAirportIconVisualSize(zoom, isSelected)
   const displayColors = isSelected ? SELECTED_AIRPORT_COLORS : colors
   const markerOpacity = isSelected ? 1 : 0.68
   const markerShadow = isSelected
@@ -1036,7 +1074,7 @@ export default function MapView({
         : resolveSemaphoreColor(percent, ranges)
       const isSelected = selectedAirportCode !== null && airport.codigoOaci === selectedAirportCode
 
-      const icon = buildAirportIcon(colors, isSelected)
+      const icon = buildAirportIcon(colors, isSelected, mapZoom)
       const marker = L.marker([airport.latitud, airport.longitud], {
         icon,
         pane: MAP_PANES.airport,
@@ -1073,7 +1111,7 @@ export default function MapView({
       })
       marker.addTo(airportLayerRef.current as L.LayerGroup)
     })
-  }, [airports, warehouseSnapshot, ranges, selectedAirportCode, onAirportPreview, previewAirportCode])
+  }, [airports, warehouseSnapshot, ranges, selectedAirportCode, mapZoom, onAirportPreview, previewAirportCode])
 
   useEffect(() => {
     if (!planeLayerRef.current) {
