@@ -78,10 +78,7 @@ export type SimulationControlsProps = {
 export default function SimulationControls({
   mode,
   onStart,
-  onPause,
-  onResume,
   isRunning,
-  isPaused,
   ranges,
   onRangesChange,
   mapFilters,
@@ -210,9 +207,6 @@ export default function SimulationControls({
                 <div className="buttons">
                   <button className="btn primary" onClick={() => onStart({ inicio, dias })} disabled={isRunning}>
                     {isRunning ? 'Ejecutando...' : mode === 'collapse' ? 'Iniciar hasta el colapso' : 'Iniciar'}
-                  </button>
-                  <button className="btn" onClick={isPaused ? onResume : onPause} disabled={!isRunning}>
-                    {isPaused ? 'Reanudar' : 'Pausar'}
                   </button>
                   <button className="btn ghost" disabled>
                     Exportar CSV

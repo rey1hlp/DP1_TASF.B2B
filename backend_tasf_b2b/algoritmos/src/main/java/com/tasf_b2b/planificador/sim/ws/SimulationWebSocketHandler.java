@@ -66,6 +66,9 @@ public class SimulationWebSocketHandler extends TextWebSocketHandler {
             registry.pauseSimulation(simId.toString());
         } else if ("resume".equalsIgnoreCase(action)) {
             registry.resumeSimulation(simId.toString());
+        } else if ("speed".equalsIgnoreCase(action)) {
+            double speedMinPerSec = root.path("speedMinPerSec").asDouble(0);
+            registry.setSimulationSpeed(simId.toString(), session, speedMinPerSec);
         }
     }
 

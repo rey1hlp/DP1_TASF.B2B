@@ -25,6 +25,7 @@ interface SimulationContextType {
   meta: WsInitMessage | WsAppendMessage | null
   pause: () => void
   resume: () => void
+  setSpeed: (speedMinPerSec: number) => void
 }
 
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined)
@@ -39,7 +40,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     localCompleted: false,
     ranges: { greenMax: 30, amberMax: 70 },
   })
-  const { status, statusMessage, currentMinute, segments, meta, pause, resume } =
+  const { status, statusMessage, currentMinute, segments, meta, pause, resume, setSpeed } =
     useSimulationSocket(simulation.simId)
 
   const resetSimulation = () => {
@@ -68,6 +69,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         meta,
         pause,
         resume,
+        setSpeed,
       }}
     >
       {children}

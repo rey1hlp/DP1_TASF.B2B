@@ -88,6 +88,13 @@ export function useSimulationSocket(simId: string | null) {
     socketRef.current.send(JSON.stringify({ type: 'control', action }))
   }
 
+  const setSpeed = (speedMinPerSec: number) => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      return
+    }
+    socketRef.current.send(JSON.stringify({ type: 'control', action: 'speed', speedMinPerSec }))
+  }
+
   return {
     status,
     statusMessage,
@@ -96,5 +103,6 @@ export function useSimulationSocket(simId: string | null) {
     meta,
     pause: () => sendControl('pause'),
     resume: () => sendControl('resume'),
+    setSpeed,
   }
 }

@@ -14,6 +14,7 @@ import {
 import MapView from '../components/MapView'
 import SimulationControls, { type ShipmentCategory } from '../components/SimulationControls'
 import FlightCancellationPanel, { type CancellableFlightItem } from '../components/FlightCancellationPanel'
+import SimulationPlaybackChip from '../components/SimulationPlaybackChip'
 import UploadEnvios from '../components/UploadEnvios'
 import type { AppLayoutContext } from '../layouts/AppLayout'
 import { useSimulationContext } from '../contexts/SimulationContext'
@@ -96,8 +97,9 @@ async function fetchSimulationShipments(simId: string, minute: number | null): P
 export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [flightCatalog, setFlightCatalog] = useState<FlightCrudDto[]>([])
-  const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays())
+  const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays({ includeVirtual: false }))
   const [virtualCancelLoadingId, setVirtualCancelLoadingId] = useState<number | null>(null)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [error, setError] = useState<string | null>(null)
 
   // 💾 UI States inicializados desde sessionStorage para recordar "dónde te quedaste"
@@ -213,7 +215,12 @@ export default function SimulationPage() {
     meta,
     pause,
     resume,
+    setSpeed,
   } = useSimulationContext()
+
+  const speedBaseMinPerSec = meta?.speedMinPerSec && meta.speedMinPerSec > 0
+    ? meta.speedMinPerSec
+    : 4
 
   const {
     simId,
@@ -349,7 +356,7 @@ export default function SimulationPage() {
 
   useEffect(() => {
     const syncCancelledDays = () => {
-      setCancelledDays(readCancelledFlightDays())
+      setCancelledDays(readCancelledFlightDays({ simulationId: simId ?? null }))
     }
 
     syncCancelledDays()
@@ -360,7 +367,7 @@ export default function SimulationPage() {
       window.removeEventListener('tasf:cancelled-flight-days-updated', syncCancelledDays)
       window.removeEventListener('storage', syncCancelledDays)
     }
-  }, [])
+  }, [simId])
 
   const handleEnviosUploaded = (key: string) => {
     setEnviosKey(key)
@@ -387,6 +394,7 @@ export default function SimulationPage() {
     setShipmentsEnVuelo([])
     setShipmentsEntregados([])
     setIsReportModalOpen(false)
+    setPlaybackSpeed(1)
 
     try {
       await new Promise<void>((resolve) => {
@@ -1027,6 +1035,11 @@ export default function SimulationPage() {
     setSimulation((prev) => ({ ...prev, ranges: newRanges }))
   }
 
+  const handlePlaybackSpeedChange = useCallback((speed: number) => {
+    setPlaybackSpeed(speed)
+    setSpeed(speedBaseMinPerSec * speed)
+  }, [setSpeed, speedBaseMinPerSec])
+
   const handleVirtualCancelFlight = useCallback(async (flight: CancellableFlightItem, reason: string) => {
     if (!simId || displayMinute === null || !simulatedDateKey) {
       setError('La simulacion debe estar activa para registrar una cancelacion virtual.')
@@ -1052,6 +1065,7 @@ export default function SimulationPage() {
         flightId: flight.id,
         fecha: effectiveDate,
         sourceType: 'VIRTUAL',
+        simulationId: simId,
         origen: flight.origen,
         destino: flight.destino,
         origenLat: flight.origenLat ?? undefined,
@@ -1061,7 +1075,7 @@ export default function SimulationPage() {
         salidaMin: departureMinuteOfDay,
         llegadaMin: departureMinuteOfDay + duration,
       })
-      setCancelledDays(readCancelledFlightDays())
+      setCancelledDays(readCancelledFlightDays({ simulationId: simId ?? null }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo registrar la cancelacion virtual'
       setError(msg)
@@ -1122,6 +1136,14 @@ export default function SimulationPage() {
             style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
           >
             <div className="map-placeholder">
+              <SimulationPlaybackChip
+                isPaused={status === 'PAUSED'}
+                isDisabled={!running || isPreparing}
+                speed={playbackSpeed}
+                onPause={pause}
+                onResume={resume}
+                onSpeedChange={handlePlaybackSpeedChange}
+              />
               <MapView
                 airports={mapAirports}
                 segments={mapSegments}
