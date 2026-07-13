@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
@@ -72,6 +72,7 @@ export type SimulationControlsProps = {
   onSelectedShipmentCategoryChange: (category: ShipmentCategory) => void
   showCancelledDetails?: boolean
   onShowCancelledDetailsChange?: (val: boolean) => void
+  flightCancellationPanel?: ReactNode
 }
 
 export default function SimulationControls({
@@ -117,6 +118,7 @@ export default function SimulationControls({
   onSelectedShipmentCategoryChange,
   showCancelledDetails,
   onShowCancelledDetailsChange,
+  flightCancellationPanel,
   onResizeStart,
 }: SimulationControlsProps & { onResizeStart?: (e: React.MouseEvent) => void }) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('config')
@@ -216,6 +218,8 @@ export default function SimulationControls({
                     Exportar CSV
                   </button>
                 </div>
+
+                {flightCancellationPanel}
               </>
             ) : null}
 

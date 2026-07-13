@@ -72,3 +72,13 @@ export const CANCELLED_ROUTE_STYLE = {
   lineJoin: 'round',
   pane: MAP_PANES.cancelledRoute,
 } satisfies L.PolylineOptions
+
+export const VIRTUAL_CANCELLED_ROUTE_STYLE = {
+  weight: 3,
+  color: '#d97706',
+  opacity: 1,
+  dashArray: '4, 8',
+  lineCap: 'round',
+  lineJoin: 'round',
+  pane: MAP_PANES.cancelledRoute,
+} satisfies L.PolylineOptions

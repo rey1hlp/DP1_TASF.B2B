@@ -3,6 +3,7 @@ import { getDayIndexFromDateString } from './time'
 
 export type CancelledFlightTrace = {
   flightId: number
+  sourceType?: 'REAL' | 'VIRTUAL'
   origenLat: number
   origenLon: number
   destinoLat: number
@@ -14,6 +15,7 @@ export type CancelledFlightTrace = {
 export type CancelledFlightDay = {
   flightId: number
   fecha: string
+  sourceType?: 'REAL' | 'VIRTUAL'
   origen?: string
   destino?: string
   origenLat?: number
@@ -72,11 +74,17 @@ export function readCancelledFlightDays(): CancelledFlightDay[] {
 
 export function appendCancelledFlightDay(entry: CancelledFlightDay) {
   const current = readCancelledFlightDays()
+  const sourceType = entry.sourceType ?? 'REAL'
   const next = [
-    ...current.filter((item) => !(item.flightId === entry.flightId && item.fecha.slice(0, 10) === entry.fecha.slice(0, 10))),
+    ...current.filter((item) => !(
+      item.flightId === entry.flightId
+      && item.fecha.slice(0, 10) === entry.fecha.slice(0, 10)
+      && (item.sourceType ?? 'REAL') === sourceType
+    )),
     {
       flightId: entry.flightId,
       fecha: entry.fecha.slice(0, 10),
+      sourceType,
       origen: entry.origen,
       destino: entry.destino,
       origenLat: entry.origenLat,
@@ -124,6 +132,7 @@ export function buildCancelledFlightTraces(
     const offset = useAbsoluteMinuteIndices && referenceDayIndex !== null ? referenceDayIndex * 1440 : 0
     return [{
       flightId: item.flightId,
+      sourceType: item.sourceType ?? 'REAL',
       origenLat: item.origenLat,
       origenLon: item.origenLon,
       destinoLat: item.destinoLat,
@@ -168,6 +177,7 @@ export function buildCancelledFlightTraces(
 
     return [{
       flightId: flight.id,
+      sourceType: 'REAL',
       origenLat: origin.latitud,
       origenLon: origin.longitud,
       destinoLat: destination.latitud,

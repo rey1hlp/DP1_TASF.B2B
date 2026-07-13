@@ -613,6 +613,7 @@ public class DailyPlanningService {
                     for (Vuelo v : ruta.vuelos) {
                         PasoRutaDto paso = new PasoRutaDto();
                         paso.vueloId = v.id;
+                        paso.planId = v.idPlan;
                         paso.origen = v.origen;
                         paso.destino = v.destino;
                         paso.salidaMin = minuteOfDay(v.salidaMin);

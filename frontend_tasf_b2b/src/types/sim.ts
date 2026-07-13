@@ -141,6 +141,102 @@ export type PageResponse<T> = {
   size: number
 }
 
+export type SimulationReportMetric = {
+  key: string
+  label: string
+  value?: number | null
+  text?: string | null
+}
+
+export type SimulationReportCancellation = {
+  id: number
+  flightId: number
+  fechaCancelacion: string
+  sourceType?: 'REAL' | 'VIRTUAL' | string
+  contextMinute?: number | null
+  reason?: string | null
+  flightCodigo?: string | null
+  origen?: string | null
+  destino?: string | null
+  salida?: string | null
+  llegada?: string | null
+}
+
+export type SimulationVirtualCancellation = {
+  id?: number
+  simulationId?: string
+  flightId: number
+  fecha?: string | null
+  contextDate?: string | null
+  contextMinuteOfDay?: number | null
+  contextMinute?: number | null
+  reason?: string | null
+  fechaCancelacion?: string | null
+  createdAt?: string | null
+  flightCodigo?: string | null
+  origen?: string | null
+  destino?: string | null
+}
+
+export type SimulationReportSummary = {
+  snapshotId: number
+  simulationId: string
+  versionNumber: number
+  inicio?: string | null
+  fin?: string | null
+  diaMin?: number | null
+  diaMax?: number | null
+  diasExtra?: number | null
+  totalEnvios: number
+  totalMaletas: number
+  speedMinPerSec?: number | null
+  createdAt: string
+  metrics: SimulationReportMetric[]
+  routeStatusCounts: Record<string, number>
+  impactTypeCounts: Record<string, number>
+  impactedRoutes: number
+  cancellations: SimulationReportCancellation[]
+}
+
+export type SimulationReportRoute = {
+  id: number
+  codigoPedido: string
+  estado: string
+  tiempoTotalHoras: number
+  ingresoMin: number
+  totalMaletas?: number | null
+  origen?: string | null
+  destino?: string | null
+  stepsCount: number
+  impacted: boolean
+}
+
+export type SimulationReportRouteStep = {
+  stepIndex: number
+  vueloId: number
+  planId?: number | null
+  origen: string
+  destino: string
+  salidaMin: number
+  llegadaMin: number
+  salidaAlmacenDestinoMin: number
+}
+
+export type SimulationReportRouteDetail = SimulationReportRoute & {
+  steps: SimulationReportRouteStep[]
+}
+
+export type SimulationReportImpact = {
+  id: number
+  codigoPedido: string
+  impactType: 'REASSIGNED' | 'WITHOUT_ROUTE' | 'CANCELLED_SEGMENT_REMOVED' | string
+  previousEstado?: string | null
+  currentEstado?: string | null
+  detail?: string | null
+  flightId?: number | null
+  fechaCancelacion?: string | null
+}
+
 export type AirportCrudDto = {
   id?: number
   codigoOaci: string

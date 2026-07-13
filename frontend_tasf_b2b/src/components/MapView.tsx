@@ -30,6 +30,7 @@ import {
   SHIPMENT_ROUTE_ACTIVE_STYLE,
   SHIPMENT_ROUTE_DONE_STYLE,
   SHIPMENT_ROUTE_PENDING_STYLE,
+  VIRTUAL_CANCELLED_ROUTE_STYLE,
 } from '../utils/mapRouteStyles'
 import { buildGeodesicArcPoints, getGeodesicPointAtProgress, type MapLatLng } from '../utils/mapGeodesic'
 import MapFloatingCard from './MapFloatingCard'
@@ -1364,18 +1365,25 @@ export default function MapView({
       const endDate = formatDateFromDayIndex(Math.floor(trace.llegadaMin / 1440))
       const endTime = formatClockFromMinute(trace.llegadaMin)
 
+      const isVirtual = trace.sourceType === 'VIRTUAL'
+
       L.polyline(
         buildRouteArc(trace.origenLat, trace.origenLon, trace.destinoLat, trace.destinoLon),
-        CANCELLED_ROUTE_STYLE
+        isVirtual ? VIRTUAL_CANCELLED_ROUTE_STYLE : CANCELLED_ROUTE_STYLE
       ).bindTooltip(
         `<div style="text-align: center;">
-          <strong>Vuelo Cancelado</strong><br/>
+          <strong>${isVirtual ? 'Cancelacion virtual' : 'Vuelo cancelado'}</strong><br/>
           Origen: ${originAirport}<br/>
           Destino: ${destAirport}<br/>
           Inicio: ${startDate} - ${startTime}<br/>
           Fin: ${endDate} - ${endTime}
         </div>`,
-        { direction: 'auto', sticky: true, permanent: showCancelledDetails, className: 'cancelled-flight-tooltip' }
+        {
+          direction: 'auto',
+          sticky: true,
+          permanent: showCancelledDetails,
+          className: isVirtual ? 'cancelled-flight-tooltip virtual' : 'cancelled-flight-tooltip',
+        }
       ).addTo(layer)
     })
   }, [cancelledFlightTraces, currentMinute, cancelledFlightIdSet, airports, showCancelledDetails])

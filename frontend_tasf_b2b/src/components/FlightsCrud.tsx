@@ -211,6 +211,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       appendCancelledFlightDay({
         flightId: id,
         fecha,
+        sourceType: 'REAL',
         origen: flight?.origenOaci,
         destino: flight?.destinoOaci,
         origenLat: origin?.latitud,

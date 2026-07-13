@@ -312,11 +312,17 @@ public class SimulationRegistry {
         }
         for (SessionContext ctx : set) {
             if (ctx.session.getId().equals(session.getId())) {
+                long now = Instant.now().toEpochMilli();
                 if (!ctx.relojActivo) {
                     ctx.relojActivo = true;
-                    ctx.inicioMs = Instant.now().toEpochMilli();
-                    ctx.speedMinPerSec = speedMinPerSec;
+                    ctx.inicioMs = now;
+                    ctx.pausedElapsedMs = 0L;
+                } else if (ctx.paused) {
+                    ctx.inicioMs = now - ctx.pausedElapsedMs;
                 }
+                ctx.speedMinPerSec = speedMinPerSec;
+                ctx.finalizado = false;
+                ctx.paused = false;
                 return;
             }
         }
@@ -502,7 +508,7 @@ public class SimulationRegistry {
                         seg.destinoLon = meta.destinoLon;
                     } else {
                         seg.flightId = paso.vueloId;
-                        seg.planId = -1;
+                        seg.planId = paso.planId != null ? paso.planId : -1;
                         seg.origen = paso.origen;
                         seg.destino = paso.destino;
                         seg.salidaMin = paso.salidaMin;

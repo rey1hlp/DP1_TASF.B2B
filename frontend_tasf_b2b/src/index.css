@@ -987,6 +987,77 @@ body {
   border-color: #1b3d6b;
 }
 
+.btn.danger {
+  background: #b42318;
+  border-color: #b42318;
+  color: #ffffff;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.flight-cancellation-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #d9e4f4;
+}
+
+.flight-cancellation-header h3 {
+  margin: 0;
+  color: #1f2f46;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.flight-cancellation-header p {
+  margin: 4px 0 0;
+  color: #62728a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.flight-cancellation-detail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d9e4f4;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.flight-cancellation-detail div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.flight-cancellation-detail span {
+  color: #6b7a90;
+  font-size: 11px;
+}
+
+.flight-cancellation-detail strong {
+  color: #1f2f46;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.flight-cancellation-note,
+.flight-cancellation-empty {
+  border-radius: 8px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #7c2d12;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 9px 10px;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3246,16 +3317,32 @@ body {
   font-family: inherit !important;
 }
 
+.cancelled-flight-tooltip.virtual {
+  border-color: #d97706 !important;
+}
+
 /* Override leaflet default tooltip border arrow colors */
 .cancelled-flight-tooltip.leaflet-tooltip-right::before {
   border-right-color: #ef4444 !important;
 }
+.cancelled-flight-tooltip.virtual.leaflet-tooltip-right::before {
+  border-right-color: #d97706 !important;
+}
 .cancelled-flight-tooltip.leaflet-tooltip-left::before {
   border-left-color: #ef4444 !important;
+}
+.cancelled-flight-tooltip.virtual.leaflet-tooltip-left::before {
+  border-left-color: #d97706 !important;
 }
 .cancelled-flight-tooltip.leaflet-tooltip-top::before {
   border-top-color: #ef4444 !important;
 }
+.cancelled-flight-tooltip.virtual.leaflet-tooltip-top::before {
+  border-top-color: #d97706 !important;
+}
 .cancelled-flight-tooltip.leaflet-tooltip-bottom::before {
   border-bottom-color: #ef4444 !important;
+}
+.cancelled-flight-tooltip.virtual.leaflet-tooltip-bottom::before {
+  border-bottom-color: #d97706 !important;
 }

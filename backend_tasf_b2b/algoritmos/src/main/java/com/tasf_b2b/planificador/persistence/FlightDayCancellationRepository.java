@@ -9,4 +9,5 @@ public interface FlightDayCancellationRepository extends JpaRepository<FlightDay
     boolean existsByFlightIdAndFechaCancelacion(Long flightId, LocalDate fecha);
     Optional<FlightDayCancellationEntity> findByFlightIdAndFechaCancelacion(Long flightId, LocalDate fecha);
     List<FlightDayCancellationEntity> findByFlightId(Long flightId);
+    List<FlightDayCancellationEntity> findByFechaCancelacionBetween(LocalDate inicio, LocalDate fin);
 }

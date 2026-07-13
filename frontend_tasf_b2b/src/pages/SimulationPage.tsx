@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
 import type { AirportDto, FlightCrudDto } from '../types/sim'
-import { API_BASE, authFetch, fetchAirports, listFlights, startSimulation, fetchCategorizedShipments, type EnvioDetalleDto } from '../services/api'
+import {
+  API_BASE,
+  authFetch,
+  createSimulationVirtualCancellation,
+  fetchAirports,
+  fetchCategorizedShipments,
+  listFlights,
+  startSimulation,
+  type EnvioDetalleDto,
+} from '../services/api'
 import MapView from '../components/MapView'
 import SimulationControls, { type ShipmentCategory } from '../components/SimulationControls'
+import FlightCancellationPanel, { type CancellableFlightItem } from '../components/FlightCancellationPanel'
 import UploadEnvios from '../components/UploadEnvios'
 import type { AppLayoutContext } from '../layouts/AppLayout'
 import { useSimulationContext } from '../contexts/SimulationContext'
@@ -17,7 +27,7 @@ import {
 import { resolveAirportContinent } from '../utils/continents'
 import { resolveSemaphoreColor, resolveSemaphoreLevel } from '../utils/semaphore'
 import FlightDetailPage from './FlightDetailPage'
-import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
+import { appendCancelledFlightDay, buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
 import SimulationReportModal from '../components/SimulationReportModal'
 
 import {
@@ -36,6 +46,7 @@ import {
 
 export type PasoRutaDto = {
   vueloId: number
+  planId?: number | null
   origen: string
   destino: string
   salidaMin: number
@@ -86,6 +97,7 @@ export default function SimulationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [flightCatalog, setFlightCatalog] = useState<FlightCrudDto[]>([])
   const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays())
+  const [virtualCancelLoadingId, setVirtualCancelLoadingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // 💾 UI States inicializados desde sessionStorage para recordar "dónde te quedaste"
@@ -816,6 +828,55 @@ export default function SimulationPage() {
     })
   }, [activeSegments, ranges])
 
+  const virtualCancellationFlights = useMemo<CancellableFlightItem[]>(() => {
+    if (displayMinute === null || !simulatedDateKey) {
+      return []
+    }
+
+    const currentMinuteOfDay = Math.floor(displayMinute % 1440)
+    const currentDayIndex = Math.floor(displayMinute / 1440)
+    const byPlan = new Map<number, CancellableFlightItem>()
+
+    for (const segment of cappedSegments) {
+      if (segment.planId === null || segment.planId === undefined) {
+        continue
+      }
+      if (segment.salidaMin <= displayMinute) {
+        continue
+      }
+      if (byPlan.has(segment.planId)) {
+        continue
+      }
+
+      const departureMinuteOfDay = Math.floor(segment.salidaMin % 1440)
+      const cutoffMinute = departureMinuteOfDay - 60
+      const effectiveDayIndex = currentMinuteOfDay > cutoffMinute ? currentDayIndex + 1 : currentDayIndex
+      const effectiveDate = formatIsoDateFromDayIndex(effectiveDayIndex)
+      const segmentDate = formatIsoDateFromDayIndex(Math.floor(segment.salidaMin / 1440))
+
+      byPlan.set(segment.planId, {
+        id: segment.planId,
+        instanceId: segment.flightId,
+        origen: segment.origen,
+        destino: segment.destino,
+        salidaMin: segment.salidaMin,
+        llegadaMin: segment.llegadaMin,
+        carga: segment.carga,
+        capacidad: segment.capacidad,
+        origenLat: segment.origenLat,
+        origenLon: segment.origenLon,
+        destinoLat: segment.destinoLat,
+        destinoLon: segment.destinoLon,
+        effectiveDate,
+        effectiveNote: effectiveDate !== segmentDate
+          ? 'Por la regla de 1 hora, esta cancelacion se aplicara a la siguiente ocurrencia del plan.'
+          : 'La cancelacion se aplicara solo a esta fecha simulada.',
+      })
+    }
+
+    return [...byPlan.values()].sort((a, b) => a.salidaMin - b.salidaMin).slice(0, 120)
+  }, [cappedSegments, displayMinute, simulatedDateKey])
+
   const airportItems = useMemo(() => {
     const airportFlightTimings = buildAirportFlightTimings(cappedSegments, displayMinute)
 
@@ -966,6 +1027,49 @@ export default function SimulationPage() {
     setSimulation((prev) => ({ ...prev, ranges: newRanges }))
   }
 
+  const handleVirtualCancelFlight = useCallback(async (flight: CancellableFlightItem, reason: string) => {
+    if (!simId || displayMinute === null || !simulatedDateKey) {
+      setError('La simulacion debe estar activa para registrar una cancelacion virtual.')
+      return
+    }
+
+    setVirtualCancelLoadingId(flight.id)
+    setError(null)
+    try {
+      const contextMinuteOfDay = Math.floor(displayMinute % 1440)
+      const saved = await createSimulationVirtualCancellation(simId, flight.id, {
+        fecha: simulatedDateKey,
+        contextDate: simulatedDateKey,
+        contextMinuteOfDay,
+        reason,
+      })
+
+      const effectiveDate = saved.fechaCancelacion?.slice(0, 10) ?? flight.effectiveDate ?? simulatedDateKey
+      const departureMinuteOfDay = Math.floor(flight.salidaMin % 1440)
+      const duration = Math.max(0, flight.llegadaMin - flight.salidaMin)
+
+      appendCancelledFlightDay({
+        flightId: flight.id,
+        fecha: effectiveDate,
+        sourceType: 'VIRTUAL',
+        origen: flight.origen,
+        destino: flight.destino,
+        origenLat: flight.origenLat ?? undefined,
+        origenLon: flight.origenLon ?? undefined,
+        destinoLat: flight.destinoLat ?? undefined,
+        destinoLon: flight.destinoLon ?? undefined,
+        salidaMin: departureMinuteOfDay,
+        llegadaMin: departureMinuteOfDay + duration,
+      })
+      setCancelledDays(readCancelledFlightDays())
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo registrar la cancelacion virtual'
+      setError(msg)
+    } finally {
+      setVirtualCancelLoadingId(null)
+    }
+  }, [displayMinute, simId, simulatedDateKey])
+
   return (
     <>
       {!enviosKey ? (
@@ -1112,11 +1216,24 @@ export default function SimulationPage() {
               onSelectedShipmentCategoryChange={setSelectedShipmentCategory}
               showCancelledDetails={showCancelledDetails}
               onShowCancelledDetailsChange={setShowCancelledDetails}
+              flightCancellationPanel={
+                <FlightCancellationPanel
+                  title="Cancelaciones simuladas"
+                  description="Registra indisponibilidades virtuales para recalcular esta simulacion sin afectar la operacion real."
+                  flights={virtualCancellationFlights}
+                  disabled={!simId || displayMinute === null || status === 'RUNNING'}
+                  loadingFlightId={virtualCancelLoadingId}
+                  emptyMessage="Inicia la simulacion para ver los proximos planes de vuelo cancelables."
+                  submitLabel="Cancelar en simulacion"
+                  onCancel={handleVirtualCancelFlight}
+                />
+              }
             />
           </section>
           
           <SimulationReportModal
             isOpen={isReportModalOpen}
+            simId={simId}
             onClose={() => {
               setIsReportModalOpen(false)
               if (localCompleted || status === 'COMPLETED') {
