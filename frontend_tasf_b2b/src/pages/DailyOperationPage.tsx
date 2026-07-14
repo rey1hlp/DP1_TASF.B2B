@@ -175,7 +175,7 @@ async function fetchShipmentFromDb(codigo: string): Promise<ShipmentCrudDto | nu
 export default function DailyOperationPage() {
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [flightCatalog, setFlightCatalog] = useState<FlightCrudDto[]>([])
-  const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays())
+  const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays({ includeVirtual: false }))
   const [segments, setSegments] = useState<MapSegment[]>([])
   const [warehouseSnapshot, setWarehouseSnapshot] = useState<WarehouseSnapshot>({})
   const [shipmentSummary, setShipmentSummary] = useState<ShipmentSummary | null>(null)
@@ -374,7 +374,7 @@ export default function DailyOperationPage() {
 
   useEffect(() => {
     const syncCancelledDays = () => {
-      setCancelledDays(readCancelledFlightDays())
+      setCancelledDays(readCancelledFlightDays({ includeVirtual: false }))
     }
 
     syncCancelledDays()

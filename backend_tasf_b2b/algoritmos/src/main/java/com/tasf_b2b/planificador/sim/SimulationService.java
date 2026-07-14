@@ -30,6 +30,8 @@ import com.tasf_b2b.planificador.utils.RutaResolver;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationEntity;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationRepository;
+import com.tasf_b2b.planificador.persistence.SimulationVirtualCancellationEntity;
+import com.tasf_b2b.planificador.persistence.SimulationVirtualCancellationRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,7 +65,9 @@ public class SimulationService {
     private final AirportRepository airportRepository;
     private final FlightRepository flightRepository;
     private final FlightDayCancellationRepository cancellationRepository;
+    private final SimulationVirtualCancellationRepository virtualCancellationRepository;
     private final com.tasf_b2b.planificador.persistence.ShipmentRepository shipmentRepository;
+    private final SimulationReportPersistenceService simulationReportPersistenceService;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
     public SimulationService(
@@ -72,14 +76,18 @@ public class SimulationService {
         AirportRepository airportRepository,
         FlightRepository flightRepository,
         FlightDayCancellationRepository cancellationRepository,
-        com.tasf_b2b.planificador.persistence.ShipmentRepository shipmentRepository
+        SimulationVirtualCancellationRepository virtualCancellationRepository,
+        com.tasf_b2b.planificador.persistence.ShipmentRepository shipmentRepository,
+        SimulationReportPersistenceService simulationReportPersistenceService
     ) {
         this.registry = registry;
         this.simulationRunRepository = simulationRunRepository;
         this.airportRepository = airportRepository;
         this.flightRepository = flightRepository;
         this.cancellationRepository = cancellationRepository;
+        this.virtualCancellationRepository = virtualCancellationRepository;
         this.shipmentRepository = shipmentRepository;
+        this.simulationReportPersistenceService = simulationReportPersistenceService;
     }
     
     public java.util.List<com.tasf_b2b.planificador.api.dto.ShipmentCrudDto> getShipmentsByFlight(
@@ -734,12 +742,14 @@ public class SimulationService {
                     diaMax + Math.max(0, diasExtra)
                 );
 
-            List<FlightDayCancellationEntity> cancellations = cancellationRepository.findAll();
+            List<AppliedFlightCancellation> cancellations =
+                cargarCancelacionesAplicables(simulationId, diaMin, diaMax + Math.max(0, diasExtra));
             java.util.Set<String> cancelledKeys = new java.util.HashSet<>();
-            for (FlightDayCancellationEntity c : cancellations) {
+            for (AppliedFlightCancellation c : cancellations) {
                 String dateStr = c.fechaCancelacion.format(DateTimeFormatter.BASIC_ISO_DATE);
                 cancelledKeys.add(c.flightId + "_" + dateStr);
             }
+            cancellations = filtrarCancelacionesAplicadas(vuelos, cancellations);
             vuelos.removeIf(v -> cancelledKeys.contains(v.idPlan + "_" + v.fecha));
     
             log.info(
@@ -867,6 +877,8 @@ public class SimulationService {
                 stored.finalizadoEn = LocalDateTime.now();
                 simulationRunRepository.save(stored);
             }
+
+            persistirReporteSimulacion(simulationId, data, cancellations);
     
             registry.markReady(simulationId, data);
     
@@ -968,7 +980,7 @@ public class SimulationService {
                     return;
                 }
 
-                ChunkResult chunk = planificarChunk(request, util, envios, aeropuertos, planes, blockStartText, blockEndText);
+                ChunkResult chunk = planificarChunk(simulationId, request, util, envios, aeropuertos, planes, blockStartText, blockEndText);
                 if (chunk == null) {
                     registry.markFailed(simulationId, "No fue posible calcular el bloque incremental de colapso.");
                     actualizarRunFinal(simulationId, SimulationState.Status.FAILED.name(), accumulated);
@@ -988,6 +1000,13 @@ public class SimulationService {
                 }
 
                 actualizarRunIntermedio(simulationId, accumulated, chunk);
+                persistirReporteSimulacion(
+                    simulationId,
+                    accumulated,
+                    accumulated != null
+                        ? cargarCancelacionesAplicables(simulationId, accumulated.diaMin, accumulated.diaMax + Math.max(0, accumulated.diasExtra))
+                        : java.util.List.of()
+                );
 
                 if (!chunk.factible) {
                     long totalEnviosAcumulados = accumulated != null ? accumulated.totalEnvios : chunk.data.totalEnvios;
@@ -1022,39 +1041,45 @@ public class SimulationService {
 
     public void refreshActiveSimulations(String triggerType, String detail) {
         for (String simulationId : registry.getSimulationIds()) {
-            SimulationState state = registry.get(simulationId);
-            if (state == null || state.data == null || state.request == null) {
-                continue;
-            }
-            if (state.status != SimulationState.Status.READY && state.status != SimulationState.Status.PAUSED) {
-                continue;
-            }
-            boolean wasPaused = state.status == SimulationState.Status.PAUSED;
-            state.startPausedAfterReady = wasPaused;
-            log.info(
-                "[SIM:{}] refresh requested triggerType={} detail={} wasPaused={}",
-                simulationId,
-                triggerType,
-                detail,
-                wasPaused
-            );
-            registry.pauseSimulation(simulationId);
-            registry.markRunning(simulationId, "Recalculando por " + triggerType);
-            SimulationRequest request = state.request;
-            executor.submit(() -> {
-                try {
-                    ejecutar(simulationId, request);
-                    if (wasPaused) {
-                        registry.pauseSimulation(simulationId);
-                    }
-                } catch (Exception ex) {
-                    log.error("[SIM:{}] refresh failed triggerType={} detail={}", simulationId, triggerType, detail, ex);
-                }
-            });
+            refreshSimulation(simulationId, triggerType, detail);
         }
     }
 
+    public boolean refreshSimulation(String simulationId, String triggerType, String detail) {
+        SimulationState state = registry.get(simulationId);
+        if (state == null || state.data == null || state.request == null) {
+            return false;
+        }
+        if (state.status != SimulationState.Status.READY && state.status != SimulationState.Status.PAUSED) {
+            return false;
+        }
+        boolean wasPaused = state.status == SimulationState.Status.PAUSED;
+        state.startPausedAfterReady = wasPaused;
+        log.info(
+            "[SIM:{}] refresh requested triggerType={} detail={} wasPaused={}",
+            simulationId,
+            triggerType,
+            detail,
+            wasPaused
+        );
+        registry.pauseSimulation(simulationId);
+        registry.markRunning(simulationId, "Recalculando por " + triggerType);
+        SimulationRequest request = state.request;
+        executor.submit(() -> {
+            try {
+                ejecutar(simulationId, request);
+                if (wasPaused) {
+                    registry.pauseSimulation(simulationId);
+                }
+            } catch (Exception ex) {
+                log.error("[SIM:{}] refresh failed triggerType={} detail={}", simulationId, triggerType, detail, ex);
+            }
+        });
+        return true;
+    }
+
     private ChunkResult planificarChunk(
+        String simulationId,
         SimulationRequest request,
         UtilArchivos util,
         List<Envio> envios,
@@ -1070,12 +1095,14 @@ public class SimulationService {
             int diasExtra = resolverDiasExtra(request, maxSlaHoras);
 
             List<Vuelo> vuelos = util.instanciarVuelosPorRango(planes, diaMin, diaMax + Math.max(0, diasExtra));
-            List<FlightDayCancellationEntity> cancellations = cancellationRepository.findAll();
+            List<AppliedFlightCancellation> cancellations =
+                cargarCancelacionesAplicables(simulationId, diaMin, diaMax + Math.max(0, diasExtra));
             java.util.Set<String> cancelledKeys = new java.util.HashSet<>();
-            for (FlightDayCancellationEntity c : cancellations) {
+            for (AppliedFlightCancellation c : cancellations) {
                 String dateStr = c.fechaCancelacion.format(DateTimeFormatter.BASIC_ISO_DATE);
                 cancelledKeys.add(c.flightId + "_" + dateStr);
             }
+            cancellations = filtrarCancelacionesAplicadas(vuelos, cancellations);
             vuelos.removeIf(v -> cancelledKeys.contains(v.idPlan + "_" + v.fecha));
 
             log.info(
@@ -1163,6 +1190,67 @@ public class SimulationService {
             stored.fin = data.fin;
         }
         simulationRunRepository.save(stored);
+    }
+
+    private List<AppliedFlightCancellation> cargarCancelacionesAplicables(String simulationId, int diaMin, int diaMax) {
+        LocalDate inicio = LocalDate.ofEpochDay(diaMin);
+        LocalDate fin = LocalDate.ofEpochDay(Math.max(diaMin, diaMax));
+        List<AppliedFlightCancellation> result = new ArrayList<>();
+        for (FlightDayCancellationEntity cancellation : cancellationRepository.findByFechaCancelacionBetween(inicio, fin)) {
+            result.add(new AppliedFlightCancellation(
+                cancellation.flightId,
+                cancellation.fechaCancelacion,
+                AppliedFlightCancellation.SOURCE_REAL,
+                null,
+                null
+            ));
+        }
+        if (simulationId != null && !simulationId.isBlank()) {
+            for (SimulationVirtualCancellationEntity cancellation
+                : virtualCancellationRepository.findBySimulationIdAndFechaCancelacionBetween(simulationId, inicio, fin)) {
+                result.add(new AppliedFlightCancellation(
+                    cancellation.flightId,
+                    cancellation.fechaCancelacion,
+                    AppliedFlightCancellation.SOURCE_VIRTUAL,
+                    cancellation.contextMinute,
+                    cancellation.reason
+                ));
+            }
+        }
+        return result;
+    }
+
+    private List<AppliedFlightCancellation> filtrarCancelacionesAplicadas(
+        List<Vuelo> vuelos,
+        List<AppliedFlightCancellation> cancellations
+    ) {
+        if (vuelos == null || vuelos.isEmpty() || cancellations == null || cancellations.isEmpty()) {
+            return java.util.List.of();
+        }
+        java.util.Set<String> availableKeys = vuelos.stream()
+            .map(v -> v.idPlan + "_" + v.fecha)
+            .collect(java.util.stream.Collectors.toSet());
+        return cancellations.stream()
+            .filter(c -> {
+                if (c == null || c.flightId == null || c.fechaCancelacion == null) {
+                    return false;
+                }
+                String dateStr = c.fechaCancelacion.format(DateTimeFormatter.BASIC_ISO_DATE);
+                return availableKeys.contains(c.flightId + "_" + dateStr);
+            })
+            .toList();
+    }
+
+    private void persistirReporteSimulacion(
+        String simulationId,
+        SimulationData data,
+        List<AppliedFlightCancellation> cancellations
+    ) {
+        try {
+            simulationReportPersistenceService.persistSnapshot(simulationId, data, cancellations);
+        } catch (Exception ex) {
+            log.warn("[SIM:{}] Simulation report persistence failed; continuing", simulationId, ex);
+        }
     }
 
     private static class ChunkResult {
@@ -1263,7 +1351,7 @@ public class SimulationService {
                 for (int j = 0; j < ruta.vuelos.size(); j++) {
                     Vuelo v = ruta.vuelos.get(j);
                     PasoRutaDto paso = new PasoRutaDto();
-                    paso.vueloId = v.id; paso.origen = v.origen; paso.destino = v.destino;
+                    paso.vueloId = v.id; paso.planId = v.idPlan; paso.origen = v.origen; paso.destino = v.destino;
                     paso.salidaMin = v.salidaMin; paso.llegadaMin = v.llegadaMin;
                     paso.salidaAlmacenDestinoMin = ruta.salidasAlmacenMin[j];
                     dto.ruta.add(paso);

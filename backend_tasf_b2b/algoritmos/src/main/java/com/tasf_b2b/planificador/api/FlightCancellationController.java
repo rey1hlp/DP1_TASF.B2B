@@ -91,11 +91,11 @@ public class FlightCancellationController {
         cancellationRepository.save(entity);
         boolean simulationContextUsed = hasSimulationContext(dto);
         log.info(
-            "[FLIGHT_CANCEL] cancel saved flightId={} requestedDate={} effectiveDate={} cutoff={} contextDate={} contextMinuteOfDay={} simulationContextUsed={}",
+            "[FLIGHT_CANCEL] cancel saved flightId={} requestedDate={} effectiveDate={} cutoffMinute={} contextDate={} contextMinuteOfDay={} simulationContextUsed={}",
             id,
             requestedDate,
             effectiveDate,
-            flight.salida != null ? flight.salida.toLocalTime().minusHours(1) : null,
+            flight.salida != null ? flight.salida.toLocalTime().getHour() * 60 + flight.salida.toLocalTime().getMinute() - 60 : null,
             dto.contextDate,
             dto.contextMinuteOfDay,
             simulationContextUsed
@@ -177,13 +177,15 @@ public class FlightCancellationController {
             referenceTime = now.toLocalTime();
         }
 
-        LocalTime cutoff = flight.salida.toLocalTime().minusHours(1);
-        if (referenceTime.isAfter(cutoff)) {
+        LocalTime departureTime = flight.salida.toLocalTime();
+        int referenceMinute = referenceTime.getHour() * 60 + referenceTime.getMinute();
+        int cutoffMinute = departureTime.getHour() * 60 + departureTime.getMinute() - 60;
+        if (referenceMinute > cutoffMinute) {
             log.info(
-                "[FLIGHT_CANCEL] effective date moved to next day by cutoff baseDate={} referenceTime={} cutoff={} usingSimulationClock={}",
+                "[FLIGHT_CANCEL] effective date moved to next day by cutoff baseDate={} referenceTime={} cutoffMinute={} usingSimulationClock={}",
                 baseDate,
                 referenceTime,
-                cutoff,
+                cutoffMinute,
                 usingSimulationClock
             );
             return baseDate.plusDays(1);

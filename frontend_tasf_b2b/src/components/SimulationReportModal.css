@@ -14,9 +14,9 @@
 
 .simulation-report-modal {
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   width: 90%;
-  max-width: 600px;
+  max-width: 980px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -50,6 +50,12 @@
   font-size: 1.25rem;
   color: #1e293b;
   font-weight: 600;
+}
+
+.simulation-report-modal-header p {
+  margin: 0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.9rem;
 }
 
 .close-button {
@@ -117,6 +123,18 @@
   padding-bottom: 0.5rem;
 }
 
+.report-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.report-section-header h3 {
+  margin-bottom: 0;
+}
+
 .report-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -148,12 +166,165 @@
   word-break: break-word;
 }
 
+.report-inline-state,
+.report-inline-error {
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+}
+
+.report-inline-state {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.report-inline-error,
+.report-export-error {
+  color: #991b1b;
+}
+
+.report-inline-error {
+  background: #fee2e2;
+}
+
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.report-filters input,
+.report-filters select,
+.report-section-header select {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #0f172a;
+  font: inherit;
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
+}
+
+.report-checkbox {
+  align-items: center;
+  color: #334155;
+  display: inline-flex;
+  font-size: 0.9rem;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.report-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.report-table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  min-width: 680px;
+  width: 100%;
+}
+
+.report-table caption {
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.report-table th,
+.report-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.report-link-button {
+  background: transparent;
+  border: 0;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.report-pager {
+  align-items: center;
+  color: #475569;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 0.85rem;
+}
+
+.report-pager button,
+.btn-secondary {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 36px;
+  padding: 0.55rem 0.9rem;
+}
+
+.report-pager button:disabled,
+.btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.report-bar-item {
+  margin-bottom: 8px;
+}
+
+.report-bar-label {
+  color: #5f6f8e;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.report-bar-track {
+  background: #e0e5eb;
+  border-radius: 4px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.report-bar-fill {
+  background: #2563eb;
+  height: 100%;
+}
+
 .simulation-report-modal-footer {
   padding: 1.25rem 1.5rem;
   border-top: 1px solid #e2e8f0;
   display: flex;
+  gap: 0.75rem;
   justify-content: flex-end;
+  align-items: center;
   background: #f8fafc;
+}
+
+.report-export-error {
+  margin-right: auto;
 }
 
 .btn-primary {
@@ -169,4 +340,21 @@
 
 .btn-primary:hover {
   background: #1d4ed8;
+}
+
+@media (max-width: 720px) {
+  .simulation-report-modal {
+    max-height: 96vh;
+    width: 96%;
+  }
+
+  .report-section-header,
+  .simulation-report-modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .report-export-error {
+    margin-right: 0;
+  }
 }

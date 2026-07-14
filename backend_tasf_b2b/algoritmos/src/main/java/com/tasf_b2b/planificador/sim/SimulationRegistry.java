@@ -173,6 +173,44 @@ public class SimulationRegistry {
         broadcastStatus(simulationId, "READY", null);
     }
 
+    public void setSimulationSpeed(String simulationId, WebSocketSession session, double speedMinPerSec) {
+        if (speedMinPerSec <= 0) {
+            return;
+        }
+        Set<SessionContext> set = sessions.get(simulationId);
+        if (set == null || set.isEmpty()) {
+            return;
+        }
+        long now = Instant.now().toEpochMilli();
+        for (SessionContext ctx : new ArrayList<>(set)) {
+            if (session != null && !ctx.session.getId().equals(session.getId())) {
+                continue;
+            }
+            long elapsedMs = ctx.paused ? ctx.pausedElapsedMs : Math.max(0L, now - ctx.inicioMs);
+            double previousSpeed = ctx.speedMinPerSec > 0 ? ctx.speedMinPerSec : speedMinPerSec;
+            long adjustedElapsedMs = Math.max(
+                0L,
+                Math.round((elapsedMs * previousSpeed) / speedMinPerSec)
+            );
+            ctx.speedMinPerSec = speedMinPerSec;
+            if (ctx.paused) {
+                ctx.pausedElapsedMs = adjustedElapsedMs;
+            } else {
+                ctx.inicioMs = now - adjustedElapsedMs;
+            }
+            ctx.relojActivo = true;
+            ctx.finalizado = false;
+            log.info(
+                "[SIM:{}] speed updated sessionId={} speedMinPerSec={} elapsedMs={} adjustedElapsedMs={}",
+                simulationId,
+                ctx.session.getId(),
+                speedMinPerSec,
+                elapsedMs,
+                adjustedElapsedMs
+            );
+        }
+    }
+
     public void unregisterSession(String simulationId, WebSocketSession session) {
         Set<SessionContext> set = sessions.get(simulationId);
         if (set == null) {
@@ -312,11 +350,17 @@ public class SimulationRegistry {
         }
         for (SessionContext ctx : set) {
             if (ctx.session.getId().equals(session.getId())) {
+                long now = Instant.now().toEpochMilli();
                 if (!ctx.relojActivo) {
                     ctx.relojActivo = true;
-                    ctx.inicioMs = Instant.now().toEpochMilli();
-                    ctx.speedMinPerSec = speedMinPerSec;
+                    ctx.inicioMs = now;
+                    ctx.pausedElapsedMs = 0L;
+                } else if (ctx.paused) {
+                    ctx.inicioMs = now - ctx.pausedElapsedMs;
                 }
+                ctx.speedMinPerSec = speedMinPerSec;
+                ctx.finalizado = false;
+                ctx.paused = false;
                 return;
             }
         }
@@ -502,7 +546,7 @@ public class SimulationRegistry {
                         seg.destinoLon = meta.destinoLon;
                     } else {
                         seg.flightId = paso.vueloId;
-                        seg.planId = -1;
+                        seg.planId = paso.planId != null ? paso.planId : -1;
                         seg.origen = paso.origen;
                         seg.destino = paso.destino;
                         seg.salidaMin = paso.salidaMin;

@@ -5,8 +5,13 @@ import type {
   FlightCrudDto,
   PageResponse,
   ShipmentCrudDto,
+  SimulationReportImpact,
+  SimulationReportRoute,
+  SimulationReportRouteDetail,
+  SimulationReportSummary,
   SimulationRequest,
   SimulationResponse,
+  SimulationVirtualCancellation,
 } from '../types/sim'
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
@@ -538,6 +543,59 @@ export async function getSimulationShipmentCodes(simId: string): Promise<string[
   return res.json()
 }
 
+export async function createSimulationVirtualCancellation(
+  simId: string,
+  flightId: number,
+  payload: Pick<SimulationVirtualCancellation, 'fecha' | 'contextDate' | 'contextMinuteOfDay' | 'reason'>
+): Promise<SimulationVirtualCancellation> {
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/flights/${flightId}/virtual-cancel`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        flightId,
+        fecha: payload.fecha,
+        contextDate: payload.contextDate ?? null,
+        contextMinuteOfDay: payload.contextMinuteOfDay ?? null,
+        reason: payload.reason ?? null,
+      }),
+    }
+  )
+  if (res.status === 409) {
+    throw new Error('Este vuelo ya está cancelado virtualmente para ese día')
+  }
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Simulación o vuelo no encontrado')
+    throw new Error('No se pudo cancelar el vuelo en la simulación')
+  }
+  return res.json()
+}
+
+export async function removeSimulationVirtualCancellation(
+  simId: string,
+  flightId: number,
+  fecha: string
+): Promise<void> {
+  const params = new URLSearchParams({ fecha })
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/flights/${flightId}/virtual-cancel?${params.toString()}`,
+    { method: 'DELETE' }
+  )
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Cancelación virtual no encontrada')
+    throw new Error('No se pudo retirar la cancelación virtual')
+  }
+}
+
+export async function listSimulationVirtualCancellations(simId: string): Promise<SimulationVirtualCancellation[]> {
+  const res = await authFetch(`${API_BASE}/api/simulations/${encodeURIComponent(simId)}/virtual-cancellations`)
+  if (!res.ok) {
+    throw new Error('No se pudieron cargar las cancelaciones virtuales')
+  }
+  return res.json()
+}
+
 export async function getShipmentByCode(code: string): Promise<ShipmentCrudDto | null> {
   const params = new URLSearchParams({ page: '0', size: '1', query: code })
   const res = await authFetch(`${API_BASE}/api/db/shipments?${params.toString()}`)
@@ -582,6 +640,78 @@ export async function fetchCategorizedShipments(
   }
 
   return res.json();
+}
+
+export async function fetchSimulationReportSummary(simId: string): Promise<SimulationReportSummary> {
+  const res = await authFetch(`${API_BASE}/api/simulations/${encodeURIComponent(simId)}/report`)
+  if (!res.ok) {
+    throw new Error('No se pudo obtener el reporte de simulación')
+  }
+  return res.json()
+}
+
+export async function fetchSimulationReportRoutes(
+  simId: string,
+  opts: { page?: number; size?: number; estado?: string; query?: string; impactedOnly?: boolean } = {}
+): Promise<PageResponse<SimulationReportRoute>> {
+  const params = new URLSearchParams({
+    page: String(opts.page ?? 0),
+    size: String(opts.size ?? 10),
+    impactedOnly: String(Boolean(opts.impactedOnly)),
+  })
+  if (opts.estado) params.set('estado', opts.estado)
+  if (opts.query) params.set('query', opts.query)
+  const res = await authFetch(`${API_BASE}/api/simulations/${encodeURIComponent(simId)}/report/routes?${params.toString()}`)
+  if (!res.ok) {
+    throw new Error('No se pudieron obtener las rutas del reporte')
+  }
+  return res.json()
+}
+
+export async function fetchSimulationReportRouteDetail(
+  simId: string,
+  codigoPedido: string
+): Promise<SimulationReportRouteDetail> {
+  const res = await authFetch(
+    `${API_BASE}/api/simulations/${encodeURIComponent(simId)}/report/routes/${encodeURIComponent(codigoPedido)}`
+  )
+  if (!res.ok) {
+    throw new Error('No se pudo obtener el detalle de la ruta')
+  }
+  return res.json()
+}
+
+export async function fetchSimulationReportImpacts(
+  simId: string,
+  opts: { page?: number; size?: number; type?: string } = {}
+): Promise<PageResponse<SimulationReportImpact>> {
+  const params = new URLSearchParams({
+    page: String(opts.page ?? 0),
+    size: String(opts.size ?? 10),
+  })
+  if (opts.type) params.set('type', opts.type)
+  const res = await authFetch(`${API_BASE}/api/simulations/${encodeURIComponent(simId)}/report/impacts?${params.toString()}`)
+  if (!res.ok) {
+    throw new Error('No se pudieron obtener las rutas impactadas')
+  }
+  return res.json()
+}
+
+export async function downloadSimulationReportCsv(simId: string, section = 'all'): Promise<Blob> {
+  const params = new URLSearchParams({ section })
+  const res = await authFetch(`${API_BASE}/api/simulations/${encodeURIComponent(simId)}/report/export.csv?${params.toString()}`)
+  if (!res.ok) {
+    throw new Error('No se pudo exportar el reporte CSV')
+  }
+  return res.blob()
+}
+
+export async function downloadSimulationReportPdf(simId: string): Promise<Blob> {
+  const res = await authFetch(`${API_BASE}/api/simulations/${encodeURIComponent(simId)}/report/export.pdf`)
+  if (!res.ok) {
+    throw new Error('No se pudo exportar el reporte PDF')
+  }
+  return res.blob()
 }
 
 export interface OperationAlertDto {
