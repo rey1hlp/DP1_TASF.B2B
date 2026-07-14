@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
-import MapFiltersPanel from './MapFiltersPanel'
 import {
   formatInteger,
 } from '../utils/time'
@@ -212,11 +211,6 @@ export default function DailyOperationControls({
             </div>
 
             <SemaphoreRangeControl ranges={ranges} onChange={onRangesChange} />
-            <MapFiltersPanel
-              filters={mapFilters}
-              onChange={onMapFiltersChange}
-              visibleCounts={mapFilterCounts}
-            />
 
             <div className="buttons">
               <button className="btn primary" onClick={onRefresh} disabled={loading}>
@@ -361,6 +355,9 @@ export default function DailyOperationControls({
 	            flightFilters={flightTextFilters}
 	            onFlightFiltersChange={onFlightTextFiltersChange}
 	            ranges={ranges}
+              mapFilters={mapFilters}
+              onMapFiltersChange={onMapFiltersChange}
+              mapFilterCounts={mapFilterCounts}
 	            airportFilters={airportTextFilters}
             onAirportFiltersChange={onAirportTextFiltersChange}
             onSearchShipment={onSearchShipment}

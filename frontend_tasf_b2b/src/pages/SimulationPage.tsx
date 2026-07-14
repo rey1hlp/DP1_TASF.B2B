@@ -1030,6 +1030,8 @@ export default function SimulationPage() {
                 cancelledFlightTraces={cancelledFlightTraces}
                 warehouseSnapshot={warehouseSnapshot}
                 ranges={ranges}
+                mapFilters={mapFilters}
+                onMapFiltersChange={setMapFilters}
                 selectedFlightId={selectedFlightId}
                 selectedAirportCode={selectedAirportCode}
                 selectedShipmentRoute={selectedShipmentRoute}

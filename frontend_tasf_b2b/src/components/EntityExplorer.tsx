@@ -1,8 +1,8 @@
-import { ArrowUpDown, Clock3, Filter, Search } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { ArrowUpDown, CircleDot, Clock3, Filter, MapPin, Package, PlaneLanding, PlaneTakeoff, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
-import type { AirportTextFilters, FlightTextFilters } from '../types/mapFilters'
+import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
 import type { ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
 import { getShipmentsByFlight, getSimulationShipmentsByFlight, type EnvioDetalleDto } from '../services/api'
@@ -18,9 +18,12 @@ import {
   formatMinuteRange,
   formatOperationalMinuteRange,
   formatPercent,
+  formatShipmentDepartureTime,
+  formatSimDateTimeFromMinute,
   formatSimMinute,
+  parseShipmentDepartureMinute,
 } from '../utils/time'
-import { resolveSemaphoreColor, type SemaphoreRanges } from '../utils/semaphore'
+import { resolveSemaphoreColor, resolveSemaphoreLevel, type SemaphoreRanges } from '../utils/semaphore'
 
 export type EntityTab = 'flights' | 'shipments' | 'airports'
 
@@ -83,6 +86,9 @@ export type EntityExplorerProps = {
   flightFilters: FlightTextFilters
   onFlightFiltersChange: (filters: FlightTextFilters) => void
   ranges: SemaphoreRanges
+  mapFilters: MapSemaphoreFilters
+  onMapFiltersChange: (filters: MapSemaphoreFilters) => void
+  mapFilterCounts?: { flights: number; warehouses: number }
   airportFilters: AirportTextFilters
   onAirportFiltersChange: (filters: AirportTextFilters) => void
   onSearchShipment: (codigo: string) => void
@@ -130,12 +136,19 @@ type FlightSortKey =
   | 'destination'
 
 type AirportSortKey = 'occupancy' | 'departure' | 'arrival'
+type ShipmentSortKey =
+  | 'default'
+  | 'bags'
+  | 'departure'
+  | 'delivery'
+  | 'origin'
+  | 'destination'
 
 type SortDirection = 'asc' | 'desc'
 
-const ITEM_HEIGHT = 44
 const FLIGHT_ITEM_HEIGHT = 96
-const AIRPORT_ITEM_HEIGHT = 92
+const AIRPORT_ITEM_HEIGHT = 106
+const SHIPMENT_ITEM_HEIGHT = 106
 const AIRPORT_PREVIEW_LIMIT = 30
 
 const FLIGHT_SORT_DEFAULT_DIRECTION: Record<FlightSortKey, SortDirection> = {
@@ -153,6 +166,23 @@ const AIRPORT_SORT_DEFAULT_DIRECTION: Record<AirportSortKey, SortDirection> = {
   arrival: 'asc',
 }
 
+const SHIPMENT_SORT_DEFAULT_DIRECTION: Record<ShipmentSortKey, SortDirection> = {
+  default: 'asc',
+  bags: 'desc',
+  departure: 'asc',
+  delivery: 'asc',
+  origin: 'asc',
+  destination: 'asc',
+}
+
+const SEMAPHORE_OPTIONS: Array<{ value: SemaphoreFilterLevel; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'green', label: 'Verde' },
+  { value: 'amber', label: 'Ámbar' },
+  { value: 'red', label: 'Rojo' },
+  { value: 'unknown', label: 'Sin datos' },
+]
+
 function getFlightOccupancyValue(flight: EntityFlightItem) {
   if (typeof flight.porcentaje === 'number') return flight.porcentaje
   if (
@@ -163,6 +193,23 @@ function getFlightOccupancyValue(flight: EntityFlightItem) {
     return (flight.carga * 100) / flight.capacidad
   }
 
+  return null
+}
+
+function getSemaphoreOptionPercent(
+  option: (typeof SEMAPHORE_OPTIONS)[number],
+  ranges: SemaphoreRanges,
+) {
+  return getSemaphoreFilterPercent(option.value, ranges)
+}
+
+function getSemaphoreFilterPercent(
+  value: SemaphoreFilterLevel,
+  ranges: SemaphoreRanges,
+) {
+  if (value === 'green') return 0
+  if (value === 'amber') return ranges.greenMax + 1
+  if (value === 'red') return ranges.amberMax + 1
   return null
 }
 
@@ -252,6 +299,9 @@ export default function EntityExplorer({
   flightFilters,
   onFlightFiltersChange,
   ranges,
+  mapFilters,
+  onMapFiltersChange,
+  mapFilterCounts,
   airportFilters,
   onAirportFiltersChange,
   onSearchShipment,
@@ -285,8 +335,16 @@ export default function EntityExplorer({
   const [flightSortDirection, setFlightSortDirection] = useState<SortDirection>('asc')
   const [isFlightFilterMenuOpen, setIsFlightFilterMenuOpen] = useState(false)
   const [isFlightSortMenuOpen, setIsFlightSortMenuOpen] = useState(false)
+  const [isFlightSemaphoreMenuOpen, setIsFlightSemaphoreMenuOpen] = useState(false)
   const [airportSortKey, setAirportSortKey] = useState<AirportSortKey>('occupancy')
   const [airportSortDirection, setAirportSortDirection] = useState<SortDirection>('desc')
+  const [isAirportFilterMenuOpen, setIsAirportFilterMenuOpen] = useState(false)
+  const [isAirportSortMenuOpen, setIsAirportSortMenuOpen] = useState(false)
+  const [isAirportSemaphoreMenuOpen, setIsAirportSemaphoreMenuOpen] = useState(false)
+  const [shipmentSortKey, setShipmentSortKey] = useState<ShipmentSortKey>('default')
+  const [shipmentSortDirection, setShipmentSortDirection] = useState<SortDirection>('asc')
+  const [isShipmentFilterMenuOpen, setIsShipmentFilterMenuOpen] = useState(false)
+  const [isShipmentSortMenuOpen, setIsShipmentSortMenuOpen] = useState(false)
   const [shipmentQuery, setShipmentQuery] = useState("");
   const [expandedShipmentCode, setExpandedShipmentCode] = useState<string | null>(null);
 
@@ -335,6 +393,7 @@ export default function EntityExplorer({
     const codeQuery = flightFilters.codeQuery.trim().toLowerCase()
     const originQuery = flightFilters.originQuery.trim().toLowerCase()
     const destinationQuery = flightFilters.destinationQuery.trim().toLowerCase()
+    const semaphoreFilter = mapFilters.flights.semaphore
 
     return flights.filter((flight) => {
       if (codeQuery && !String(flight.flightId).toLowerCase().includes(codeQuery)) {
@@ -349,9 +408,16 @@ export default function EntityExplorer({
         return false
       }
 
+      if (
+        semaphoreFilter !== 'all' &&
+        resolveSemaphoreLevel(getFlightOccupancyValue(flight), ranges) !== semaphoreFilter
+      ) {
+        return false
+      }
+
       return true
     })
-  }, [flightFilters.codeQuery, flightFilters.destinationQuery, flightFilters.originQuery, flights]);
+  }, [flightFilters.codeQuery, flightFilters.destinationQuery, flightFilters.originQuery, flights, mapFilters.flights.semaphore, ranges]);
 
   const orderedFlights = useMemo(() => {
     if (flightSortKey === 'default') {
@@ -409,6 +475,8 @@ export default function EntityExplorer({
   const airportContinentQuery = airportFilters.continentQuery.trim().toLowerCase()
 
   const filteredAirports = useMemo(() => {
+    const semaphoreFilter = mapFilters.warehouses.semaphore
+
     return airports.filter((airport) => {
       if (airportCodeQuery && !airport.codigoOaci.toLowerCase().includes(airportCodeQuery)) {
         return false
@@ -416,14 +484,21 @@ export default function EntityExplorer({
 
       if (
         airportContinentQuery &&
-        (airport.continente ?? '').trim().toLowerCase() !== airportContinentQuery
+        !(airport.continente ?? '').trim().toLowerCase().includes(airportContinentQuery)
+      ) {
+        return false
+      }
+
+      if (
+        semaphoreFilter !== 'all' &&
+        resolveSemaphoreLevel(airport.porcentaje ?? null, ranges) !== semaphoreFilter
       ) {
         return false
       }
 
       return true
     })
-  }, [airportCodeQuery, airportContinentQuery, airports]);
+  }, [airportCodeQuery, airportContinentQuery, airports, mapFilters.warehouses.semaphore, ranges]);
 
   const orderedAirports = useMemo(() => {
     return [...filteredAirports].sort((left, right) => {
@@ -492,13 +567,130 @@ export default function EntityExplorer({
     )
   }, [airportContinentOptions, airportContinentQuery])
 
-  const filteredShipments = useMemo(() => {
-    const query = shipmentQuery.trim().toLowerCase();
-    if (!query) return shipments;
-    return shipments.filter((shipment) =>
-      shipment.toLowerCase().includes(query),
-    );
-  }, [shipments, shipmentQuery]);
+  const hasCategorizedShipmentItems =
+    shipmentsPlanificados.length > 0 ||
+    shipmentsEnVuelo.length > 0 ||
+    shipmentsEntregados.length > 0
+
+  const selectedCategorizedShipments = useMemo(() => {
+    if (selectedShipmentCategory === 'PLANIFICADOS') return shipmentsPlanificados
+    if (selectedShipmentCategory === 'ENTREGADOS') return shipmentsEntregados
+    return shipmentsEnVuelo
+  }, [selectedShipmentCategory, shipmentsEntregados, shipmentsEnVuelo, shipmentsPlanificados])
+
+  const baseShipmentItems = useMemo<EnvioDetalleDto[]>(() => {
+    if (hasCategorizedShipmentItems) return selectedCategorizedShipments
+
+    return shipments.map((codigoPedido) => ({
+      codigoPedido,
+      origen: '--',
+      destino: '--',
+      ut: '',
+      cantidadMaletas: shipmentQuantities[codigoPedido] ?? 0,
+      estado: 'PLANIFICADO',
+      minutoEntrega: null,
+    }))
+  }, [hasCategorizedShipmentItems, selectedCategorizedShipments, shipmentQuantities, shipments])
+
+  const shipmentOriginOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        baseShipmentItems
+          .map((shipment) => shipment.origen.trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right))
+  }, [baseShipmentItems])
+
+  const shipmentDestinationOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        baseShipmentItems
+          .map((shipment) => shipment.destino.trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right))
+  }, [baseShipmentItems])
+
+  const filteredShipmentItems = useMemo(() => {
+    const query = shipmentQuery.trim().toLowerCase()
+    const originQuery = shipmentOriginFilter.trim().toLowerCase()
+    const destinationQuery = shipmentDestinationFilter.trim().toLowerCase()
+
+    return baseShipmentItems.filter((shipment) => {
+      if (
+        query &&
+        !shipment.codigoPedido.toLowerCase().includes(query) &&
+        !buildBagCodes(shipment.codigoPedido, shipment.cantidadMaletas).some((bagCode) =>
+          bagCode.toLowerCase().includes(query),
+        )
+      ) {
+        return false
+      }
+
+      if (originQuery && !shipment.origen.toLowerCase().includes(originQuery)) {
+        return false
+      }
+
+      if (destinationQuery && !shipment.destino.toLowerCase().includes(destinationQuery)) {
+        return false
+      }
+
+      return true
+    })
+  }, [baseShipmentItems, shipmentDestinationFilter, shipmentOriginFilter, shipmentQuery])
+
+  const orderedShipmentItems = useMemo(() => {
+    if (shipmentSortKey === 'default') {
+      return filteredShipmentItems
+    }
+
+    return [...filteredShipmentItems].sort((left, right) => {
+      switch (shipmentSortKey) {
+        case 'bags': {
+          const result = compareNullableNumber(
+            left.cantidadMaletas,
+            right.cantidadMaletas,
+            shipmentSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'departure': {
+          const leftMinute = parseShipmentDepartureMinute(left.ut)
+          const rightMinute = parseShipmentDepartureMinute(right.ut)
+          const result = leftMinute !== null || rightMinute !== null
+            ? compareNullableNumber(leftMinute, rightMinute, shipmentSortDirection)
+            : compareText(left.ut ?? '', right.ut ?? '', shipmentSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        case 'delivery': {
+          const result = compareNullableNumber(
+            left.minutoEntrega,
+            right.minutoEntrega,
+            shipmentSortDirection,
+          )
+          if (result !== 0) return result
+          break
+        }
+        case 'origin': {
+          const result = compareText(left.origen, right.origen, shipmentSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        case 'destination': {
+          const result = compareText(left.destino, right.destino, shipmentSortDirection)
+          if (result !== 0) return result
+          break
+        }
+        default:
+          break
+      }
+
+      return left.codigoPedido.localeCompare(right.codigoPedido)
+    })
+  }, [filteredShipmentItems, shipmentSortDirection, shipmentSortKey])
 
   const flightList = useVirtualList(orderedFlights, {
     itemHeight: FLIGHT_ITEM_HEIGHT,
@@ -508,8 +700,8 @@ export default function EntityExplorer({
     itemHeight: AIRPORT_ITEM_HEIGHT,
     listHeight,
   });
-  const shipmentList = useVirtualList(filteredShipments, {
-    itemHeight: ITEM_HEIGHT,
+  const shipmentList = useVirtualList(orderedShipmentItems, {
+    itemHeight: SHIPMENT_ITEM_HEIGHT,
     listHeight: shipmentListHeight,
   });
   const selectedShipmentCodeForBags =
@@ -519,12 +711,38 @@ export default function EntityExplorer({
         ? selectedShipmentRoute.codigoPedido
         : null
     )
+  const selectedShipmentBagTotal = selectedShipmentCodeForBags
+    ? (
+        baseShipmentItems.find((shipment) => shipment.codigoPedido === selectedShipmentCodeForBags)?.cantidadMaletas
+        ?? shipmentQuantities[selectedShipmentCodeForBags]
+        ?? 0
+      )
+    : 0
 
   const hasActiveFlightFilters =
     Boolean(flightFilters.codeQuery.trim()) ||
     Boolean(flightFilters.originQuery.trim()) ||
     Boolean(flightFilters.destinationQuery.trim())
   const hasActiveFlightSort = flightSortKey !== 'default'
+  const hasActiveFlightSemaphoreFilter = mapFilters.flights.semaphore !== 'all'
+  const activeFlightSemaphoreColor = resolveSemaphoreColor(
+    getSemaphoreFilterPercent(mapFilters.flights.semaphore, ranges),
+    ranges,
+  )
+  const hasActiveAirportFilters =
+    Boolean(airportFilters.codeQuery.trim()) ||
+    Boolean(airportFilters.continentQuery.trim())
+  const hasActiveAirportSort = airportSortKey !== 'occupancy' || airportSortDirection !== 'desc'
+  const hasActiveAirportSemaphoreFilter = mapFilters.warehouses.semaphore !== 'all'
+  const activeAirportSemaphoreColor = resolveSemaphoreColor(
+    getSemaphoreFilterPercent(mapFilters.warehouses.semaphore, ranges),
+    ranges,
+  )
+  const hasActiveShipmentFilters =
+    Boolean(shipmentQuery.trim()) ||
+    Boolean(shipmentOriginFilter.trim()) ||
+    Boolean(shipmentDestinationFilter.trim())
+  const hasActiveShipmentSort = shipmentSortKey !== 'default'
 
   const getFlightCapacityPercent = (flight: EntityFlightItem) => {
     if (typeof flight.porcentaje === 'number') return flight.porcentaje
@@ -542,6 +760,10 @@ export default function EntityExplorer({
   const getFlightCapacityColor = (flight: EntityFlightItem) => {
     const percent = getFlightCapacityPercent(flight)
     return resolveSemaphoreColor(percent, ranges).fill
+  }
+
+  const getAirportOccupancyColor = (airport: EntityAirportItem) => {
+    return resolveSemaphoreColor(airport.porcentaje ?? null, ranges).fill
   }
 
   const handleFlightKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -566,6 +788,18 @@ export default function EntityExplorer({
       originQuery: '',
       destinationQuery: '',
     })
+    flightList.setScrollTop(0)
+  }
+
+  const handleFlightSemaphoreFilterChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      flights: {
+        ...mapFilters.flights,
+        semaphore: value,
+      },
+    })
+    setIsFlightSemaphoreMenuOpen(false)
     flightList.setScrollTop(0)
   }
 
@@ -607,9 +841,22 @@ export default function EntityExplorer({
     airportList.setScrollTop(0)
   }
 
-  const handleAirportSortChange = (value: AirportSortKey) => {
+  const handleAirportSemaphoreFilterChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      warehouses: {
+        ...mapFilters.warehouses,
+        semaphore: value,
+      },
+    })
+    setIsAirportSemaphoreMenuOpen(false)
+    airportList.setScrollTop(0)
+  }
+
+  const handleAirportSortPreset = (value: AirportSortKey, direction?: SortDirection) => {
     setAirportSortKey(value)
-    setAirportSortDirection(AIRPORT_SORT_DEFAULT_DIRECTION[value])
+    setAirportSortDirection(direction ?? AIRPORT_SORT_DEFAULT_DIRECTION[value])
+    setIsAirportSortMenuOpen(false)
     airportList.setScrollTop(0)
   }
 
@@ -618,12 +865,46 @@ export default function EntityExplorer({
     airportList.setScrollTop(0)
   }
 
+  const handleShipmentKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    const query = shipmentQuery.trim()
+    if (query) {
+      onSearchShipment(query)
+      return
+    }
+
+    const target = orderedShipmentItems[0];
+    if (target) onSearchShipment(target.codigoPedido);
+  };
+
+  const clearShipmentFilters = () => {
+    setShipmentQuery('')
+    onShipmentOriginFilterChange?.('')
+    onShipmentDestinationFilterChange?.('')
+    shipmentList.setScrollTop(0)
+  }
+
+  const handleShipmentSortPreset = (value: ShipmentSortKey, direction?: SortDirection) => {
+    setShipmentSortKey(value)
+    setShipmentSortDirection(direction ?? SHIPMENT_SORT_DEFAULT_DIRECTION[value])
+    setIsShipmentSortMenuOpen(false)
+    shipmentList.setScrollTop(0)
+  }
+
+  const handleShipmentSortDirectionToggle = () => {
+    if (shipmentSortKey === 'default') return
+
+    setShipmentSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    shipmentList.setScrollTop(0)
+  }
+
   useEffect(() => {
     flightList.setScrollTop(0)
   }, [
     flightFilters.codeQuery,
     flightFilters.destinationQuery,
     flightFilters.originQuery,
+    mapFilters.flights.semaphore,
     flightSortDirection,
     flightSortKey,
   ])
@@ -633,8 +914,20 @@ export default function EntityExplorer({
   }, [
     airportFilters.codeQuery,
     airportFilters.continentQuery,
+    mapFilters.warehouses.semaphore,
     airportSortDirection,
     airportSortKey,
+  ])
+
+  useEffect(() => {
+    shipmentList.setScrollTop(0)
+  }, [
+    selectedShipmentCategory,
+    shipmentDestinationFilter,
+    shipmentOriginFilter,
+    shipmentQuery,
+    shipmentSortDirection,
+    shipmentSortKey,
   ])
 
   const processedFocusRequestIdRef = useRef<number>(-1)
@@ -687,9 +980,9 @@ export default function EntityExplorer({
       setActiveEntityTab('shipments')
       setShipmentQuery(String(focusRequest.id))
       setTimeout(() => {
-        const index = filteredShipments.findIndex(s => s === String(focusRequest.id))
+        const index = orderedShipmentItems.findIndex(s => s.codigoPedido === String(focusRequest.id))
         if (index !== -1) {
-          const targetScrollTop = index * ITEM_HEIGHT
+          const targetScrollTop = index * SHIPMENT_ITEM_HEIGHT
           shipmentList.setScrollTop(targetScrollTop)
           if (shipmentListRef.current) {
             shipmentListRef.current.scrollTop = targetScrollTop
@@ -702,105 +995,7 @@ export default function EntityExplorer({
         }
       }, 50)
     }
-  }, [focusRequest, displayedAirports, orderedFlights, filteredShipments])
-
-  const renderShipmentCategoryTable = (
-    title: string,
-    items: EnvioDetalleDto[],
-    showDeliveryMinute: boolean,
-  ) => (
-    <div className="entity-shipment-category" style={{ marginBottom: "14px" }}>
-      <div className="entity-toolbar-label" style={{ marginBottom: "4px" }}>
-        {`${title} (${formatInteger(items.length)})`}
-      </div>
-      <div
-        className="flight-list"
-        style={{ maxHeight: "180px", height: "auto", overflowY: "auto" }}
-      >
-        {items.length === 0 ? (
-          <div style={{ padding: "10px", fontSize: "12px" }}>
-            Sin envíos en esta categoría.
-          </div>
-        ) : (
-          <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", background: "#eaf0fb" }}>
-                <th style={{ padding: "6px" }}>Código de pedido</th>
-                <th style={{ padding: "6px" }}>Origen actual</th>
-                <th style={{ padding: "6px" }}>Destino final</th>
-                <th style={{ padding: "6px" }}>UT salida</th>
-                <th style={{ padding: "6px" }}>N° maletas</th>
-                {showDeliveryMinute && <th style={{ padding: "6px" }}>Entrega (min)</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const isExpanded = expandedShipmentCode === item.codigoPedido
-                const bagCodes = buildBagCodes(item.codigoPedido, item.cantidadMaletas)
-
-                return (
-                  <Fragment key={item.codigoPedido}>
-                    <tr
-                      key={item.codigoPedido}
-                      style={{
-                        borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
-                      }}
-                      title="Click para ver la ruta completa"
-                    >
-                      <td style={{ padding: "6px" }}>
-                        <button
-                          type="button"
-                          className="entity-link-button"
-                          onClick={() => onSearchShipment(item.codigoPedido)}
-                        >
-                          {item.codigoPedido}
-                        </button>
-                      </td>
-                      <td style={{ padding: "6px" }}>{item.origen}</td>
-                      <td style={{ padding: "6px" }}>{item.destino}</td>
-                      <td style={{ padding: "6px" }}>{item.ut}</td>
-                      <td style={{ padding: "6px" }}>
-                        <button
-                          type="button"
-                          className="entity-bag-toggle"
-                          onClick={() => setExpandedShipmentCode(isExpanded ? null : item.codigoPedido)}
-                        >
-                          {formatBags(item.cantidadMaletas)}
-                        </button>
-                      </td>
-                      {showDeliveryMinute && (
-                        <td style={{ padding: "6px" }}>
-                          {item.minutoEntrega ?? "-"}
-                        </td>
-                      )}
-                    </tr>
-                    {isExpanded && (
-                      <tr key={`${item.codigoPedido}-bags`}>
-                        <td colSpan={showDeliveryMinute ? 6 : 5} style={{ padding: "8px 6px 10px" }}>
-                          <div className="entity-bag-list">
-                            {bagCodes.map((bagCode) => (
-                              <button
-                                key={bagCode}
-                                type="button"
-                                className="entity-bag-chip"
-                                onClick={() => onSearchShipment(bagCode)}
-                              >
-                                {bagCode}
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+  }, [focusRequest, displayedAirports, orderedFlights, orderedShipmentItems])
 
   const renderFlights = () => (
     <>
@@ -823,6 +1018,7 @@ export default function EntityExplorer({
             onClick={() => {
               setIsFlightFilterMenuOpen((current) => !current)
               setIsFlightSortMenuOpen(false)
+              setIsFlightSemaphoreMenuOpen(false)
             }}
             title="Filtros avanzados"
             aria-label="Filtros avanzados"
@@ -870,10 +1066,65 @@ export default function EntityExplorer({
         <div className="flight-tool-wrap">
           <button
             type="button"
+            className={`flight-tool-button semaphore-tool-button ${hasActiveFlightSemaphoreFilter ? 'active' : ''}`}
+            style={
+              hasActiveFlightSemaphoreFilter
+                ? ({
+                    '--semaphore-active-bg': activeFlightSemaphoreColor.fill,
+                    '--semaphore-active-border': activeFlightSemaphoreColor.stroke,
+                  } as CSSProperties)
+                : undefined
+            }
+            onClick={() => {
+              setIsFlightSemaphoreMenuOpen((current) => !current)
+              setIsFlightFilterMenuOpen(false)
+              setIsFlightSortMenuOpen(false)
+            }}
+            title="Filtrar por semáforo"
+            aria-label="Filtrar por semáforo"
+            aria-expanded={isFlightSemaphoreMenuOpen}
+          >
+            <CircleDot size={18} />
+            {hasActiveFlightSemaphoreFilter ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isFlightSemaphoreMenuOpen && (
+            <div className="flight-popover flight-sort-popover semaphore-filter-popover">
+              <div className="flight-popover-title">Semáforo de vuelos</div>
+              {SEMAPHORE_OPTIONS.map((option) => {
+                const colors = resolveSemaphoreColor(getSemaphoreOptionPercent(option, ranges), ranges)
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={mapFilters.flights.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleFlightSemaphoreFilterChange(option.value)}
+                  >
+                    <span
+                      className="semaphore-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+              {mapFilterCounts ? (
+                <div className="semaphore-filter-count">
+                  {formatInteger(mapFilterCounts.flights)} vuelos visibles en mapa
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
             className={`flight-tool-button ${hasActiveFlightSort ? 'active' : ''}`}
             onClick={() => {
               setIsFlightSortMenuOpen((current) => !current)
               setIsFlightFilterMenuOpen(false)
+              setIsFlightSemaphoreMenuOpen(false)
             }}
             title="Ordenamiento"
             aria-label="Ordenamiento"
@@ -1080,114 +1331,186 @@ export default function EntityExplorer({
   const renderShipments = () => (
     <>
       {onSelectedShipmentCategoryChange && (
-        <div className="shipment-category-selector" style={{ marginBottom: '15px', display: 'flex' }}>
+        <div className="shipment-category-selector">
           <button
-            className={`category-btn ${selectedShipmentCategory === 'PLANIFICADOS' ? 'active' : ''}`}
+            type="button"
+            className={`shipment-category-button ${selectedShipmentCategory === 'PLANIFICADOS' ? 'active' : ''}`}
             onClick={() => onSelectedShipmentCategoryChange('PLANIFICADOS')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              marginRight: '5px',
-              borderRadius: '4px',
-              border: '1px solid #ddd',
-              backgroundColor: selectedShipmentCategory === 'PLANIFICADOS' ? '#0288d1' : '#f5f5f5',
-              color: selectedShipmentCategory === 'PLANIFICADOS' ? 'white' : '#333',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: selectedShipmentCategory === 'PLANIFICADOS' ? 'bold' : 'normal',
-            }}
           >
-            Planificados
+            {`Planificados (${formatInteger(shipmentsPlanificados.length)})`}
           </button>
           <button
-            className={`category-btn ${selectedShipmentCategory === 'EN_VUELO' ? 'active' : ''}`}
+            type="button"
+            className={`shipment-category-button ${selectedShipmentCategory === 'EN_VUELO' ? 'active' : ''}`}
             onClick={() => onSelectedShipmentCategoryChange('EN_VUELO')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              marginRight: '5px',
-              borderRadius: '4px',
-              border: '1px solid #ddd',
-              backgroundColor: selectedShipmentCategory === 'EN_VUELO' ? '#0288d1' : '#f5f5f5',
-              color: selectedShipmentCategory === 'EN_VUELO' ? 'white' : '#333',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: selectedShipmentCategory === 'EN_VUELO' ? 'bold' : 'normal',
-            }}
           >
-            En Vuelo
+            {`En vuelo (${formatInteger(shipmentsEnVuelo.length)})`}
           </button>
           <button
-            className={`category-btn ${selectedShipmentCategory === 'ENTREGADOS' ? 'active' : ''}`}
+            type="button"
+            className={`shipment-category-button ${selectedShipmentCategory === 'ENTREGADOS' ? 'active' : ''}`}
             onClick={() => onSelectedShipmentCategoryChange('ENTREGADOS')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              borderRadius: '4px',
-              border: '1px solid #ddd',
-              backgroundColor: selectedShipmentCategory === 'ENTREGADOS' ? '#0288d1' : '#f5f5f5',
-              color: selectedShipmentCategory === 'ENTREGADOS' ? 'white' : '#333',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: selectedShipmentCategory === 'ENTREGADOS' ? 'bold' : 'normal',
-            }}
           >
-            Entregados
+            {`Entregados (${formatInteger(shipmentsEntregados.length)})`}
           </button>
         </div>
       )}
 
-      {/* Filtros de origen y destino */}
-      {onShipmentOriginFilterChange && (
-        <label className="field" style={{ marginBottom: '10px' }}>
-          <span className="entity-filter-label">Filtrar por Origen</span>
+      <div className="flight-control-row shipment-control-row">
+        <label className="flight-search-field" aria-label="Buscar envío por ID">
+          <Search size={16} />
           <input
             type="text"
-            placeholder="Ej. LIM"
-            value={shipmentOriginFilter}
-            onChange={(event) => onShipmentOriginFilterChange(event.target.value.toUpperCase())}
+            placeholder={labels?.shipmentPlaceholder ?? "Buscar ID..."}
+            value={shipmentQuery}
+            onChange={(event) => setShipmentQuery(event.target.value)}
+            onKeyDown={handleShipmentKeyDown}
           />
         </label>
-      )}
-      {onShipmentDestinationFilterChange && (
-        <label className="field" style={{ marginBottom: '15px' }}>
-          <span className="entity-filter-label">Filtrar por Destino</span>
-          <input
-            type="text"
-            placeholder="Ej. SKBO"
-            value={shipmentDestinationFilter}
-            onChange={(event) => onShipmentDestinationFilterChange(event.target.value.toUpperCase())}
-          />
-        </label>
-      )}
 
-      {selectedShipmentCategory === 'PLANIFICADOS' && renderShipmentCategoryTable("Planificados", shipmentsPlanificados, false)}
-      {selectedShipmentCategory === 'EN_VUELO' && renderShipmentCategoryTable("En Vuelo", shipmentsEnVuelo, false)}
-      {selectedShipmentCategory === 'ENTREGADOS' && renderShipmentCategoryTable("Entregados Recientes", shipmentsEntregados, true)}
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button ${hasActiveShipmentFilters ? 'active' : ''}`}
+            onClick={() => {
+              setIsShipmentFilterMenuOpen((current) => !current)
+              setIsShipmentSortMenuOpen(false)
+            }}
+            title="Filtros avanzados"
+            aria-label="Filtros avanzados"
+            aria-expanded={isShipmentFilterMenuOpen}
+          >
+            <Filter size={18} />
+            {hasActiveShipmentFilters ? <span className="flight-tool-indicator" /> : null}
+          </button>
 
-      <h3>{labels?.shipmentTitle ?? "Buscar envío / maleta"}</h3>
-      <label className="field">
-        <input
-          type="text"
-          placeholder={
-            labels?.shipmentPlaceholder ??
-            "Ingresar ID del envío (ej. 000000001)"
-          }
-          value={shipmentQuery}
-          onChange={(event) => setShipmentQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onSearchShipment(shipmentQuery);
-          }}
-        />
-      </label>
+          {isShipmentFilterMenuOpen && (
+            <div className="flight-popover flight-filter-popover shipment-filter-popover">
+              <div className="flight-popover-title">Filtros avanzados</div>
+              <label className="flight-popover-field">
+                <span>Origen</span>
+                <input
+                  type="text"
+                  list="shipment-origin-options"
+                  placeholder="Buscar origen..."
+                  value={shipmentOriginFilter}
+                  onChange={(event) => onShipmentOriginFilterChange?.(event.target.value.toUpperCase())}
+                />
+              </label>
+              <label className="flight-popover-field">
+                <span>Destino</span>
+                <input
+                  type="text"
+                  list="shipment-destination-options"
+                  placeholder="Buscar destino..."
+                  value={shipmentDestinationFilter}
+                  onChange={(event) => onShipmentDestinationFilterChange?.(event.target.value.toUpperCase())}
+                />
+              </label>
+              <button
+                type="button"
+                className="flight-popover-clear"
+                onClick={clearShipmentFilters}
+                disabled={!hasActiveShipmentFilters}
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button ${hasActiveShipmentSort ? 'active' : ''}`}
+            onClick={() => {
+              setIsShipmentSortMenuOpen((current) => !current)
+              setIsShipmentFilterMenuOpen(false)
+            }}
+            title="Ordenamiento"
+            aria-label="Ordenamiento"
+            aria-expanded={isShipmentSortMenuOpen}
+          >
+            <ArrowUpDown size={18} />
+            {hasActiveShipmentSort ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isShipmentSortMenuOpen && (
+            <div className="flight-popover flight-sort-popover shipment-sort-popover">
+              <div className="flight-popover-title">Ordenar envíos</div>
+              <button
+                type="button"
+                className={shipmentSortKey === 'default' ? 'active' : ''}
+                onClick={() => handleShipmentSortPreset('default')}
+              >
+                Orden actual
+              </button>
+              <button
+                type="button"
+                className={shipmentSortKey === 'bags' ? 'active' : ''}
+                onClick={() => handleShipmentSortPreset('bags', 'desc')}
+              >
+                N° maletas
+              </button>
+              <button
+                type="button"
+                className={shipmentSortKey === 'departure' ? 'active' : ''}
+                onClick={() => handleShipmentSortPreset('departure', 'asc')}
+              >
+                UT salida
+              </button>
+              <button
+                type="button"
+                className={shipmentSortKey === 'delivery' ? 'active' : ''}
+                onClick={() => handleShipmentSortPreset('delivery', 'asc')}
+              >
+                Entrega
+              </button>
+              <button
+                type="button"
+                className={shipmentSortKey === 'origin' ? 'active' : ''}
+                onClick={() => handleShipmentSortPreset('origin', 'asc')}
+              >
+                Origen
+              </button>
+              <button
+                type="button"
+                className={shipmentSortKey === 'destination' ? 'active' : ''}
+                onClick={() => handleShipmentSortPreset('destination', 'asc')}
+              >
+                Destino
+              </button>
+              <button
+                type="button"
+                className="flight-sort-direction-action"
+                onClick={handleShipmentSortDirectionToggle}
+                disabled={shipmentSortKey === 'default'}
+              >
+                Dirección: {shipmentSortDirection === 'asc' ? 'Ascendente' : 'Descendente'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <datalist id="shipment-origin-options">
+          {shipmentOriginOptions.map((origin) => (
+            <option key={origin} value={origin} />
+          ))}
+        </datalist>
+        <datalist id="shipment-destination-options">
+          {shipmentDestinationOptions.map((destination) => (
+            <option key={destination} value={destination} />
+          ))}
+        </datalist>
+      </div>
 
       <div
         ref={shipmentListRef}
-        className="flight-list"
+        className="flight-list shipment-card-list"
         onScroll={(event) =>
           shipmentList.setScrollTop(event.currentTarget.scrollTop)
         }
-        style={{ height: `${shipmentList.listHeight}px`, marginTop: "8px" }}
+        style={{ height: `${shipmentList.listHeight}px` }}
       >
         <div
           className="flight-list-spacer"
@@ -1198,52 +1521,81 @@ export default function EntityExplorer({
             style={{ transform: `translateY(${shipmentList.offsetY}px)` }}
           >
             {shipmentList.visibleItems.length === 0 && (
-              <div style={{ padding: "10px", fontSize: "12px" }}>
+              <div className="shipment-empty-card">
                 {labels?.shipmentEmpty ?? "No hay muestras (inicia simulación)"}
               </div>
             )}
-            {shipmentList.visibleItems.map((codigo) => {
-              const cantidad = shipmentQuantities[codigo]
+            {shipmentList.visibleItems.map((shipment) => {
+              const codigo = shipment.codigoPedido
+              const cantidad = shipment.cantidadMaletas ?? shipmentQuantities[codigo] ?? 0
               const isExpanded = expandedShipmentCode === codigo
+              const isSelected = selectedShipmentRoute?.codigoPedido === codigo
+              const deliveryLabel = shipment.minutoEntrega !== null && shipment.minutoEntrega !== undefined
+                ? formatSimDateTimeFromMinute(shipment.minutoEntrega)
+                : '--'
+
               return (
                 <div
                   key={codigo}
-                  className={`flight-item entity-shipment-list-item ${selectedShipmentRoute?.codigoPedido === codigo ? "active" : ""}`}
-                  style={{ height: `${ITEM_HEIGHT}px` }}
+                  className={`flight-item entity-shipment-card ${isSelected ? "active" : ""}`}
+                  style={{ height: `${SHIPMENT_ITEM_HEIGHT}px` }}
+                  role="button"
+                  tabIndex={0}
+                  title="Click para ver la ruta completa"
+                  onClick={() => onSearchShipment(codigo)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onSearchShipment(codigo)
+                    }
+                  }}
                 >
-                  <button
-                    type="button"
-                    className="entity-shipment-main"
-                    onClick={() => onSearchShipment(codigo)}
-                  >
-                    <div className="flight-label">{`${labels?.shipmentIcon ?? "📦"} Pedido: ${codigo}`}</div>
-                    <div className="flight-meta">
-                      {cantidad ? `${formatBags(cantidad)} maletas` : 'Click para ver ruta'}
+                  <div className="shipment-card-content">
+                    <div className="shipment-card-header">
+                      <span className="flight-label">{codigo}</span>
+                      <span className="shipment-status-pill">{getShipmentStatusLabel(shipment.estado)}</span>
                     </div>
-                  </button>
-                  {cantidad ? (
-                    <button
-                      type="button"
-                      className="entity-bag-toggle"
-                      onClick={() => setExpandedShipmentCode(isExpanded ? null : codigo)}
-                      title={isExpanded ? 'Ocultar maletas' : 'Ver maletas'}
-                    >
-                      {isExpanded ? 'Ocultar' : 'Ver'}
-                    </button>
-                  ) : null}
+                    <div className="shipment-card-route">
+                      <MapPin size={13} />
+                      <span>{`${shipment.origen || '--'} → ${shipment.destino || '--'}`}</span>
+                    </div>
+                    <div className="shipment-card-metrics">
+                      <span>
+                        <Package size={13} />
+                        {`${formatBags(cantidad)} maletas`}
+                      </span>
+                      {cantidad ? (
+                        <button
+                          type="button"
+                          className="shipment-card-bag-toggle"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setExpandedShipmentCode(isExpanded ? null : codigo)
+                          }}
+                          title={isExpanded ? 'Ocultar maletas' : 'Ver maletas'}
+                        >
+                          {isExpanded ? 'Ocultar' : 'Ver'}
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="shipment-card-footer">
+                      <span>{`Salida: ${formatShipmentDepartureTime(shipment.ut)}`}</span>
+                      <span>{`Entrega: ${deliveryLabel}`}</span>
+                    </div>
+                  </div>
                 </div>
               )
             })}
           </div>
         </div>
       </div>
-      {selectedShipmentCodeForBags && shipmentQuantities[selectedShipmentCodeForBags] ? (
+      {selectedShipmentCodeForBags && selectedShipmentBagTotal ? (
         <div className="entity-bag-panel">
           <div className="entity-toolbar-label">
             Maletas de {selectedShipmentCodeForBags}
           </div>
           <div className="entity-bag-list">
-            {buildBagCodes(selectedShipmentCodeForBags, shipmentQuantities[selectedShipmentCodeForBags]).map((bagCode) => (
+            {buildBagCodes(selectedShipmentCodeForBags, selectedShipmentBagTotal).map((bagCode) => (
               <button
                 key={bagCode}
                 type="button"
@@ -1258,16 +1610,7 @@ export default function EntityExplorer({
       ) : null}
       <div className="flight-hint">
         {labels?.shipmentHint ??
-          `${formatInteger(filteredShipments.length)} ${labels?.shipmentHintNoun ?? "envíos de muestra"}`}
-      </div>
-
-      <div
-        className="buttons"
-        style={{ marginTop: "4px", marginBottom: "4px" }}
-      >
-        <button className="btn" onClick={() => onSearchShipment(shipmentQuery)}>
-          Buscar ruta
-        </button>
+          `${formatInteger(orderedShipmentItems.length)} ${labels?.shipmentHintNoun ?? "envíos"}`}
       </div>
       {shipmentSearchError && (
         <div className="upload-error" style={{ marginBottom: "8px" }}>
@@ -1322,78 +1665,182 @@ export default function EntityExplorer({
 
   const renderAirports = () => (
     <>
-      <div className="entity-filter-panel">
-        <div className="entity-filter-header">
-          <span className="entity-toolbar-label">Filtros de almacenes</span>
+      <div className="flight-control-row airport-control-row">
+        <label className="flight-search-field" aria-label="Buscar aeropuerto por código">
+          <Search size={16} />
+          <input
+            type="text"
+            placeholder={labels?.airportPlaceholder ?? 'Buscar código...'}
+            value={airportFilters.codeQuery}
+            onChange={(event) => handleAirportFilterChange('codeQuery', event.target.value)}
+            onKeyDown={handleAirportKeyDown}
+          />
+        </label>
+
+        <div className="flight-tool-wrap">
           <button
             type="button"
-            className="entity-filter-clear"
-            onClick={clearAirportFilters}
-            disabled={!airportFilters.codeQuery && !airportFilters.continentQuery}
-            title="Limpiar filtros"
+            className={`flight-tool-button ${hasActiveAirportFilters ? 'active' : ''}`}
+            onClick={() => {
+              setIsAirportFilterMenuOpen((current) => !current)
+              setIsAirportSortMenuOpen(false)
+              setIsAirportSemaphoreMenuOpen(false)
+            }}
+            title="Filtros avanzados"
+            aria-label="Filtros avanzados"
+            aria-expanded={isAirportFilterMenuOpen}
           >
-            <span>Limpiar</span>
+            <Filter size={18} />
+            {hasActiveAirportFilters ? <span className="flight-tool-indicator" /> : null}
           </button>
+
+          {isAirportFilterMenuOpen && (
+            <div className="flight-popover airport-filter-popover">
+              <div className="flight-popover-title">Filtros avanzados</div>
+              <label className="flight-popover-field">
+                <span>Región continental</span>
+                <input
+                  type="text"
+                  list="airport-continent-options"
+                  placeholder="Buscar región..."
+                  value={selectedAirportContinentValue || airportFilters.continentQuery}
+                  onChange={(event) => handleAirportFilterChange('continentQuery', event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="flight-popover-clear"
+                onClick={clearAirportFilters}
+                disabled={!hasActiveAirportFilters}
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
         </div>
-        <div className="entity-filter-grid entity-filter-grid-airports">
-          <label className="field">
-            <span className="entity-filter-label">Código</span>
-            <input
-              type="text"
-              placeholder={labels?.airportPlaceholder ?? 'Ej. LIM'}
-              value={airportFilters.codeQuery}
-              onChange={(event) => handleAirportFilterChange('codeQuery', event.target.value)}
-              onKeyDown={handleAirportKeyDown}
-            />
-          </label>
-          <label className="field">
-            <span className="entity-filter-label">Región continental</span>
-            <select
-              value={selectedAirportContinentValue}
-              onChange={(event) =>
-                handleAirportFilterChange('continentQuery', event.target.value)
-              }
-            >
-              <option value="">Todas</option>
-              {airportContinentOptions.map((continent) => (
-                <option key={continent} value={continent}>
-                  {continent}
-                </option>
-              ))}
-            </select>
-          </label>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button semaphore-tool-button ${hasActiveAirportSemaphoreFilter ? 'active' : ''}`}
+            style={
+              hasActiveAirportSemaphoreFilter
+                ? ({
+                    '--semaphore-active-bg': activeAirportSemaphoreColor.fill,
+                    '--semaphore-active-border': activeAirportSemaphoreColor.stroke,
+                  } as CSSProperties)
+                : undefined
+            }
+            onClick={() => {
+              setIsAirportSemaphoreMenuOpen((current) => !current)
+              setIsAirportFilterMenuOpen(false)
+              setIsAirportSortMenuOpen(false)
+            }}
+            title="Filtrar por semáforo"
+            aria-label="Filtrar por semáforo"
+            aria-expanded={isAirportSemaphoreMenuOpen}
+          >
+            <CircleDot size={18} />
+            {hasActiveAirportSemaphoreFilter ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isAirportSemaphoreMenuOpen && (
+            <div className="flight-popover flight-sort-popover semaphore-filter-popover">
+              <div className="flight-popover-title">Semáforo de aeropuertos</div>
+              {SEMAPHORE_OPTIONS.map((option) => {
+                const colors = resolveSemaphoreColor(getSemaphoreOptionPercent(option, ranges), ranges)
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={mapFilters.warehouses.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleAirportSemaphoreFilterChange(option.value)}
+                  >
+                    <span
+                      className="semaphore-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+              {mapFilterCounts ? (
+                <div className="semaphore-filter-count">
+                  {formatInteger(mapFilterCounts.warehouses)} aeropuertos visibles en mapa
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
-      </div>
-      <div className="entity-toolbar">
-        <label className="field entity-sort-field">
-          <span className="entity-toolbar-label">Ordenar por</span>
-          <div className="entity-sort-row">
-            <select
-              value={airportSortKey}
-              onChange={(event) => handleAirportSortChange(event.target.value as AirportSortKey)}
-            >
-              <option value="occupancy">Nivel de ocupación</option>
-              <option value="departure">Próxima salida</option>
-              <option value="arrival">Próxima llegada</option>
-            </select>
-            <button
-              type="button"
-              className="entity-sort-direction"
-              onClick={handleAirportSortDirectionToggle}
-              title={
-                airportSortDirection === 'asc'
-                  ? 'Cambiar a descendente'
-                  : 'Cambiar a ascendente'
-              }
-            >
-              {airportSortDirection === 'asc' ? '↑' : '↓'}
-            </button>
-          </div>
-        </label>
+
+        <div className="flight-tool-wrap">
+          <button
+            type="button"
+            className={`flight-tool-button ${hasActiveAirportSort ? 'active' : ''}`}
+            onClick={() => {
+              setIsAirportSortMenuOpen((current) => !current)
+              setIsAirportFilterMenuOpen(false)
+              setIsAirportSemaphoreMenuOpen(false)
+            }}
+            title="Ordenamiento"
+            aria-label="Ordenamiento"
+            aria-expanded={isAirportSortMenuOpen}
+          >
+            <ArrowUpDown size={18} />
+            {hasActiveAirportSort ? <span className="flight-tool-indicator" /> : null}
+          </button>
+
+          {isAirportSortMenuOpen && (
+            <div className="flight-popover flight-sort-popover airport-sort-popover">
+              <div className="flight-popover-title">Ordenar aeropuertos</div>
+              <button
+                type="button"
+                className={!hasActiveAirportSort ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('occupancy', 'desc')}
+              >
+                Orden actual
+              </button>
+              <button
+                type="button"
+                className={hasActiveAirportSort && airportSortKey === 'occupancy' ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('occupancy', 'desc')}
+              >
+                Ocupación
+              </button>
+              <button
+                type="button"
+                className={airportSortKey === 'departure' ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('departure', 'asc')}
+              >
+                Próxima salida
+              </button>
+              <button
+                type="button"
+                className={airportSortKey === 'arrival' ? 'active' : ''}
+                onClick={() => handleAirportSortPreset('arrival', 'asc')}
+              >
+                Próxima llegada
+              </button>
+              <button
+                type="button"
+                className="flight-sort-direction-action"
+                onClick={handleAirportSortDirectionToggle}
+              >
+                Dirección: {airportSortDirection === 'asc' ? 'Ascendente' : 'Descendente'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <datalist id="airport-continent-options">
+          {airportContinentOptions.map((continent) => (
+            <option key={continent} value={continent} />
+          ))}
+        </datalist>
       </div>
       <div
         ref={airportListRef}
-        className="flight-list"
+        className="flight-list airport-card-list"
         onScroll={(event) =>
           airportList.setScrollTop(event.currentTarget.scrollTop)
         }
@@ -1409,38 +1856,49 @@ export default function EntityExplorer({
           >
             {airportList.visibleItems.map((airport) => {
               const hasOccupancy = airport.ocupacion !== undefined && airport.capacidad !== undefined
-              const occupancyLabel = hasOccupancy
-                ? `${formatInteger(airport.ocupacion)} / ${formatInteger(airport.capacidad)}`
+              const occupancyPercentLabel = airport.porcentaje !== undefined
+                ? formatPercent(airport.porcentaje, 0)
+                : 'Sin dato'
+              const occupancyDetail = hasOccupancy
+                ? `Ocupación: ${occupancyPercentLabel} (${formatInteger(airport.ocupacion)} / ${formatInteger(airport.capacidad)} maletas)`
                 : airport.capacidad !== undefined
-                  ? `Cap. ${formatInteger(airport.capacidad)}`
-                  : 'Capacidad n/d'
+                  ? `Capacidad total: ${formatInteger(airport.capacidad)} maletas`
+                  : 'Ocupación: sin dato'
+              const occupancyColor = getAirportOccupancyColor(airport)
 
               return (
                 <button
                   key={airport.codigoOaci}
-                  className={`flight-item entity-airport-item ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
+                  className={`flight-item entity-airport-card ${selectedAirportCode === airport.codigoOaci ? "active" : ""}`}
                   onClick={() => onSelectAirport(airport.codigoOaci)}
-                  style={{ height: `${AIRPORT_ITEM_HEIGHT}px` }}
+                  style={{
+                    height: `${AIRPORT_ITEM_HEIGHT}px`,
+                    '--airport-occupancy-color': occupancyColor,
+                  } as CSSProperties}
                 >
-                  <div>
-                    <div className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</div>
-                    <div className="flight-meta">{`${airport.pais} · ${occupancyLabel}`}</div>
-                    <div className="flight-meta" style={{ marginTop: '2px' }}>
-                      Próx. Salida: {formatSimMinute(airport.nextDepartureMin, true)}
+                  <span className="airport-occupancy-bar" aria-hidden="true" />
+                  <div className="airport-card-content">
+                    <div className="airport-card-header">
+                      <span className="flight-label">{`${airport.codigoOaci} | ${airport.nombre}`}</span>
                     </div>
-                    <div className="flight-meta">
-                      Próx. Llegada: {formatSimMinute(airport.nextArrivalMin, true)}
+                    <div className="airport-card-location flight-meta">
+                      <MapPin size={13} />
+                      <span>{[airport.pais, airport.continente].filter(Boolean).join(' · ')}</span>
+                    </div>
+                    <div className="airport-card-timings">
+                      <span>
+                        <PlaneTakeoff size={13} />
+                        {formatSimMinute(airport.nextDepartureMin, true)}
+                      </span>
+                      <span>
+                        <PlaneLanding size={13} />
+                        {formatSimMinute(airport.nextArrivalMin, true)}
+                      </span>
+                    </div>
+                    <div className="airport-card-capacity">
+                      {occupancyDetail}
                     </div>
                   </div>
-                  {airport.porcentaje !== undefined ? (
-                    <div className="entity-airport-status">
-                      <span>{formatPercent(airport.porcentaje, 0)}</span>
-                      <span
-                        className="warehouse-dot"
-                        style={{ background: airport.color }}
-                      />
-                    </div>
-                  ) : null}
                 </button>
               )
             })}
@@ -1468,10 +1926,10 @@ export default function EntityExplorer({
           {`Vuelos (${formatInteger(filteredFlights.length)})`}
         </button>
         <button
-          className={`entity-subtab ${activeEntityTab === "shipments" ? "active" : ""} ${filteredShipments.length === 0 ? "empty" : ""}`}
+          className={`entity-subtab ${activeEntityTab === "shipments" ? "active" : ""} ${filteredShipmentItems.length === 0 ? "empty" : ""}`}
           onClick={() => setActiveEntityTab("shipments")}
         >
-          {`Envíos (${formatInteger(filteredShipments.length)})`}
+          {`Envíos (${formatInteger(filteredShipmentItems.length)})`}
         </button>
         <button
           className={`entity-subtab ${activeEntityTab === "airports" ? "active" : ""} ${filteredAirports.length === 0 ? "empty" : ""}`}

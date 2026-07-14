@@ -389,7 +389,7 @@ public class SimulationService {
             // Clasificación según la línea de tiempo de la simulación (currentMinute)
             if (currentMinute < minutoSalidaInicial) {
                 planificados.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
-                    codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "PLANIFICADO", null
+                    codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "PLANIFICADO", minutoEntregaFinal
                 ));
             } else if (currentMinute >= minutoSalidaInicial && currentMinute <= minutoEntregaFinal) {
                 String origenTramoActual = origenGlobal;
@@ -404,7 +404,7 @@ public class SimulationService {
                 }
 
                 enVuelo.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
-                    codigoPedido, origenTramoActual, destinoTramoActual, ut, cantidadMaletas, "EN_VUELO", null
+                    codigoPedido, origenTramoActual, destinoTramoActual, ut, cantidadMaletas, "EN_VUELO", minutoEntregaFinal
                 ));
             } else {
                 if (minutoEntregaFinal >= (currentMinute - 240)) {

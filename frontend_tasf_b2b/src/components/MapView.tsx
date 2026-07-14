@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
-import { Calendar, CalendarClock, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
+import { Calendar, CalendarClock, Layers, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim'
+import type { MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
 import {
   API_BASE,
   authFetch,
@@ -41,6 +42,14 @@ type AirportDetailsStage = 'airport' | 'shipments' | 'shipmentDetails'
 
 type TimeChipTone = 'simulated' | 'real'
 
+const MAP_SEMAPHORE_OPTIONS: Array<{ value: SemaphoreFilterLevel; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'green', label: 'Verde' },
+  { value: 'amber', label: 'Ámbar' },
+  { value: 'red', label: 'Rojo' },
+  { value: 'unknown', label: 'Sin datos' },
+]
+
 type TimeChipProps = {
   icon: LucideIcon
   label: string
@@ -72,17 +81,26 @@ function MapTimeChip({ icon: Icon, label, value, tone, onClose }: TimeChipProps)
 
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
+const PLANE_ICON_BASE_VISUAL_SIZE = 20
+const PLANE_ICON_MIN_VISUAL_SIZE = 16
+const PLANE_ICON_MAX_VISUAL_SIZE = 34
+const PLANE_ICON_BASE_ZOOM = 2
+const PLANE_ICON_ZOOM_SCALE_STEP = 0.14
+const PLANE_MARKER_HITBOX_SIZE = 40
 
-// Ícono profesional de "Avión Despegando / Aeropuerto"
-const AIRPORT_PATHS = [
-  "M18.2 12.27 20 6H4l1.8 6.27a1 1 0 0 0 .95.73h10.5a1 1 0 0 0 .96-.73Z",
-  "M8 13v9",
-  "M16 22v-9",
-  "m9 6 1 7",
-  "m15 6-1 7",
-  "M12 6V2",
-  "M13 2h-2",
-]
+const AIRPORT_ICON_VIEWBOX = '10 12 80 76'
+const AIRPORT_PATH =
+  'm75.652 25.203c0 0.046875-0.003906 0.097656-0.015625 0.14062h3.4453l1.9688 5.0156h-12.297l1.9688-5.0156h3.4453c-0.007813-0.046875-0.015625-0.09375-0.015625-0.14062v-9.9727c0-0.41406 0.33594-0.75 0.75-0.75 0.41406 0 0.75 0.33594 0.75 0.75zm-26.406 39.086h12.051v-4.6992h-46.461v4.6992zm0.75 1.5v9.1172h9.6797v-9.1172zm-11.18 0v9.1172h9.6797v-9.1172zm-11.18 0v9.1172h9.6797v-9.1172zm-11.184 9.1133h9.6797v-9.1172h-9.6797zm9.6797 10.617v-9.1172h-9.6797v9.1172zm11.184 0v-9.1172h-9.6797v9.1172zm11.18 0v-9.1172h-9.6797v9.1172zm11.18 0v-9.1172h-9.6797v9.1172zm22.809-4.6992c-4.9414 0.007813-10.562 0.26953-15.391 0h-5.918v4.6992h26.574v-4.6992zm-3.1133-37.637h-8.9336l-2.5469 36.137h14.023zm6.5039-5.6602h-21.941l0.89453 4.1602h20.156zm-3.7227-5.6641h-19.438l0.89453 4.1641h22.586l0.89453-4.1641zm-53.438 2.1836 6.6719-2.9805c-1.2266-0.57422-3.457-1.6289-6.6641-3.2031-0.10156-0.050781-0.20703-0.074219-0.30469-0.074219-0.085938 0-0.17578 0.023438-0.26172 0.0625l-3.7656 1.9648zm10.324 15.359c-0.015624 0.09375-0.050781 0.17969-0.10156 0.24219s-0.11719 0.11719-0.20703 0.15625l-1.7344 0.79297-1.9375 0.89062c-0.13672-0.71875-0.24219-1.3359-0.35547-1.9961-0.25391-1.4727-0.54688-3.1875-1.5391-8.0391-0.082031-0.40625-0.47656-0.66406-0.88281-0.58203l-0.089844 0.023437-4.0625 1.3828c-5.2773 1.7969-6.1875 2.1055-9.25 3.0938-0.48438 0.15625-0.98047 0.14844-1.4297-0.003907-0.44531-0.15234-0.83984-0.44531-1.125-0.86719l-0.24219-0.35547-3.75-5.8359c-0.046875-0.074219-0.078125-0.14844-0.085937-0.21875-0.007813-0.070313 0-0.15234 0.023437-0.23438l0.007813-0.027343c0.023437-0.070313 0.0625-0.13281 0.10547-0.17969 0.050782-0.054687 0.11719-0.097656 0.19531-0.13281l2.1602-0.89844c0.09375-0.039062 0.18359-0.054687 0.26562-0.042969 0.082032 0.007813 0.16797 0.039063 0.25 0.097657l4.1016 2.8008c0.23438 0.16016 0.52344 0.16797 0.76172 0.050781l24.48-10.934c1.125-0.50391 2.1172-0.68359 3.0039-0.57422 0.875 0.10156 1.6641 0.48828 2.4062 1.1211 0.15234 0.12891 0.34375 0.1875 0.52734 0.17969 0.78906-0.011719 1.4414 0.17188 1.9336 0.47656 0.39453 0.24609 0.67969 0.56641 0.83984 0.92578 0.15234 0.34375 0.19141 0.73047 0.10156 1.1172l-0.007812 0.027344c-0.09375 0.36719-0.30469 0.74219-0.65234 1.0938-0.42969 0.18359-0.90625 0.375-1.4219 0.57422-0.60156 0.23047-1.3164 0.49609-2.1367 0.78906l-7.6211 2.8906c-0.25781 0.097657-0.42969 0.32031-0.47656 0.57031z'
+const AIRPORT_MARKER_BASE_SIZE = 34
+const AIRPORT_MARKER_MIN_SIZE = 28
+const AIRPORT_MARKER_MAX_SIZE = 54
+const AIRPORT_MARKER_SELECTED_EXTRA_SIZE = 8
+const AIRPORT_ICON_BASE_VISUAL_SIZE = 20
+const AIRPORT_ICON_MIN_VISUAL_SIZE = 16
+const AIRPORT_ICON_MAX_VISUAL_SIZE = 34
+const AIRPORT_ICON_SELECTED_EXTRA_SIZE = 6
+const AIRPORT_ICON_BASE_ZOOM = 3
+const AIRPORT_ICON_ZOOM_SCALE_STEP = 0.12
 
 export type MapViewProps = {
   airports: AirportDto[]
@@ -90,6 +108,8 @@ export type MapViewProps = {
   currentMinute: number | null
   warehouseSnapshot: Record<string, { capacidad: number; ocupacion: number; porcentaje: number; libre: number }>
   ranges: { greenMax: number; amberMax: number }
+  mapFilters: MapSemaphoreFilters
+  onMapFiltersChange: (filters: MapSemaphoreFilters) => void
   selectedFlightId: number | null
   selectedAirportCode: string | null
   selectedShipmentRoute?: TrackerShipmentRoute | null
@@ -114,12 +134,57 @@ export type MapViewProps = {
 }
 
 const DEFAULT_CENTER: [number, number] = [12, -10]
-const DEFAULT_ZOOM = 2
+const DEFAULT_ZOOM = 3
 const YOUR_API_KEY = 'cs78LhJcqA5P4sFbhTaG';
 const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/019f2fff-a937-7733-b3ff-b0ebc2406d84/style.json`
 const SELECTED_AIRPORT_COLORS = {
   stroke: '#2f62b5',
   fill: '#d7e5fb',
+}
+
+function getSemaphoreFilterPercent(value: SemaphoreFilterLevel, ranges: { greenMax: number; amberMax: number }) {
+  if (value === 'green') return 0
+  if (value === 'amber') return ranges.greenMax + 1
+  if (value === 'red') return ranges.amberMax + 1
+  return null
+}
+
+function getSemaphoreFilterColor(value: SemaphoreFilterLevel, ranges: { greenMax: number; amberMax: number }) {
+  return resolveSemaphoreColor(getSemaphoreFilterPercent(value, ranges), ranges)
+}
+
+function getPlaneIconVisualSize(zoom: number) {
+  const safeZoom = Number.isFinite(zoom) ? zoom : PLANE_ICON_BASE_ZOOM
+  const scale = 1 + (safeZoom - PLANE_ICON_BASE_ZOOM) * PLANE_ICON_ZOOM_SCALE_STEP
+  const size = Math.round(PLANE_ICON_BASE_VISUAL_SIZE * scale)
+  return Math.max(PLANE_ICON_MIN_VISUAL_SIZE, Math.min(PLANE_ICON_MAX_VISUAL_SIZE, size))
+}
+
+function getAirportScaledSize(baseSize: number, minSize: number, maxSize: number, zoom: number) {
+  const safeZoom = Number.isFinite(zoom) ? zoom : AIRPORT_ICON_BASE_ZOOM
+  const scale = 1 + (safeZoom - AIRPORT_ICON_BASE_ZOOM) * AIRPORT_ICON_ZOOM_SCALE_STEP
+  const size = Math.round(baseSize * scale)
+  return Math.max(minSize, Math.min(maxSize, size))
+}
+
+function getAirportMarkerSize(zoom: number, isSelected: boolean) {
+  const baseSize = getAirportScaledSize(
+    AIRPORT_MARKER_BASE_SIZE,
+    AIRPORT_MARKER_MIN_SIZE,
+    AIRPORT_MARKER_MAX_SIZE,
+    zoom,
+  )
+  return baseSize + (isSelected ? AIRPORT_MARKER_SELECTED_EXTRA_SIZE : 0)
+}
+
+function getAirportIconVisualSize(zoom: number, isSelected: boolean) {
+  const baseSize = getAirportScaledSize(
+    AIRPORT_ICON_BASE_VISUAL_SIZE,
+    AIRPORT_ICON_MIN_VISUAL_SIZE,
+    AIRPORT_ICON_MAX_VISUAL_SIZE,
+    zoom,
+  )
+  return baseSize + (isSelected ? AIRPORT_ICON_SELECTED_EXTRA_SIZE : 0)
 }
 
 function toRad(value: number) {
@@ -200,6 +265,7 @@ function buildPlaneIcon(
   carga: number,
   capacidad: number | undefined,
   ranges: { greenMax: number; amberMax: number },
+  zoom: number,
   dimmed = false,
   isSelected = false,
 ) {
@@ -221,8 +287,9 @@ function buildPlaneIcon(
   const fill = isEmpty && !isSelected ? 'none' : colors.fill
   const stroke = colors.stroke
   const strokeWidth = isSelected ? 2.1 : isEmpty ? 1.8 : 1.5
+  const visualSize = getPlaneIconVisualSize(zoom)
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${visualSize}" height="${visualSize}" viewBox="0 0 24 24"
     fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"
     stroke-linecap="round" stroke-linejoin="round">
     <path d="${PLANE_PATH}"/>
@@ -230,26 +297,28 @@ function buildPlaneIcon(
 
   return L.divIcon({
     className: 'plane-marker',
-    html: `<div class="plane-marker-hitbox"><div style="transform:rotate(${rotation}deg);width:28px;height:28px;opacity:${dimmed ? 0.4 : 1}">${svg}</div></div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
+    html: `<div class="plane-marker-hitbox"><div style="transform:rotate(${rotation}deg);width:${visualSize}px;height:${visualSize}px;opacity:${dimmed ? 0.4 : 1}">${svg}</div></div>`,
+    iconSize: [PLANE_MARKER_HITBOX_SIZE, PLANE_MARKER_HITBOX_SIZE],
+    iconAnchor: [PLANE_MARKER_HITBOX_SIZE / 2, PLANE_MARKER_HITBOX_SIZE / 2],
   })
 }
 
 function buildAirportIcon(
   colors: { stroke: string; fill: string },
-  isSelected: boolean
+  isSelected: boolean,
+  zoom: number,
 ) {
-  const markerSize = isSelected ? 42 : 34
-  const iconSize = isSelected ? 22 : 20
+  const markerSize = getAirportMarkerSize(zoom, isSelected)
+  const iconSize = getAirportIconVisualSize(zoom, isSelected)
   const displayColors = isSelected ? SELECTED_AIRPORT_COLORS : colors
+  const markerOpacity = isSelected ? 1 : 0.68
+  const markerShadow = isSelected
+    ? '0 3px 10px rgba(15, 23, 42, 0.28)'
+    : '0 2px 5px rgba(15, 23, 42, 0.14)'
 
-  const svgPaths = AIRPORT_PATHS.map(path => `<path d="${path}"/>`).join('')
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24"
-    fill="none" stroke="${displayColors.stroke}" stroke-width="2"
-    stroke-linecap="round" stroke-linejoin="round">
-    ${svgPaths}
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="${AIRPORT_ICON_VIEWBOX}"
+    fill="${displayColors.stroke}" aria-hidden="true">
+    <path d="${AIRPORT_PATH}" fill-rule="evenodd"/>
   </svg>`
 
   return L.divIcon({
@@ -262,7 +331,8 @@ function buildAirportIcon(
       border:1px solid rgba(15, 23, 42, 0.18);
       display:grid;
       place-items:center;
-      box-shadow:0 2px 7px rgba(15, 23, 42, 0.25);
+      box-shadow:${markerShadow};
+      opacity:${markerOpacity};
     ">${svg}</div>`,
     iconSize: [markerSize, markerSize],
     iconAnchor: [markerSize / 2, markerSize / 2],
@@ -296,6 +366,8 @@ export default function MapView({
   currentMinute,
   warehouseSnapshot,
   ranges,
+  mapFilters,
+  onMapFiltersChange,
   selectedFlightId,
   selectedAirportCode,
   selectedShipmentRoute,
@@ -339,12 +411,14 @@ export default function MapView({
   const [trackerCode, setTrackerCode] = useState<string | null>(null)
   const [isTrackerOpen, setIsTrackerOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isMapLayerFiltersOpen, setIsMapLayerFiltersOpen] = useState(false)
   const [visibleTimeItems, setVisibleTimeItems] = useState({
     simulatedDate: true,
     simulatedDuration: true,
     actualDate: true,
     actualDuration: true,
   })
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM)
   const airportLayerRef = useRef<L.LayerGroup | null>(null)
   const planeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
@@ -864,6 +938,12 @@ export default function MapView({
     cancelledRouteLayerRef.current = L.layerGroup().addTo(map)
     ghostLayerRef.current = L.layerGroup().addTo(map)
 
+    const handleZoomEnd = () => {
+      setMapZoom(map.getZoom())
+    }
+
+    map.on('zoomend', handleZoomEnd)
+    setMapZoom(map.getZoom())
     mapRef.current = map
   }, [])
 
@@ -994,7 +1074,7 @@ export default function MapView({
         : resolveSemaphoreColor(percent, ranges)
       const isSelected = selectedAirportCode !== null && airport.codigoOaci === selectedAirportCode
 
-      const icon = buildAirportIcon(colors, isSelected)
+      const icon = buildAirportIcon(colors, isSelected, mapZoom)
       const marker = L.marker([airport.latitud, airport.longitud], {
         icon,
         pane: MAP_PANES.airport,
@@ -1031,7 +1111,7 @@ export default function MapView({
       })
       marker.addTo(airportLayerRef.current as L.LayerGroup)
     })
-  }, [airports, warehouseSnapshot, ranges, selectedAirportCode, onAirportPreview, previewAirportCode])
+  }, [airports, warehouseSnapshot, ranges, selectedAirportCode, mapZoom, onAirportPreview, previewAirportCode])
 
   useEffect(() => {
     if (!planeLayerRef.current) {
@@ -1079,7 +1159,7 @@ export default function MapView({
       const anySelectionActive = selectedFlightId !== null || selectedShipmentRoute != null
       const isDimmed = anySelectionActive && !isSelected
 
-      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, isDimmed, isSelectedFlight)
+      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, mapZoom, isDimmed, isSelectedFlight)
 
       const tooltipParts = [
         `Vuelo ${seg.flightId}`,
@@ -1140,7 +1220,7 @@ export default function MapView({
         planeMarkersRef.current.delete(flightId)
       }
     })
-  }, [segments, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, onFlightPreview, previewFlightId, cancelledFlightIdSet])
+  }, [segments, currentMinute, selectedFlightId, selectedShipmentRoute, ranges, mapZoom, onFlightPreview, previewFlightId, cancelledFlightIdSet])
 
   useEffect(() => {
     const layer = routeLayerRef.current
@@ -1374,6 +1454,47 @@ export default function MapView({
     ((secondaryTimeLabel || hasRealOnlyTime) && visibleTimeItems.actualDate) ||
     (realDurationLabel && visibleTimeItems.actualDuration),
   )
+  const hasActiveMapLayerFilter =
+    mapFilters.flights.semaphore !== 'all' ||
+    mapFilters.warehouses.semaphore !== 'all'
+  const hasMixedMapLayerFilter =
+    mapFilters.flights.semaphore !== 'all' &&
+    mapFilters.warehouses.semaphore !== 'all' &&
+    mapFilters.flights.semaphore !== mapFilters.warehouses.semaphore
+  const mapLayerFilterColor = hasMixedMapLayerFilter
+    ? { fill: '#dbeafe', stroke: '#2f62b5' }
+    : getSemaphoreFilterColor(
+        mapFilters.flights.semaphore !== 'all'
+          ? mapFilters.flights.semaphore
+          : mapFilters.warehouses.semaphore,
+        ranges,
+      )
+  const mapLayerFilterButtonStyle = hasActiveMapLayerFilter
+    ? ({
+        '--map-layer-filter-bg': mapLayerFilterColor.fill,
+        '--map-layer-filter-border': mapLayerFilterColor.stroke,
+      } as CSSProperties)
+    : undefined
+
+  const handleMapFlightSemaphoreChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      flights: {
+        ...mapFilters.flights,
+        semaphore: value,
+      },
+    })
+  }
+
+  const handleMapWarehouseSemaphoreChange = (value: SemaphoreFilterLevel) => {
+    onMapFiltersChange({
+      ...mapFilters,
+      warehouses: {
+        ...mapFilters.warehouses,
+        semaphore: value,
+      },
+    })
+  }
 
   return (
     <div ref={wrapperRef} className="map-wrapper">
@@ -1393,13 +1514,87 @@ export default function MapView({
         <RotateCcw size={17} />
       </button>
       <button
+        className={`map-layer-filter-btn ${hasActiveMapLayerFilter ? 'active' : ''}`}
+        style={mapLayerFilterButtonStyle}
+        onClick={() => {
+          setIsMapLayerFiltersOpen((current) => !current)
+          setIsSettingsOpen(false)
+        }}
+        title="Filtros rápidos del mapa"
+        aria-label="Filtros rápidos del mapa"
+        aria-expanded={isMapLayerFiltersOpen}
+      >
+        <Layers size={18} />
+        {hasActiveMapLayerFilter ? <span className="map-layer-filter-indicator" /> : null}
+      </button>
+      <button
         className="map-settings-btn"
-        onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+        onClick={() => {
+          setIsSettingsOpen(!isSettingsOpen)
+          setIsMapLayerFiltersOpen(false)
+        }}
         title="Configuración de visualización"
         aria-label="Configuración de visualización"
       >
         <Settings size={18} />
       </button>
+
+      {isMapLayerFiltersOpen && (
+        <div className="map-layer-filter-panel">
+          <div className="map-layer-filter-panel-header">
+            <strong>Filtros rápidos</strong>
+            <button className="map-settings-panel-close" onClick={() => setIsMapLayerFiltersOpen(false)}>
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="map-layer-filter-section">
+            <span>Vuelos</span>
+            <div className="map-layer-filter-options">
+              {MAP_SEMAPHORE_OPTIONS.map((option) => {
+                const colors = getSemaphoreFilterColor(option.value, ranges)
+                return (
+                  <button
+                    key={`flight-${option.value}`}
+                    type="button"
+                    className={mapFilters.flights.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleMapFlightSemaphoreChange(option.value)}
+                  >
+                    <span
+                      className="map-layer-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="map-layer-filter-section">
+            <span>Aeropuertos</span>
+            <div className="map-layer-filter-options">
+              {MAP_SEMAPHORE_OPTIONS.map((option) => {
+                const colors = getSemaphoreFilterColor(option.value, ranges)
+                return (
+                  <button
+                    key={`warehouse-${option.value}`}
+                    type="button"
+                    className={mapFilters.warehouses.semaphore === option.value ? 'active' : ''}
+                    onClick={() => handleMapWarehouseSemaphoreChange(option.value)}
+                  >
+                    <span
+                      className="map-layer-filter-dot"
+                      style={{ background: option.value === 'all' ? '#9aa8ba' : colors.fill }}
+                    />
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isSettingsOpen && (
         <div className="map-settings-panel">
