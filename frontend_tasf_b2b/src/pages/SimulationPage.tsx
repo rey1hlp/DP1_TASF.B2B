@@ -179,9 +179,6 @@ export default function SimulationPage() {
 
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
 
-  // ⏱️ Estado para el cronómetro en tiempo real (en segundos)
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
-
   const { setTopbarMain } = useOutletContext<AppLayoutContext>()
   const navigate = useNavigate()
 
@@ -216,6 +213,8 @@ export default function SimulationPage() {
     pause,
     resume,
     setSpeed,
+    elapsedSeconds,
+    setElapsedSeconds,
   } = useSimulationContext()
 
   const speedBaseMinPerSec = meta?.speedMinPerSec && meta.speedMinPerSec > 0
@@ -454,6 +453,14 @@ export default function SimulationPage() {
 
   const handleSearchShipment = async (codigo: string) => {
     if (!codigo || !simId) return
+
+    // Toggle: si ya está seleccionado, deseleccionar
+    if (selectedShipmentRoute?.codigoPedido === codigo) {
+      setSelectedShipmentRoute(null)
+      setEntityFocusRequest(null)
+      return
+    }
+
     try {
       setShipmentSearchError(null)
       const route = await fetchShipmentRoute(simId, codigo)
@@ -619,7 +626,7 @@ export default function SimulationPage() {
   const preparingMessage = isPreparing
     ? simulationMode === 'collapse'
       ? `Calculando simulacion hasta el colapso desde: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
-      : `Calculando simulacion hasta la fecha: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
+      : `Calculando simulacion desde la fecha: ${formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)}`
     : null
 
   const displayStartDate = formatCompactDate(requestedStartOnlyDate ?? meta?.inicio)
@@ -1131,7 +1138,7 @@ export default function SimulationPage() {
             </div>
           </section>
 
-          <section 
+          <section
             className={`map-area ${isPanelCollapsed ? 'panel-collapsed' : ''} ${isMapFullscreen ? 'is-fullscreen' : ''}`}
             style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties}
           >
@@ -1252,7 +1259,7 @@ export default function SimulationPage() {
               }
             />
           </section>
-          
+
           <SimulationReportModal
             isOpen={isReportModalOpen}
             simId={simId}
