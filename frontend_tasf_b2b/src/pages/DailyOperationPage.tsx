@@ -232,6 +232,13 @@ export default function DailyOperationPage() {
   const entityFocusRequestIdRef = useRef(0)
 
   const handleSearchShipment = async (codigo: string) => {
+    // Toggle: si ya está seleccionado, deseleccionar
+    if (selectedShipmentRoute?.codigoPedido === codigo) {
+      setSelectedShipmentRoute(null)
+      setEntityFocusRequest(null)
+      return
+    }
+
     setShipmentSearchError(null)
     try {
       // Intentar primero obtener la ruta real del endpoint de operación diaria

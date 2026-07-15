@@ -26,12 +26,20 @@ interface SimulationContextType {
   pause: () => void
   resume: () => void
   setSpeed: (speedMinPerSec: number) => void
+  elapsedSeconds: number
+  setElapsedSeconds: (seconds: number | ((prev: number) => number)) => void
 }
 
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined)
 
 export function SimulationProvider({ children }: { children: ReactNode }) {
   const [enviosKey, setEnviosKey] = useState<string | null>(null)
+  const [elapsedSeconds, setElapsedSecondsState] = useState<number>(0)
+
+  const setElapsedSeconds = (seconds: number | ((prev: number) => number)) => {
+    setElapsedSecondsState(seconds)
+  }
+
   const [simulation, setSimulation] = useState<SimulationState>({
     simId: null,
     requestedStart: null,
@@ -70,6 +78,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         pause,
         resume,
         setSpeed,
+        elapsedSeconds,
+        setElapsedSeconds,
       }}
     >
       {children}
