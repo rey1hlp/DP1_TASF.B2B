@@ -65,7 +65,6 @@ public class SimulationReportPersistenceService {
         this.impactRepository = impactRepository;
     }
 
-    @Transactional
     public void persistSnapshot(
         String simulationId,
         SimulationData data,

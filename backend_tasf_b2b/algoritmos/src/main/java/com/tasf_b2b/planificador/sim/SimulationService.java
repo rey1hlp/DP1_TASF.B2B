@@ -1246,11 +1246,16 @@ public class SimulationService {
         SimulationData data,
         List<AppliedFlightCancellation> cancellations
     ) {
-        try {
-            simulationReportPersistenceService.persistSnapshot(simulationId, data, cancellations);
-        } catch (Exception ex) {
-            log.warn("[SIM:{}] Simulation report persistence failed; continuing", simulationId, ex);
-        }
+        executor.submit(() -> {
+            try {
+                long start = System.currentTimeMillis();
+                log.info("[SIM:{}] Background report persistence started", simulationId);
+                simulationReportPersistenceService.persistSnapshot(simulationId, data, cancellations);
+                log.info("[SIM:{}] Background report persistence completed in {} ms", simulationId, System.currentTimeMillis() - start);
+            } catch (Exception ex) {
+                log.warn("[SIM:{}] Simulation report persistence failed; continuing", simulationId, ex);
+            }
+        });
     }
 
     private static class ChunkResult {
