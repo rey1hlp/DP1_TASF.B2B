@@ -226,6 +226,7 @@ export default function DailyOperationPage() {
   const [sampleShipments, setSampleShipments] = useState<string[]>([])
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({})
   const [shipmentFlightIds, setShipmentFlightIds] = useState<Record<string, string[]>>({})
+  const [shipmentClientIds, setShipmentClientIds] = useState<Record<string, string | null | undefined>>({})
   const [showCancelledDetails, setShowCancelledDetails] = useState(true)
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
@@ -320,6 +321,9 @@ export default function DailyOperationPage() {
       ))
       setShipmentFlightIds(Object.fromEntries(
         snapshot.envios.map((shipment) => [shipment.codigoPedido, shipment.vueloIds ?? []])
+      ))
+      setShipmentClientIds(Object.fromEntries(
+        snapshot.envios.map((shipment) => [shipment.codigoPedido, shipment.idCliente])
       ))
       setSelectedShipmentRoute((currentRoute) =>
         syncSelectedShipmentRoute(currentRoute, snapshot.envios)
@@ -840,10 +844,12 @@ export default function DailyOperationPage() {
           onSelectAirport={handleSelectAirport}
           selectedShipmentRoute={selectedShipmentRoute}
           onSearchShipment={handleSearchShipment}
+          onSelectShipmentRoute={setSelectedShipmentRoute}
           shipmentSearchError={shipmentSearchError}
           sampleShipments={sampleShipments}
           shipmentQuantities={shipmentQuantities}
           shipmentFlightIds={shipmentFlightIds}
+          shipmentClientIds={shipmentClientIds}
           flightTextFilters={mapFilters.flights.text}
           onFlightTextFiltersChange={(filters) =>
             setMapFilters((current) => ({

@@ -4,6 +4,7 @@ export interface EnvioDetalleDto {
   destino: string;
   ut: string;
   cantidadMaletas: number;
+  idCliente?: string | null;
   estado: 'PLANIFICADO' | 'EN_VUELO' | 'ENTREGADO';
   minutoEntrega?: number | null;
   vueloIds?: string[];

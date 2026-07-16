@@ -46,7 +46,7 @@ import {
 } from '../utils/time'
 
 export type PasoRutaDto = {
-  vueloId: number
+  vueloId: number | string
   planId?: number | null
   origen: string
   destino: string
@@ -1209,6 +1209,7 @@ export default function SimulationPage() {
               onResizeStart={handleResizeStart}
               selectedShipmentRoute={selectedShipmentRoute}
               onSearchShipment={handleSearchShipment}
+              onSelectShipmentRoute={setSelectedShipmentRoute}
               shipmentSearchError={shipmentSearchError}
               sampleShipments={sampleShipments}
               shipmentQuantities={shipmentQuantities}
