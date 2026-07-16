@@ -15,12 +15,11 @@ import {
   formatDurationHours,
   formatBags,
   formatInteger,
-  formatMinuteRange,
-  formatOperationalMinuteRange,
+  formatMinuteRangeWithGmt,
   formatPercent,
   formatShipmentDepartureTime,
-  formatSimDateTimeFromMinute,
-  formatSimMinute,
+  formatSimDateTimeFromMinuteWithGmt,
+  formatSimMinuteWithGmt,
   parseShipmentDepartureMinute,
 } from '../utils/time'
 import { resolveSemaphoreColor, resolveSemaphoreLevel, type SemaphoreRanges } from '../utils/semaphore'
@@ -96,6 +95,7 @@ type SidebarView = 'shipment-detail' | 'bag-detail'
 export type EntityExplorerProps = {
   flights: EntityFlightItem[]
   airports: EntityAirportItem[]
+  airportGmtByCode?: Record<string, number>
   shipments: string[]
   selectedFlightId: number | null
   selectedAirportCode: string | null
@@ -322,6 +322,22 @@ function normalizeEntityCode(value?: string | null) {
   return value?.trim().toLowerCase() ?? ''
 }
 
+function normalizeAirportCode(value?: string | null) {
+  return value?.trim().toUpperCase() ?? ''
+}
+
+function resolveAirportGmt(
+  airportGmtByCode: Record<string, number>,
+  code?: string | null,
+): number | null {
+  const lookupKey = normalizeAirportCode(code)
+  if (!lookupKey) {
+    return null
+  }
+  const value = airportGmtByCode[lookupKey]
+  return Number.isFinite(value) ? value : null
+}
+
 function isLikelyBagCode(value: string) {
   return /-\d{3}$/.test(value.trim())
 }
@@ -377,6 +393,7 @@ function BagList({ shipmentCode, totalBags, selectedBagCode, onSelectBag }: BagL
 
 type BagDetailPanelProps = {
   route: EntityShipmentRoute | null
+  airportGmtByCode: Record<string, number>
   selectedBagCode: string | null
   clientId?: string | null
   activeBagIndex: number
@@ -390,6 +407,7 @@ type BagDetailPanelProps = {
 
 function BagDetailPanel({
   route,
+  airportGmtByCode,
   selectedBagCode,
   clientId,
   activeBagIndex,
@@ -498,7 +516,14 @@ function BagDetailPanel({
                 >
                   <span>{step.planId ?? step.vueloId ?? '--'}</span>
                   <strong>{step.origen} → {step.destino}</strong>
-                  <small>{formatMinuteRange(step.salidaMin, step.llegadaMin)}</small>
+                  <small>
+                    {formatMinuteRangeWithGmt(
+                      step.salidaMin,
+                      step.llegadaMin,
+                      resolveAirportGmt(airportGmtByCode, step.origen),
+                      resolveAirportGmt(airportGmtByCode, step.destino),
+                    )}
+                  </small>
                 </div>
               ))
             )}
@@ -512,6 +537,7 @@ function BagDetailPanel({
 export default function EntityExplorer({
   flights,
   airports,
+  airportGmtByCode = {},
   shipments,
   selectedFlightId,
   selectedAirportCode,
@@ -1634,7 +1660,14 @@ export default function EntityExplorer({
                     </div>
                     <div className="flight-card-time flight-meta">
                       <Clock3 size={13} />
-                      <span>{formatMinuteRange(flight.salidaMin, flight.llegadaMin)}</span>
+                      <span>
+                        {formatMinuteRangeWithGmt(
+                          flight.salidaMin,
+                          flight.llegadaMin,
+                          resolveAirportGmt(airportGmtByCode, flight.origen),
+                          resolveAirportGmt(airportGmtByCode, flight.destino),
+                        )}
+                      </span>
                     </div>
                     <div className="flight-card-capacity">
                       {capacityDetail}
@@ -1716,6 +1749,7 @@ export default function EntityExplorer({
       {sidebarView === 'bag-detail' ? (
         <BagDetailPanel
           route={selectedBagRoute}
+          airportGmtByCode={airportGmtByCode}
           selectedBagCode={selectedBagCode}
           clientId={selectedShipmentClientId}
           activeBagIndex={activeBagIndex}
@@ -1955,7 +1989,10 @@ export default function EntityExplorer({
               const isExpanded = expandedShipmentCode === codigo
               const isSelected = selectedShipmentRoute?.codigoPedido === codigo
               const deliveryLabel = shipment.minutoEntrega !== null && shipment.minutoEntrega !== undefined
-                ? formatSimDateTimeFromMinute(shipment.minutoEntrega)
+                ? formatSimDateTimeFromMinuteWithGmt(
+                    shipment.minutoEntrega,
+                    resolveAirportGmt(airportGmtByCode, shipment.destino),
+                  )
                 : '--'
 
               return (
@@ -2003,7 +2040,12 @@ export default function EntityExplorer({
                       ) : null}
                     </div>
                     <div className="shipment-card-footer">
-                      <span>{`Salida: ${formatShipmentDepartureTime(shipment.ut)}`}</span>
+                      <span>
+                        {`Salida: ${formatShipmentDepartureTime(
+                          shipment.ut,
+                          resolveAirportGmt(airportGmtByCode, shipment.origen),
+                        )}`}
+                      </span>
                       <span>{`Entrega: ${deliveryLabel}`}</span>
                     </div>
                   </div>
@@ -2067,7 +2109,14 @@ export default function EntityExplorer({
                 {step.planId ?? step.vueloId} | {step.origen} → {step.destino}
               </div>
               <div className="flight-meta">
-                Salida {formatOperationalMinuteRange(step.salidaMin, step.llegadaMin)}
+                Salida {
+                  formatMinuteRangeWithGmt(
+                    step.salidaMin,
+                    step.llegadaMin,
+                    resolveAirportGmt(airportGmtByCode, step.origen),
+                    resolveAirportGmt(airportGmtByCode, step.destino),
+                  )
+                }
               </div>
             </div>
           ))}
@@ -2303,11 +2352,19 @@ export default function EntityExplorer({
                     <div className="airport-card-timings">
                       <span>
                         <PlaneTakeoff size={13} />
-                        {formatSimMinute(airport.nextDepartureMin, true)}
+                        {formatSimMinuteWithGmt(
+                          airport.nextDepartureMin,
+                          resolveAirportGmt(airportGmtByCode, airport.codigoOaci),
+                          true,
+                        )}
                       </span>
                       <span>
                         <PlaneLanding size={13} />
-                        {formatSimMinute(airport.nextArrivalMin, true)}
+                        {formatSimMinuteWithGmt(
+                          airport.nextArrivalMin,
+                          resolveAirportGmt(airportGmtByCode, airport.codigoOaci),
+                          true,
+                        )}
                       </span>
                     </div>
                     <div className="airport-card-capacity">

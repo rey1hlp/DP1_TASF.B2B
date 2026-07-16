@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { ComponentProps } from 'react'
-import type { AirportDto, FlightCrudDto, ShipmentCrudDto } from '../types/sim'
+import type { AirportDto, EnvioDetalleDto, FlightCrudDto, ShipmentCrudDto } from '../types/sim'
 import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports, listFlights } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls, { type RespuestaRutaEnvioDto } from '../components/DailyOperationControls'
@@ -123,22 +123,34 @@ function syncSelectedShipmentRoute(
     return currentRoute
   }
 
-  const shouldHideRoute =
-    selectedShipment.status === 'DELIVERED' || selectedShipment.status === 'CANCELLED'
-  const nextRoute = shouldHideRoute ? [] : currentRoute.ruta
-
   const statusChanged = currentRoute.estado !== selectedShipment.status
-  const routeChanged = shouldHideRoute && currentRoute.ruta.length > 0
 
-  if (!statusChanged && !routeChanged) {
+  if (!statusChanged) {
     return currentRoute
   }
 
   return {
     ...currentRoute,
     estado: selectedShipment.status,
-    ruta: nextRoute,
   }
+}
+
+function mapShipmentsToEntityItems(shipments?: ShipmentCrudDto[]): EnvioDetalleDto[] {
+  if (!shipments?.length) {
+    return []
+  }
+
+  return shipments.map((shipment) => ({
+    codigoPedido: shipment.codigoPedido,
+    origen: shipment.origen,
+    destino: shipment.destino,
+    ut: shipment.ingresoUtc || shipment.ingresoLocal || '',
+    cantidadMaletas: shipment.cantidad,
+    idCliente: shipment.idCliente,
+    estado: (shipment.status ?? 'PENDING') as EnvioDetalleDto['estado'],
+    minutoEntrega: null,
+    vueloIds: shipment.vueloIds ?? [],
+  }))
 }
 
 function getLimaDateKey() {
@@ -228,6 +240,7 @@ export default function DailyOperationPage() {
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({})
   const [shipmentFlightIds, setShipmentFlightIds] = useState<Record<string, string[]>>({})
   const [shipmentClientIds, setShipmentClientIds] = useState<Record<string, string | null | undefined>>({})
+  const [entityShipments, setEntityShipments] = useState<EnvioDetalleDto[]>([])
   const [showCancelledDetails, setShowCancelledDetails] = useState(true)
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
@@ -252,10 +265,6 @@ export default function DailyOperationPage() {
         if (dbShipment?.status) {
           routeData.estado = dbShipment.status
         }
-        // Asegurar que no se dibuje la línea si ya se entregó o canceló
-        if (routeData.estado === 'DELIVERED' || routeData.estado === 'CANCELLED') {
-          routeData.ruta = []
-        }
         setSelectedFlightId(null)
         setSelectedAirportCode(null)
         setSelectedShipmentRoute(routeData)
@@ -271,9 +280,7 @@ export default function DailyOperationPage() {
           codigoPedido: shipment.codigoPedido,
           estado: shipment.status ?? 'PENDING',
           tiempoTotalHoras: shipment.slaHoras,
-          ruta: (shipment.status === 'DELIVERED' || shipment.status === 'CANCELLED')
-            ? []
-            : [{ vueloId: '--', origen: shipment.origen, destino: shipment.destino, salidaMin: 0, llegadaMin: 0 }]
+          ruta: []
         })
         return
       }
@@ -288,6 +295,13 @@ export default function DailyOperationPage() {
   const fallbackCurrentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
   const currentMinute = serverCurrentMinute ?? fallbackCurrentMinute
   const operationDateKey = getLimaDateKey()
+  const airportGmtByCode = useMemo(
+    () =>
+      Object.fromEntries(
+        airports.map((airport) => [airport.codigoOaci.toUpperCase(), airport.gmt]),
+      ),
+    [airports],
+  )
   const cancelledFlightTraces = useMemo(() => {
     return buildCancelledFlightTraces(
       flightCatalog,
@@ -331,6 +345,7 @@ export default function DailyOperationPage() {
       setShipmentClientIds(Object.fromEntries(
         snapshot.envios.map((shipment) => [shipment.codigoPedido, shipment.idCliente])
       ))
+      setEntityShipments(mapShipmentsToEntityItems(snapshot.envios))
       setSelectedShipmentRoute((currentRoute) =>
         syncSelectedShipmentRoute(currentRoute, snapshot.envios)
       )
@@ -440,18 +455,13 @@ export default function DailyOperationPage() {
           return currentRoute
         }
 
-        const shouldHideRoute =
-          shipment.status === 'DELIVERED' || shipment.status === 'CANCELLED'
-        const nextRoute = shouldHideRoute ? [] : currentRoute.ruta
-
-        if (currentRoute.estado === shipment.status && nextRoute === currentRoute.ruta) {
+        if (currentRoute.estado === shipment.status) {
           return currentRoute
         }
 
         return {
           ...currentRoute,
           estado: shipment.status ?? 'PENDING',
-          ruta: nextRoute,
         }
       })
     }
@@ -853,6 +863,7 @@ export default function DailyOperationPage() {
           selectedFlightId={selectedFlightId}
           onSelectFlight={handleSelectFlight}
           airportItems={airportItems}
+          airportGmtByCode={airportGmtByCode}
           selectedAirportCode={selectedAirportCode}
           onSelectAirport={handleSelectAirport}
           selectedShipmentRoute={selectedShipmentRoute}
@@ -863,6 +874,7 @@ export default function DailyOperationPage() {
           shipmentQuantities={shipmentQuantities}
           shipmentFlightIds={shipmentFlightIds}
           shipmentClientIds={shipmentClientIds}
+          entityShipments={entityShipments}
           flightTextFilters={mapFilters.flights.text}
           onFlightTextFiltersChange={(filters) =>
             setMapFilters((current) => ({

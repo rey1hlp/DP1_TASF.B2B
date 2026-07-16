@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   formatDateTime,
   formatElapsedReal,
+  formatMinuteRangeWithGmt,
   formatShipmentDepartureTime,
   formatSimDateTimeFromMinute,
   formatSimSpan,
@@ -49,6 +50,21 @@ test('formatShipmentDepartureTime renders backend Min format as simulated date t
 
 test('formatShipmentDepartureTime keeps timezone timestamps in UTC', () => {
   assert.equal(formatShipmentDepartureTime('2026-05-17T01:08:00Z'), '17 may 2026, 01:08 UTC')
+})
+
+test('formatShipmentDepartureTime localizes timezone timestamps with airport GMT', () => {
+  assert.equal(formatShipmentDepartureTime('2026-05-17T01:08:00Z', -5), '16 may 2026, 20:08')
+})
+
+test('formatMinuteRangeWithGmt localizes departure and arrival using each airport GMT', () => {
+  const dayIndex = getDayIndexFromDateString('2026-05-17') ?? 0
+  const startMinute = dayIndex * 1440 + 60
+  const endMinute = dayIndex * 1440 + 180
+
+  assert.equal(
+    formatMinuteRangeWithGmt(startMinute, endMinute, -5, 1),
+    '16/05/2026 20:00 - 17/05/2026 04:00',
+  )
 })
 
 test('formatElapsedReal uses mm:ss min for early seconds', () => {

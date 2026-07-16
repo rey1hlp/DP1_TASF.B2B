@@ -46,6 +46,7 @@ export type SimulationControlsProps = {
   selectedFlightId: number | null
   onSelectFlight: (flightId: number) => void
   airportItems: EntityAirportItem[]
+  airportGmtByCode: Record<string, number>
   selectedAirportCode: string | null
   onSelectAirport: (codigoOaci: string) => void
   isCollapsed: boolean
@@ -90,6 +91,7 @@ export default function SimulationControls({
   selectedFlightId,
   onSelectFlight,
   airportItems,
+  airportGmtByCode,
   selectedAirportCode,
   onSelectAirport,
   isCollapsed,
@@ -290,6 +292,7 @@ export default function SimulationControls({
                 <EntityExplorer
                   flights={flightItems}
                   airports={airportItems}
+                  airportGmtByCode={airportGmtByCode}
                   shipments={sampleShipments}
                   shipmentQuantities={shipmentQuantities}
                   selectedFlightId={selectedFlightId}
