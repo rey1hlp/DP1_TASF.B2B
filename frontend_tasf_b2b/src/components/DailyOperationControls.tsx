@@ -77,9 +77,12 @@ export type DailyOperationControlsProps = {
 
   selectedShipmentRoute: RespuestaRutaEnvioDto | null
   onSearchShipment: (codigo: string) => void
+  onSelectShipmentRoute?: (route: RespuestaRutaEnvioDto) => void
   shipmentSearchError: string | null
   sampleShipments: string[]
   shipmentQuantities?: Record<string, number>
+  shipmentFlightIds?: Record<string, string[]>
+  shipmentClientIds?: Record<string, string | null | undefined>
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
   airportTextFilters: AirportTextFilters
@@ -114,9 +117,12 @@ export default function DailyOperationControls({
   onToggleCollapse,
   selectedShipmentRoute,
   onSearchShipment,
+  onSelectShipmentRoute,
   shipmentSearchError,
   sampleShipments,
   shipmentQuantities,
+  shipmentFlightIds,
+  shipmentClientIds,
   flightTextFilters,
   onFlightTextFiltersChange,
   airportTextFilters,
@@ -347,6 +353,8 @@ export default function DailyOperationControls({
             airports={airportItems}
             shipments={sampleShipments}
             shipmentQuantities={shipmentQuantities}
+            shipmentFlightIds={shipmentFlightIds}
+            shipmentClientIds={shipmentClientIds}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}
@@ -361,6 +369,7 @@ export default function DailyOperationControls({
 	            airportFilters={airportTextFilters}
             onAirportFiltersChange={onAirportTextFiltersChange}
             onSearchShipment={onSearchShipment}
+            onSelectShipmentRoute={onSelectShipmentRoute}
             shipmentSearchError={shipmentSearchError}
             currentMinute={currentMinute}
             focusRequest={entityFocusRequest}

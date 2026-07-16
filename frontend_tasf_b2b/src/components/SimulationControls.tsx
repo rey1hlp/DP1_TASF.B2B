@@ -3,10 +3,10 @@ import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from '.
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
-import type { EnvioDetalleDto } from '../services/api'
+import type { EnvioDetalleDto } from '../types/sim'
 
 export type PasoRutaDto = {
-  vueloId: number
+  vueloId: number | string
   origen: string
   destino: string
   salidaMin: number
@@ -52,6 +52,7 @@ export type SimulationControlsProps = {
   onToggleCollapse: () => void
   selectedShipmentRoute: RespuestaRutaEnvioDto | null
   onSearchShipment: (codigo: string) => void
+  onSelectShipmentRoute?: (route: RespuestaRutaEnvioDto) => void
   shipmentSearchError: string | null
   sampleShipments: string[]
   shipmentQuantities?: Record<string, number>
@@ -95,6 +96,7 @@ export default function SimulationControls({
   onToggleCollapse,
   selectedShipmentRoute,
   onSearchShipment,
+  onSelectShipmentRoute,
   shipmentSearchError,
   sampleShipments,
   shipmentQuantities,
@@ -304,6 +306,7 @@ export default function SimulationControls({
 	                  airportFilters={airportTextFilters}
                   onAirportFiltersChange={onAirportTextFiltersChange}
                   onSearchShipment={onSearchShipment}
+                  onSelectShipmentRoute={onSelectShipmentRoute}
                   shipmentSearchError={shipmentSearchError}
                   currentMinute={currentMinute}
                   focusRequest={entityFocusRequest}

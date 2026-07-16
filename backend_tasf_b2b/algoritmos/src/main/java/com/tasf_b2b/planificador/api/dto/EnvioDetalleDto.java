@@ -1,13 +1,18 @@
 package com.tasf_b2b.planificador.api.dto;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class EnvioDetalleDto {
     private String codigoPedido;
     private String origen;
     private String destino;
     private String ut;
     private int cantidadMaletas;
+    private String idCliente;
     private String estado;
     private Integer minutoEntrega;
+    private List<String> vueloIds = new ArrayList<>();
 
     public EnvioDetalleDto() {}
 
@@ -21,6 +26,16 @@ public class EnvioDetalleDto {
         this.minutoEntrega = minutoEntrega;
     }
 
+    public EnvioDetalleDto(String codigoPedido, String origen, String destino, String ut, int cantidadMaletas, String estado, Integer minutoEntrega, List<String> vueloIds) {
+        this(codigoPedido, origen, destino, ut, cantidadMaletas, estado, minutoEntrega);
+        this.vueloIds = vueloIds != null ? vueloIds : new ArrayList<>();
+    }
+
+    public EnvioDetalleDto(String codigoPedido, String origen, String destino, String ut, int cantidadMaletas, String idCliente, String estado, Integer minutoEntrega, List<String> vueloIds) {
+        this(codigoPedido, origen, destino, ut, cantidadMaletas, estado, minutoEntrega, vueloIds);
+        this.idCliente = idCliente;
+    }
+
     public String getCodigoPedido() { return codigoPedido; }
     public void setCodigoPedido(String codigoPedido) { this.codigoPedido = codigoPedido; }
     public String getOrigen() { return origen; }
@@ -31,8 +46,12 @@ public class EnvioDetalleDto {
     public void setUt(String ut) { this.ut = ut; }
     public int getCantidadMaletas() { return cantidadMaletas; }
     public void setCantidadMaletas(int cantidadMaletas) { this.cantidadMaletas = cantidadMaletas; }
+    public String getIdCliente() { return idCliente; }
+    public void setIdCliente(String idCliente) { this.idCliente = idCliente; }
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
     public Integer getMinutoEntrega() { return minutoEntrega; }
     public void setMinutoEntrega(Integer minutoEntrega) { this.minutoEntrega = minutoEntrega; }
+    public List<String> getVueloIds() { return vueloIds; }
+    public void setVueloIds(List<String> vueloIds) { this.vueloIds = vueloIds != null ? vueloIds : new ArrayList<>(); }
 }

@@ -7,7 +7,16 @@ type MapRef = {
 }
 
 type ShipmentRoute = {
-  ruta: Array<{ origen: string; destino: string; vueloId?: number | string }>
+  codigoPedido?: string
+  codigoMaleta?: string
+  consultaMaleta?: boolean
+  ruta: Array<{
+    origen: string
+    destino: string
+    salidaMin: number
+    llegadaMin: number
+    vueloId?: number | string
+  }>
 } | null | undefined
 
 export type UseMapSelectionFocusParams = {
@@ -39,6 +48,71 @@ function getSegmentPosition(segment: FlightSegmentDto, minute: number | null): L
   ]
 }
 
+function getAirportPosition(
+  airports: AirportDto[],
+  airportCode: string,
+): [number, number] | null {
+  const airport = airports.find((item) => item.codigoOaci === airportCode)
+  return airport ? [airport.latitud, airport.longitud] : null
+}
+
+function getShipmentCurrentPosition(
+  route: NonNullable<ShipmentRoute>,
+  airports: AirportDto[],
+  segments: FlightSegmentDto[],
+  currentMinute: number | null,
+): L.LatLngExpression | null {
+  if (!route.ruta.length) {
+    return null
+  }
+
+  if (currentMinute === null) {
+    const firstStep = route.ruta[0]
+    return getAirportPosition(airports, firstStep.origen)
+  }
+
+  const firstStep = route.ruta[0]
+  if (currentMinute < firstStep.salidaMin) {
+    return getAirportPosition(airports, firstStep.origen)
+  }
+
+  const activeStep = route.ruta.find(
+    (step) => currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin,
+  )
+
+  if (activeStep) {
+    const matchingSegment = segments.find(
+      (segment) => String(segment.flightId) === String(activeStep.vueloId),
+    )
+    if (matchingSegment) {
+      return getSegmentPosition(matchingSegment, currentMinute)
+    }
+
+    const origin = getAirportPosition(airports, activeStep.origen)
+    const destination = getAirportPosition(airports, activeStep.destino)
+    if (!origin || !destination) {
+      return origin ?? destination
+    }
+
+    const total = Math.max(1, activeStep.llegadaMin - activeStep.salidaMin)
+    const progress = Math.min(1, Math.max(0, (currentMinute - activeStep.salidaMin) / total))
+    return [
+      origin[0] + (destination[0] - origin[0]) * progress,
+      origin[1] + (destination[1] - origin[1]) * progress,
+    ]
+  }
+
+  const lastFinishedStep = [...route.ruta]
+    .reverse()
+    .find((step) => currentMinute > step.llegadaMin)
+
+  if (lastFinishedStep) {
+    return getAirportPosition(airports, lastFinishedStep.destino)
+  }
+
+  return getAirportPosition(airports, firstStep.origen)
+}
+
 export default function useMapSelectionFocus({
   mapRef,
   airports,
@@ -57,7 +131,11 @@ export default function useMapSelectionFocus({
       const routeKey = selectedShipmentRoute.ruta
         .map((step) => `${step.vueloId ?? ''}:${step.origen}-${step.destino}`)
         .join('|')
-      return `shipment:${routeKey}`
+      const shipmentKey =
+        selectedShipmentRoute.codigoMaleta ??
+        selectedShipmentRoute.codigoPedido ??
+        routeKey
+      return `shipment:${shipmentKey}:${routeKey}`
     }
     if (selectedFlightId !== null) {
       return `flight:${selectedFlightId}`
@@ -88,6 +166,23 @@ export default function useMapSelectionFocus({
     }
 
     if (selectedShipmentRoute?.ruta.length) {
+      if (selectedShipmentRoute.consultaMaleta || selectedShipmentRoute.codigoMaleta) {
+        const currentPosition = getShipmentCurrentPosition(
+          selectedShipmentRoute,
+          airports,
+          segments,
+          currentMinute,
+        )
+
+        if (currentPosition) {
+          map.flyTo(currentPosition, Math.max(map.getZoom(), 5), {
+            duration: 0.6,
+          })
+          lastFocusKeyRef.current = focusKey
+        }
+        return
+      }
+
       const latlngs: L.LatLngExpression[] = []
 
       selectedShipmentRoute.ruta.forEach((step) => {

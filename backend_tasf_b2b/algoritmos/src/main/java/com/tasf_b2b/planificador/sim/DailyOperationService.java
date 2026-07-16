@@ -92,7 +92,9 @@ public class DailyOperationService {
             .collect(Collectors.toList());
         log.info("[DAILY_OP] segments matched snapshot={}", segments.size());
 
-        syncShipmentStatuses(shipmentsForDate, currentMinute);
+        Map<String, RespuestaRutaEnvioDto> routeByShipment = buildShipmentRouteCache(shipmentsForDate);
+
+        syncShipmentStatuses(shipmentsForDate, currentMinute, routeByShipment);
 
         List<ShipmentEntity> shipments = shipmentsForDate.stream()
             .filter(shipment -> airportFilter == null
@@ -118,7 +120,9 @@ public class DailyOperationService {
         snapshot.warehouseSnapshot = warehouseSnapshot;
         snapshot.shipmentSummary = shipmentSummary;
         snapshot.alerts = alerts;
-        snapshot.envios = shipments.stream().map(this::toShipmentDto).collect(Collectors.toList());
+        snapshot.envios = shipments.stream()
+            .map(shipment -> toShipmentDto(shipment, routeByShipment.get(shipment.codigoPedido)))
+            .collect(Collectors.toList());
         return snapshot;
     }
 
@@ -219,7 +223,27 @@ public class DailyOperationService {
         return dto;
     }
 
-    private void syncShipmentStatuses(List<ShipmentEntity> shipments, int currentMinute) {
+    private Map<String, RespuestaRutaEnvioDto> buildShipmentRouteCache(List<ShipmentEntity> shipments) {
+        Map<String, RespuestaRutaEnvioDto> routeByShipment = new HashMap<>();
+        if (shipments == null || shipments.isEmpty()) {
+            return routeByShipment;
+        }
+
+        for (ShipmentEntity shipment : shipments) {
+            if (shipment == null || shipment.codigoPedido == null || shipment.codigoPedido.isBlank()) {
+                continue;
+            }
+            routeByShipment.put(shipment.codigoPedido, dailyPlanningService.getShipmentRoute(shipment.codigoPedido));
+        }
+
+        return routeByShipment;
+    }
+
+    private void syncShipmentStatuses(
+        List<ShipmentEntity> shipments,
+        int currentMinute,
+        Map<String, RespuestaRutaEnvioDto> routeByShipment
+    ) {
         if (shipments == null || shipments.isEmpty()) {
             return;
         }
@@ -229,7 +253,7 @@ public class DailyOperationService {
             if (shipment == null || shipment.status == ShipmentStatus.CANCELLED) {
                 continue;
             }
-            RespuestaRutaEnvioDto route = dailyPlanningService.getShipmentRoute(shipment.codigoPedido);
+            RespuestaRutaEnvioDto route = routeByShipment.get(shipment.codigoPedido);
             if (route == null || route.ruta == null || route.ruta.isEmpty()) {
                 log.debug("[DAILY_OP] shipment route missing code={} status={} currentMinute={}", shipment.codigoPedido, shipment.status, currentMinute);
                 continue;
@@ -351,7 +375,7 @@ public class DailyOperationService {
         return airportCode.trim().toUpperCase(Locale.ROOT);
     }
 
-    private ShipmentCrudDto toShipmentDto(ShipmentEntity entity) {
+    private ShipmentCrudDto toShipmentDto(ShipmentEntity entity, RespuestaRutaEnvioDto route) {
         ShipmentCrudDto dto = new ShipmentCrudDto();
         dto.id = entity.id;
         dto.codigoPedido = entity.codigoPedido;
@@ -368,6 +392,12 @@ public class DailyOperationService {
         dto.slaHoras = entity.slaHoras;
         dto.status = entity.status;
         dto.auditDateIns = entity.auditDateIns;
+        dto.vueloIds = route != null && route.ruta != null
+            ? route.ruta.stream()
+                .map(step -> String.valueOf(step.vueloId))
+                .distinct()
+                .toList()
+            : List.of();
         return dto;
     }
 }

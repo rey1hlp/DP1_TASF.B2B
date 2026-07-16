@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
-import type { AirportDto, FlightCrudDto } from '../types/sim'
+import type { AirportDto, EnvioDetalleDto, FlightCrudDto } from '../types/sim'
 import {
   API_BASE,
   authFetch,
@@ -9,7 +9,6 @@ import {
   fetchCategorizedShipments,
   listFlights,
   startSimulation,
-  type EnvioDetalleDto,
 } from '../services/api'
 import MapView from '../components/MapView'
 import SimulationControls, { type ShipmentCategory } from '../components/SimulationControls'
@@ -46,7 +45,7 @@ import {
 } from '../utils/time'
 
 export type PasoRutaDto = {
-  vueloId: number
+  vueloId: number | string
   planId?: number | null
   origen: string
   destino: string
@@ -1209,6 +1208,7 @@ export default function SimulationPage() {
               onResizeStart={handleResizeStart}
               selectedShipmentRoute={selectedShipmentRoute}
               onSearchShipment={handleSearchShipment}
+              onSelectShipmentRoute={setSelectedShipmentRoute}
               shipmentSearchError={shipmentSearchError}
               sampleShipments={sampleShipments}
               shipmentQuantities={shipmentQuantities}

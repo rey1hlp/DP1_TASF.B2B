@@ -12,6 +12,7 @@ import type {
   SimulationRequest,
   SimulationResponse,
   SimulationVirtualCancellation,
+  SimulationShipmentsResponseDto,
 } from '../types/sim'
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
@@ -605,23 +606,6 @@ export async function getShipmentByCode(code: string): Promise<ShipmentCrudDto |
   const data = await res.json()
   const content = Array.isArray(data?.content) ? data.content : []
   return content.find((shipment: ShipmentCrudDto) => shipment.codigoPedido === code) ?? null
-}
-
-//NUEVAS FUNCIONES PARA CUBRIR LOS DETALLES DE VUELOS
-export interface EnvioDetalleDto {
-  codigoPedido: string;
-  origen: string;
-  destino: string;
-  ut: string;
-  cantidadMaletas: number;
-  estado: 'PLANIFICADO' | 'EN_VUELO' | 'ENTREGADO';
-  minutoEntrega?: number | null;
-}
-
-export interface SimulationShipmentsResponseDto {
-  planificados: EnvioDetalleDto[];
-  enVuelo: EnvioDetalleDto[];
-  entregadosRecientes: EnvioDetalleDto[];
 }
 
 export async function fetchCategorizedShipments(
