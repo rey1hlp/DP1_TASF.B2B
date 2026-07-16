@@ -929,50 +929,6 @@
   background: #ffffff;
 }
 
-.bag-piece-pager {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.bag-piece-pager strong {
-  min-width: 30px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 800;
-  color: #10213a;
-}
-
-.bag-piece-pager button {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 1px solid #c9d7eb;
-  border-radius: 999px;
-  background: #f8fbff;
-  color: #21436f;
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-}
-
-.bag-piece-pager button:hover:not(:disabled) {
-  background: #eaf2ff;
-  border-color: #2f62b5;
-}
-
-.bag-piece-pager button:active:not(:disabled) {
-  transform: scale(0.9);
-}
-
-.bag-piece-pager button:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
 .bag-detail-summary span {
   color: #65738a;
   font-size: 10px;
@@ -990,15 +946,27 @@
 }
 
 .bag-piece-pager {
-  display: inline-flex;
+  width: 100%;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
   min-width: 0;
+}
+
+.bag-piece-pager strong {
+  flex: 1 1 auto;
+  min-width: 30px;
+  color: #10213a;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .bag-piece-pager button {
   width: 18px;
   height: 18px;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   border: none;
@@ -1017,9 +985,13 @@
   background: #eaf2ff;
 }
 
+.bag-piece-pager button:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
 .bag-piece-pager button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
 .bag-detail-state {

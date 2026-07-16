@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
-import type { ShipmentCrudDto } from '../types/sim'
+import type { EnvioDetalleDto, ShipmentCrudDto } from '../types/sim'
 // 1. Asegúrate de importar la función de simulación desde tu api
-import { getShipmentsByFlight, getSimulationShipmentsByFlight, type EnvioDetalleDto } from '../services/api'
+import { getShipmentsByFlight, getSimulationShipmentsByFlight } from '../services/api'
 import './EntityExplorer.css'
 
 // 2. Importa el hook del contexto de simulación

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
-import type { AirportDto, FlightCrudDto } from '../types/sim'
+import type { AirportDto, EnvioDetalleDto, FlightCrudDto } from '../types/sim'
 import {
   API_BASE,
   authFetch,
@@ -9,7 +9,6 @@ import {
   fetchCategorizedShipments,
   listFlights,
   startSimulation,
-  type EnvioDetalleDto,
 } from '../services/api'
 import MapView from '../components/MapView'
 import SimulationControls, { type ShipmentCategory } from '../components/SimulationControls'

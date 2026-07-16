@@ -3,7 +3,7 @@ import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from '.
 import SemaphoreRangeControl from './ui/SemaphoreRangeControl'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
-import type { EnvioDetalleDto } from '../services/api'
+import type { EnvioDetalleDto } from '../types/sim'
 
 export type PasoRutaDto = {
   vueloId: number | string
