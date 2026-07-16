@@ -638,6 +638,7 @@ export default function DailyOperationPage() {
   const activeFlightItems = useMemo(() => {
     return visibleActiveSegments.map((segment) => ({
       flightId: segment.flightId,
+      planId: segment.planId,
       origen: segment.origen,
       destino: segment.destino,
       salidaMin: segment.salidaMin,
@@ -659,6 +660,7 @@ export default function DailyOperationPage() {
   const upcomingFlightItems = useMemo(() => {
     return upcomingSegments.map((segment) => ({
       flightId: segment.flightId,
+      planId: segment.planId,
       origen: segment.origen,
       destino: segment.destino,
       salidaMin: segment.salidaMin,

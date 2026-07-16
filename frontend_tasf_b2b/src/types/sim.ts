@@ -72,6 +72,7 @@ export type SimulationResponse = {
 export type FlightSegmentDto = {
   flightId: number
   planId: number
+  codigo?: string | null
   origen: string
   destino: string
   salidaMin: number

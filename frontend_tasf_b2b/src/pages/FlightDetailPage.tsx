@@ -13,6 +13,7 @@ import {
 
 interface FlightDetailPageProps {
   flightId: number
+  fallbackCodigo?: string | null
   onVolver: () => void
   isSimulation?: boolean
   simId?: string
@@ -26,6 +27,7 @@ interface FlightDetailPageProps {
 
 export default function FlightDetailPage({
   flightId,
+  fallbackCodigo,
   onVolver,
   isSimulation = false,
   simId,
@@ -48,7 +50,7 @@ export default function FlightDetailPage({
           if (simulationFlight) {
             setFlight({
               id: simulationFlight.flightId,
-              codigo: simulationFlight.codigo || `Vuelo ${simulationFlight.flightId}`,
+              codigo: simulationFlight.codigo || `Vuelo ${simulationFlight.planId ?? simulationFlight.flightId}`,
               origen: simulationFlight.origen,
               origenOaci: simulationFlight.origen,
               destino: simulationFlight.destino,
@@ -68,8 +70,8 @@ export default function FlightDetailPage({
           setShipments([]);
         } else {
           const [fData, sData] = await Promise.all([
-            getFlightById(flightId),
-            getShipmentsByFlight(flightId),
+            getFlightById(flightId, fallbackCodigo),
+            getShipmentsByFlight(flightId, fallbackCodigo),
           ]);
           setFlight(fData);
           setShipments(sData);
@@ -83,7 +85,7 @@ export default function FlightDetailPage({
     };
 
     void loadDetail();
-  }, [flightId, isSimulation, simId, simulationFlight]);
+  }, [flightId, fallbackCodigo, isSimulation, simId, simulationFlight]);
 
   const filteredShipments = useMemo(() => {
     return shipments.filter(ship => {

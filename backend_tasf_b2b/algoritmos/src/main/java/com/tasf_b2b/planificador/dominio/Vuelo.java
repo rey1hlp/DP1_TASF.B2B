@@ -3,6 +3,7 @@ package com.tasf_b2b.planificador.dominio;
 public class Vuelo {
     public final int id;
     public final int idPlan;
+    public final String codigo;
     public final String origen;
     public final String destino;
     public final int salidaMin;   // minutos absolutos desde epoch (o minutos del plan si no hay fecha)
@@ -13,13 +14,19 @@ public class Vuelo {
     public final double horasDuracion;
 
     public Vuelo(int id, String origen, String destino, int salidaMin, int llegadaMin, int capacidad) {
-        this(id, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, id);
+        this(id, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, id, null);
     }
 
     public Vuelo(int id, String origen, String destino, int salidaMin, int llegadaMin, int capacidad,
                  int diaIndex, String fecha, int idPlan) {
+        this(id, origen, destino, salidaMin, llegadaMin, capacidad, diaIndex, fecha, idPlan, null);
+    }
+
+    public Vuelo(int id, String origen, String destino, int salidaMin, int llegadaMin, int capacidad,
+                 int diaIndex, String fecha, int idPlan, String codigo) {
         this.id = id;
         this.idPlan = idPlan;
+        this.codigo = codigo;
         this.origen = origen;
         this.destino = destino;
         this.salidaMin = salidaMin;

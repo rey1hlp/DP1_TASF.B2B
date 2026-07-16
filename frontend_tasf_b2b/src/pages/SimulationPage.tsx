@@ -803,6 +803,7 @@ export default function SimulationPage() {
 
       return {
         flightId: segment.flightId,
+        planId: segment.planId,
         origen: segment.origen,
         destino: segment.destino,
         salidaMin: segment.salidaMin,
@@ -1078,6 +1079,8 @@ export default function SimulationPage() {
             if (!seg) return undefined;
             return {
               flightId: seg.flightId,
+              planId: seg.planId,
+              codigo: seg.codigo,
               origen: seg.origen,
               destino: seg.destino,
               capacidad: seg.capacidad,

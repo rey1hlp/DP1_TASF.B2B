@@ -546,6 +546,7 @@ public class SimulationRegistry {
                     if (meta != null) {
                         seg.flightId = meta.flightId;
                         seg.planId = meta.planId;
+                        seg.codigo = meta.codigo;
                         seg.origen = meta.origen;
                         seg.destino = meta.destino;
                         seg.salidaMin = meta.salidaMin;

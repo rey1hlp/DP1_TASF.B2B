@@ -157,8 +157,19 @@ export async function getAirportShipments(
 }
 
 // Vuelo por ID
-export async function getFlightById(id: number): Promise<FlightCrudDto> {
+export async function getFlightById(id: number, fallbackCodigo?: string | null): Promise<FlightCrudDto> {
   const res = await authFetch(`${API_BASE}/api/db/flights/${id}`);
+  if (!res.ok) {
+    if (res.status === 404 && fallbackCodigo) {
+      return getFlightByCode(fallbackCodigo)
+    }
+    throw new Error('Vuelo no encontrado');
+  }
+  return res.json();
+}
+
+export async function getFlightByCode(codigo: string): Promise<FlightCrudDto> {
+  const res = await authFetch(`${API_BASE}/api/db/flights/by-code/${encodeURIComponent(codigo)}`);
   if (!res.ok) {
     throw new Error('Vuelo no encontrado');
   }
@@ -166,8 +177,22 @@ export async function getFlightById(id: number): Promise<FlightCrudDto> {
 }
 
 // Manifiesto de envíos asignados a un vuelo
-export async function getShipmentsByFlight(flightId: number): Promise<ShipmentCrudDto[]> {
+export async function getShipmentsByFlight(
+  flightId: number,
+  fallbackCodigo?: string | null
+): Promise<ShipmentCrudDto[]> {
   const res = await authFetch(`${API_BASE}/api/db/flights/${flightId}/shipments`);
+  if (!res.ok) {
+    if (res.status === 404 && fallbackCodigo) {
+      return getShipmentsByFlightCode(fallbackCodigo)
+    }
+    throw new Error('Error al obtener envíos del vuelo');
+  }
+  return res.json();
+}
+
+export async function getShipmentsByFlightCode(codigo: string): Promise<ShipmentCrudDto[]> {
+  const res = await authFetch(`${API_BASE}/api/db/flights/by-code/${encodeURIComponent(codigo)}/shipments`);
   if (!res.ok) {
     throw new Error('Error al obtener envíos del vuelo');
   }

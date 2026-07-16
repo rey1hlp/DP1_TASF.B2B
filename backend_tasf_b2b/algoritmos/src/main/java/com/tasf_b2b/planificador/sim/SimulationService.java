@@ -1356,6 +1356,7 @@ public class SimulationService {
                     seg = new FlightSegmentDto();
                     seg.flightId = vuelo.id;
                     seg.planId = vuelo.idPlan;
+                    seg.codigo = vuelo.codigo;
                     seg.origen = vuelo.origen;
                     seg.destino = vuelo.destino;
                     seg.salidaMin = vuelo.salidaMin;
@@ -1468,7 +1469,7 @@ public class SimulationService {
             int capacidad = entity.capacidad;
             int planId = entity.id != null ? entity.id.intValue() : id;
 
-            planes.add(new Vuelo(id++, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, planId));
+            planes.add(new Vuelo(id++, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, planId, entity.codigo));
         }
         return planes;
     }

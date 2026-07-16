@@ -29,6 +29,8 @@ export type EntityTab = 'flights' | 'shipments' | 'airports'
 
 export type EntityFlightItem = {
   flightId: number
+  planId?: number | null
+  codigo?: string | null
   origen: string
   destino: string
   salidaMin: number
@@ -578,6 +580,14 @@ export default function EntityExplorer({
   const [flightShipments, setFlightShipments] = useState<ShipmentCrudDto[] | null>(null);
   const [loadingShipments, setLoadingShipments] = useState(false);
   const [errorShipments, setErrorShipments] = useState<string | null>(null);
+  const selectedFlight = useMemo(
+    () => flights.find((flight) => flight.flightId === selectedFlightId) ?? null,
+    [flights, selectedFlightId],
+  )
+  const selectedFlightDisplayId = selectedFlight?.planId ?? selectedFlightId
+  const selectedFlightLabel = selectedFlight?.codigo
+    ? `${selectedFlightDisplayId} (${selectedFlight.codigo})`
+    : selectedFlightDisplayId
 
   useEffect(() => {
     if (!selectedFlightId) {
@@ -593,8 +603,11 @@ export default function EntityExplorer({
     // Si hay un simId activo en el contexto, llama al nuevo endpoint de simulación.
     // Si no lo hay, usa el endpoint clásico de la base de datos ordinaria.
     const fetchShipments = simId
-      ? getSimulationShipmentsByFlight(simId, selectedFlightId)
-      : getShipmentsByFlight(selectedFlightId);
+      ? getSimulationShipmentsByFlight(simId, selectedFlightId, {
+          planId: selectedFlight?.planId ?? undefined,
+          salidaMin: selectedFlight?.salidaMin,
+        })
+      : getShipmentsByFlight(selectedFlight?.planId ?? selectedFlightId, selectedFlight?.codigo);
 
     fetchShipments
       .then((data) => {
@@ -610,7 +623,7 @@ export default function EntityExplorer({
     return () => {
       cancelled = true;
     };
-  }, [selectedFlightId, simId]); // 3. ⚠️ Añadimos 'simId' aquí para que reaccione si cambia la simulación
+  }, [selectedFlight, selectedFlightId, simId]); // 3. ⚠️ Añadimos 'simId' aquí para que reaccione si cambia la simulación
   // --- FIN CÓDIGO ACTUALIZADO ---
 
   const filteredFlights = useMemo(() => {
@@ -620,7 +633,13 @@ export default function EntityExplorer({
     const semaphoreFilter = mapFilters.flights.semaphore
 
     return flights.filter((flight) => {
-      if (codeQuery && !String(flight.flightId).toLowerCase().includes(codeQuery)) {
+      const displayFlightId = flight.planId ?? flight.flightId
+      if (
+        codeQuery &&
+        !String(displayFlightId).toLowerCase().includes(codeQuery) &&
+        !String(flight.flightId).toLowerCase().includes(codeQuery) &&
+        !(flight.codigo ?? '').toLowerCase().includes(codeQuery)
+      ) {
         return false
       }
 
@@ -691,7 +710,7 @@ export default function EntityExplorer({
           break
       }
 
-      return left.flightId - right.flightId
+      return (left.planId ?? left.flightId) - (right.planId ?? right.flightId)
     })
   }, [filteredFlights, flightSortDirection, flightSortKey]);
 
@@ -1585,6 +1604,7 @@ export default function EntityExplorer({
             style={{ transform: `translateY(${flightList.offsetY}px)` }}
           >
             {flightList.visibleItems.map((flight) => {
+              const displayFlightId = flight.planId ?? flight.flightId
               const hasCargo = flight.carga !== undefined && flight.capacidad !== undefined
               const capacityPercent = getFlightCapacityPercent(flight)
               const capacityPercentLabel = capacityPercent !== null ? formatPercent(capacityPercent, 0) : 'Sin dato'
@@ -1608,7 +1628,7 @@ export default function EntityExplorer({
                   <span className="flight-capacity-bar" aria-hidden="true" />
                   <div className="flight-card-content">
                     <div className="flight-card-header">
-                      <span className="flight-label">{`${flight.flightId} | ${flight.origen} → ${flight.destino}`}</span>
+                      <span className="flight-label">{`${displayFlightId} | ${flight.origen} → ${flight.destino}`}</span>
                       {flight.estado ? <span className="flight-status-pill">{flight.estado}</span> : null}
                     </div>
                     <div className="flight-card-time flight-meta">
@@ -1643,7 +1663,7 @@ export default function EntityExplorer({
               borderBottom: "1px solid #d9e4f4",
             }}
           >
-            <strong>📦 Maletas del vuelo {selectedFlightId}</strong>
+            <strong>Maletas del vuelo {selectedFlightLabel}</strong>
           </div>
 
           {loadingShipments && <div style={{ padding: "10px", fontSize: "12px" }}>Cargando maletas...</div>}

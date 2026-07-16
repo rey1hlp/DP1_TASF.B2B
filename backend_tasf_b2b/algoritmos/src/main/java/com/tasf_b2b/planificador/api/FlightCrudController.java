@@ -72,6 +72,15 @@ public class FlightCrudController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/by-code/{codigo}")
+    public ResponseEntity<FlightCrudDto> getFlightByCodigo(@PathVariable String codigo) {
+        FlightEntity entity = repository.findByCodigo(codigo);
+        if (entity == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(toDto(entity));
+    }
+
     @GetMapping("/{id}/shipments")
     public ResponseEntity<List<ShipmentCrudDto>> getShipmentsByFlightRoute(@PathVariable Long id) {
         FlightEntity flight = repository.findById(id).orElse(null);
@@ -127,6 +136,15 @@ public class FlightCrudController {
             destinoOaci
         );
         return ResponseEntity.ok(List.of());
+    }
+
+    @GetMapping("/by-code/{codigo}/shipments")
+    public ResponseEntity<List<ShipmentCrudDto>> getShipmentsByFlightCodigo(@PathVariable String codigo) {
+        FlightEntity flight = repository.findByCodigo(codigo);
+        if (flight == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return getShipmentsByFlightRoute(flight.id);
     }
 
     private ShipmentCrudDto shipmentToDto(ShipmentEntity entity) {
