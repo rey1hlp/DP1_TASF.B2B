@@ -513,6 +513,37 @@
   grid-template-columns: minmax(0, 1fr) 38px 38px;
 }
 
+.shipment-flight-filter-field {
+  min-width: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -2px 0 10px;
+  padding: 0 10px;
+  border: 1px solid #d4deec;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #60728d;
+  box-shadow: 0 5px 14px rgba(24, 54, 92, 0.05);
+}
+
+.shipment-flight-filter-field svg {
+  flex: 0 0 auto;
+  color: #748299;
+}
+
+.shipment-flight-filter-field input {
+  min-width: 0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #1e2c44;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
 .shipment-card-list {
   border: none;
   border-radius: 12px;

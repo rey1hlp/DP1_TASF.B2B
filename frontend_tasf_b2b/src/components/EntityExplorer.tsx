@@ -97,6 +97,7 @@ export type EntityExplorerProps = {
   currentMinute: number | null
   focusRequest?: EntityFocusRequest | null
   shipmentQuantities?: Record<string, number>
+  shipmentFlightIds?: Record<string, string[]>
   shipmentsPlanificados?: EnvioDetalleDto[]
   shipmentsEnVuelo?: EnvioDetalleDto[]
   shipmentsEntregados?: EnvioDetalleDto[]
@@ -477,6 +478,7 @@ export default function EntityExplorer({
   currentMinute,
   focusRequest,
   shipmentQuantities = {},
+  shipmentFlightIds = {},
   labels,
   listHeight = 320,
   shipmentListHeight = 220,
@@ -512,6 +514,7 @@ export default function EntityExplorer({
   const [isShipmentFilterMenuOpen, setIsShipmentFilterMenuOpen] = useState(false)
   const [isShipmentSortMenuOpen, setIsShipmentSortMenuOpen] = useState(false)
   const [shipmentQuery, setShipmentQuery] = useState("");
+  const [shipmentFlightFilter, setShipmentFlightFilter] = useState('')
   const [expandedShipmentCode, setExpandedShipmentCode] = useState<string | null>(null);
   const [sidebarView, setSidebarView] = useState<SidebarView>('shipment-detail')
   const [selectedBagCode, setSelectedBagCode] = useState<string | null>(null)
@@ -755,10 +758,11 @@ export default function EntityExplorer({
       destino: '--',
       ut: '',
       cantidadMaletas: shipmentQuantities[codigoPedido] ?? 0,
+      vueloIds: shipmentFlightIds[codigoPedido] ?? [],
       estado: 'PLANIFICADO',
       minutoEntrega: null,
     }))
-  }, [hasCategorizedShipmentItems, selectedCategorizedShipments, shipmentQuantities, shipments])
+  }, [hasCategorizedShipmentItems, selectedCategorizedShipments, shipmentFlightIds, shipmentQuantities, shipments])
 
   const shipmentOriginOptions = useMemo(() => {
     return Array.from(
@@ -780,10 +784,22 @@ export default function EntityExplorer({
     ).sort((left, right) => left.localeCompare(right))
   }, [baseShipmentItems])
 
+  const shipmentFlightOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        baseShipmentItems
+          .flatMap((shipment) => shipment.vueloIds ?? [])
+          .map((flightId) => String(flightId).trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+  }, [baseShipmentItems])
+
   const filteredShipmentItems = useMemo(() => {
     const query = shipmentQuery.trim().toLowerCase()
     const originQuery = shipmentOriginFilter.trim().toLowerCase()
     const destinationQuery = shipmentDestinationFilter.trim().toLowerCase()
+    const flightQuery = shipmentFlightFilter.trim().toLowerCase()
 
     return baseShipmentItems.filter((shipment) => {
       if (
@@ -804,9 +820,18 @@ export default function EntityExplorer({
         return false
       }
 
+      if (
+        flightQuery &&
+        !(shipment.vueloIds ?? []).some((flightId) =>
+          String(flightId).toLowerCase().includes(flightQuery),
+        )
+      ) {
+        return false
+      }
+
       return true
     })
-  }, [baseShipmentItems, shipmentDestinationFilter, shipmentOriginFilter, shipmentQuery])
+  }, [baseShipmentItems, shipmentDestinationFilter, shipmentFlightFilter, shipmentOriginFilter, shipmentQuery])
 
   const orderedShipmentItems = useMemo(() => {
     if (shipmentSortKey === 'default') {
@@ -933,7 +958,8 @@ export default function EntityExplorer({
   const hasActiveShipmentFilters =
     Boolean(shipmentQuery.trim()) ||
     Boolean(shipmentOriginFilter.trim()) ||
-    Boolean(shipmentDestinationFilter.trim())
+    Boolean(shipmentDestinationFilter.trim()) ||
+    Boolean(shipmentFlightFilter.trim())
   const hasActiveShipmentSort = shipmentSortKey !== 'default'
 
   const getFlightCapacityPercent = (flight: EntityFlightItem) => {
@@ -1101,6 +1127,7 @@ export default function EntityExplorer({
     setShipmentQuery('')
     onShipmentOriginFilterChange?.('')
     onShipmentDestinationFilterChange?.('')
+    setShipmentFlightFilter('')
     shipmentList.setScrollTop(0)
   }
 
@@ -1144,6 +1171,7 @@ export default function EntityExplorer({
   }, [
     selectedShipmentCategory,
     shipmentDestinationFilter,
+    shipmentFlightFilter,
     shipmentOriginFilter,
     shipmentQuery,
     shipmentSortDirection,
@@ -1637,6 +1665,16 @@ export default function EntityExplorer({
                   onChange={(event) => onShipmentDestinationFilterChange?.(event.target.value.toUpperCase())}
                 />
               </label>
+              <label className="flight-popover-field">
+                <span>Código de vuelo</span>
+                <input
+                  type="text"
+                  list="shipment-flight-options"
+                  placeholder="Ej. 1024"
+                  value={shipmentFlightFilter}
+                  onChange={(event) => setShipmentFlightFilter(event.target.value)}
+                />
+              </label>
               <button
                 type="button"
                 className="flight-popover-clear"
@@ -1732,7 +1770,23 @@ export default function EntityExplorer({
             <option key={destination} value={destination} />
           ))}
         </datalist>
+        <datalist id="shipment-flight-options">
+          {shipmentFlightOptions.map((flightId) => (
+            <option key={flightId} value={flightId} />
+          ))}
+        </datalist>
       </div>
+
+      <label className="shipment-flight-filter-field" aria-label="Filtrar envíos por código de vuelo">
+        <PlaneTakeoff size={14} />
+        <input
+          type="text"
+          list="shipment-flight-options"
+          placeholder="Filtrar por vuelo..."
+          value={shipmentFlightFilter}
+          onChange={(event) => setShipmentFlightFilter(event.target.value)}
+        />
+      </label>
 
       <div
         ref={shipmentListRef}

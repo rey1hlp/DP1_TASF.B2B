@@ -391,6 +391,10 @@ public class SimulationService {
                 ? state.data.enviosPorCodigo.get(codigoPedido)
                 : null;
             int cantidadMaletas = shipment != null ? Math.max(0, shipment.cantidad) : 0;
+            List<String> vueloIds = infoRuta.ruta.stream()
+                .map(tramo -> String.valueOf(tramo.vueloId))
+                .distinct()
+                .toList();
 
             // Definimos las variables base para el DTO
             String origenGlobal = primerTramo.origen;
@@ -400,7 +404,7 @@ public class SimulationService {
             // Clasificación según la línea de tiempo de la simulación (currentMinute)
             if (currentMinute < minutoSalidaInicial) {
                 planificados.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
-                    codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "PLANIFICADO", minutoEntregaFinal
+                    codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "PLANIFICADO", minutoEntregaFinal, vueloIds
                 ));
             } else if (currentMinute >= minutoSalidaInicial && currentMinute <= minutoEntregaFinal) {
                 String origenTramoActual = origenGlobal;
@@ -415,12 +419,12 @@ public class SimulationService {
                 }
 
                 enVuelo.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
-                    codigoPedido, origenTramoActual, destinoTramoActual, ut, cantidadMaletas, "EN_VUELO", minutoEntregaFinal
+                    codigoPedido, origenTramoActual, destinoTramoActual, ut, cantidadMaletas, "EN_VUELO", minutoEntregaFinal, vueloIds
                 ));
             } else {
                 if (minutoEntregaFinal >= (currentMinute - 240)) {
                     entregadosRecientes.add(new com.tasf_b2b.planificador.api.dto.EnvioDetalleDto(
-                        codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "ENTREGADO", minutoEntregaFinal
+                        codigoPedido, origenGlobal, destinoGlobal, ut, cantidadMaletas, "ENTREGADO", minutoEntregaFinal, vueloIds
                     ));
                 }
             }

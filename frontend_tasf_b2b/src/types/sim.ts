@@ -6,6 +6,7 @@ export interface EnvioDetalleDto {
   cantidadMaletas: number;
   estado: 'PLANIFICADO' | 'EN_VUELO' | 'ENTREGADO';
   minutoEntrega?: number | null;
+  vueloIds?: string[];
 }
 
 export interface SimulationShipmentsResponseDto {
@@ -281,4 +282,5 @@ export type ShipmentCrudDto = {
   status?: 'PENDING' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
   asignado: boolean
   auditDateIns?: string
+  vueloIds?: string[]
 }

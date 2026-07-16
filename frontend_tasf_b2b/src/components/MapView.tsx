@@ -699,9 +699,9 @@ export default function MapView({
     const isNewAirport = previewAirportCode !== lastAirportCodeRef.current
 
     const loadAirportShipments = async () => {
+      setAirportShipmentsLoading(true)
+      setAirportShipmentsError(null)
       if (isNewAirport) {
-        setAirportShipmentsLoading(true)
-        setAirportShipmentsError(null)
         setAirportShipments([]) // Clear old shipments to avoid showing stale data
         lastAirportCodeRef.current = previewAirportCode
       }
@@ -745,15 +745,13 @@ export default function MapView({
             detailStage: airportDetailStage,
             error: error instanceof Error ? error.message : error,
           })
-          if (isNewAirport) {
-            setAirportShipments([])
-            setAirportShipmentsError(
-              error instanceof Error ? error.message : 'No se pudo cargar los envíos del aeropuerto',
-            )
-          }
+          setAirportShipments([])
+          setAirportShipmentsError(
+            error instanceof Error ? error.message : 'No se pudo cargar los envíos del aeropuerto',
+          )
         }
       } finally {
-        if (!cancelled && isNewAirport) {
+        if (!cancelled) {
           setAirportShipmentsLoading(false)
         }
       }

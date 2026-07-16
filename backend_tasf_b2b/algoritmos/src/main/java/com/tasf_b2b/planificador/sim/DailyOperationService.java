@@ -368,6 +368,13 @@ public class DailyOperationService {
         dto.slaHoras = entity.slaHoras;
         dto.status = entity.status;
         dto.auditDateIns = entity.auditDateIns;
+        RespuestaRutaEnvioDto route = dailyPlanningService.getShipmentRoute(entity.codigoPedido);
+        dto.vueloIds = route != null && route.ruta != null
+            ? route.ruta.stream()
+                .map(step -> String.valueOf(step.vueloId))
+                .distinct()
+                .toList()
+            : List.of();
         return dto;
     }
 }

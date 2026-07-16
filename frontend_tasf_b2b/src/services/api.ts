@@ -616,6 +616,7 @@ export interface EnvioDetalleDto {
   cantidadMaletas: number;
   estado: 'PLANIFICADO' | 'EN_VUELO' | 'ENTREGADO';
   minutoEntrega?: number | null;
+  vueloIds?: string[];
 }
 
 export interface SimulationShipmentsResponseDto {

@@ -1,5 +1,8 @@
 package com.tasf_b2b.planificador.api.dto;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class EnvioDetalleDto {
     private String codigoPedido;
     private String origen;
@@ -8,6 +11,7 @@ public class EnvioDetalleDto {
     private int cantidadMaletas;
     private String estado;
     private Integer minutoEntrega;
+    private List<String> vueloIds = new ArrayList<>();
 
     public EnvioDetalleDto() {}
 
@@ -19,6 +23,11 @@ public class EnvioDetalleDto {
         this.cantidadMaletas = cantidadMaletas;
         this.estado = estado;
         this.minutoEntrega = minutoEntrega;
+    }
+
+    public EnvioDetalleDto(String codigoPedido, String origen, String destino, String ut, int cantidadMaletas, String estado, Integer minutoEntrega, List<String> vueloIds) {
+        this(codigoPedido, origen, destino, ut, cantidadMaletas, estado, minutoEntrega);
+        this.vueloIds = vueloIds != null ? vueloIds : new ArrayList<>();
     }
 
     public String getCodigoPedido() { return codigoPedido; }
@@ -35,4 +44,6 @@ public class EnvioDetalleDto {
     public void setEstado(String estado) { this.estado = estado; }
     public Integer getMinutoEntrega() { return minutoEntrega; }
     public void setMinutoEntrega(Integer minutoEntrega) { this.minutoEntrega = minutoEntrega; }
+    public List<String> getVueloIds() { return vueloIds; }
+    public void setVueloIds(List<String> vueloIds) { this.vueloIds = vueloIds != null ? vueloIds : new ArrayList<>(); }
 }
