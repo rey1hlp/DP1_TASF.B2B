@@ -41,6 +41,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -511,12 +512,16 @@ public class SimulationService {
     public SimulationResponse startSimulation(SimulationRequest request) {
         String simulationId = UUID.randomUUID().toString();
         boolean collapseStreaming = Boolean.TRUE.equals(request.colapsoIncremental);
+        SimulationStart start = resolveSimulationStart(request);
         SimulationResponse response = new SimulationResponse();
         response.simulationId = simulationId;
         response.status = SimulationState.Status.RUNNING.name();
-        response.inicio = request.inicio;
+        response.inicio = start.inicioDate;
+        response.inicioLocal = start.inicioLocalText;
+        response.inicioUtc = start.inicioUtc.toString();
+        response.inicioUtcMinute = start.inicioUtcMinute;
         response.fin = (request.fin == null || request.fin.isBlank())
-            ? ((request.inicio != null && request.dias != null) ? calcularFinDesdeInicio(request.inicio, request.dias) : null)
+            ? ((start.inicioDate != null && request.dias != null) ? calcularFinDesdeInicio(start.inicioDate, request.dias) : null)
             : request.fin;
         response.speedMinPerSec = (request.speedMinPerSec != null && request.speedMinPerSec > 0)
             ? request.speedMinPerSec
@@ -525,23 +530,33 @@ public class SimulationService {
         response.message = "RUNNING";
         // de momento, para que siempre genere reporte en el back
         request.reporte = true;
+        request.inicio = start.inicioDate;
+        request.inicioLocal = start.inicioLocalText;
+        request.inicioUtc = start.inicioUtc.toString();
+        request.inicioUtcMinute = start.inicioUtcMinute;
 
         SimulationRunEntity run = new SimulationRunEntity();
         run.simulationId = simulationId;
         run.tipo = collapseStreaming
             ? "COLAPSO_INCREMENTAL"
             : ((request.buscarColapso != null && request.buscarColapso) ? "COLAPSO" : "PERIODO");
-        run.inicio = request.inicio;
+        run.inicio = start.inicioDate;
+        run.inicioLocal = start.inicioLocalText;
+        run.inicioUtc = start.inicioUtc;
+        run.inicioUtcMinute = start.inicioUtcMinute;
         run.fin = response.fin;
         run.dias = request.dias;
         run.estado = SimulationState.Status.RUNNING.name();
         run.speedMinPerSec = response.speedMinPerSec;
         run.creadoEn = LocalDateTime.now();
         simulationRunRepository.save(run);
-        log.info("[SIM:{}] run created tipo={} inicio={} fin={} dias={} buscarColapso={} colapsoIncremental={}",
+        log.info("[SIM:{}] run created tipo={} inicio={} inicioLocal={} inicioUtc={} inicioUtcMinute={} fin={} dias={} buscarColapso={} colapsoIncremental={}",
             simulationId,
             run.tipo,
             run.inicio,
+            run.inicioLocal,
+            run.inicioUtc,
+            run.inicioUtcMinute,
             run.fin,
             run.dias,
             request.buscarColapso,
@@ -576,11 +591,15 @@ public class SimulationService {
             String archivoEnvios = resolverArchivoEnvios(request);
             String inicio = request.inicio;
             String fin = resolverFechaFin(request);
+            SimulationStart start = resolveSimulationStart(request);
     
             log.info(
-                "[SIM:{}] Input params -> inicio={}, fin={}, archivoEnvios={}",
+                "[SIM:{}] Input params -> inicio={}, inicioLocal={}, inicioUtc={}, inicioUtcMinute={}, fin={}, archivoEnvios={}",
                 simulationId,
                 inicio,
+                start.inicioLocalText,
+                start.inicioUtc,
+                start.inicioUtcMinute,
                 fin,
                 archivoEnvios
             );
@@ -638,6 +657,7 @@ public class SimulationService {
             );
     
             envios = limitarEnvios(request, envios);
+            envios = filtrarEnviosDesdeInicio(request, envios);
     
             if (envios.isEmpty()) {
     
@@ -871,6 +891,7 @@ public class SimulationService {
                     almacenes,
                     rutasPorPaquete,
                     totalMaletas,
+                    start,
                     diaMin,
                     diaMax,
                     diasExtra
@@ -882,6 +903,9 @@ public class SimulationService {
                 stored.totalEnvios = envios.size();
                 stored.totalMaletas = totalMaletas;
                 stored.inicio = data.inicio;
+                stored.inicioLocal = data.inicioLocal;
+                stored.inicioUtc = data.inicioUtc != null ? LocalDateTime.parse(data.inicioUtc) : null;
+                stored.inicioUtcMinute = data.inicioUtcMinute;
                 stored.fin = data.fin;
                 stored.finalizadoEn = LocalDateTime.now();
                 simulationRunRepository.save(stored);
@@ -945,7 +969,8 @@ public class SimulationService {
 
             int blockDays = (request.bloqueDias != null && request.bloqueDias > 0) ? request.bloqueDias : 5;
             int intervalMs = (request.intervaloPlanMs != null && request.intervaloPlanMs > 0) ? request.intervaloPlanMs : 180_000;
-            LocalDate startDate = LocalDate.parse(request.inicio, FECHA_FORMAT);
+            SimulationStart start = resolveSimulationStart(request);
+            LocalDate startDate = LocalDate.parse(start.inicioDate, FECHA_FORMAT);
             int blockIndex = 0;
             boolean firstBlock = true;
             SimulationData accumulated = null;
@@ -972,6 +997,9 @@ public class SimulationService {
                     blockEndText
                 );
                 envios = limitarEnvios(request, envios);
+                if (firstBlock) {
+                    envios = filtrarEnviosDesdeInicio(request, envios);
+                }
 
                 log.info(
                     "[SIM:{}] collapse block shipments={}",
@@ -1160,6 +1188,7 @@ public class SimulationService {
                 almacenes,
                 rutasPorPaquete,
                 totalMaletas,
+                resolveSimulationStart(request),
                 diaMin,
                 diaMax,
                 diasExtra
@@ -1180,6 +1209,9 @@ public class SimulationService {
         stored.totalEnvios = data.totalEnvios;
         stored.totalMaletas = data.totalMaletas;
         stored.inicio = data.inicio;
+        stored.inicioLocal = data.inicioLocal;
+        stored.inicioUtc = data.inicioUtc != null ? LocalDateTime.parse(data.inicioUtc) : null;
+        stored.inicioUtcMinute = data.inicioUtcMinute;
         stored.fin = data.fin;
         stored.estado = chunk.factible ? SimulationState.Status.READY.name() : SimulationState.Status.COMPLETED.name();
         simulationRunRepository.save(stored);
@@ -1196,6 +1228,9 @@ public class SimulationService {
             stored.totalEnvios = data.totalEnvios;
             stored.totalMaletas = data.totalMaletas;
             stored.inicio = data.inicio;
+            stored.inicioLocal = data.inicioLocal;
+            stored.inicioUtc = data.inicioUtc != null ? LocalDateTime.parse(data.inicioUtc) : null;
+            stored.inicioUtcMinute = data.inicioUtcMinute;
             stored.fin = data.fin;
         }
         simulationRunRepository.save(stored);
@@ -1519,6 +1554,50 @@ public class SimulationService {
         return d.plusDays(delta).format(FECHA_FORMAT);
     }
 
+    private SimulationStart resolveSimulationStart(SimulationRequest request) {
+        if (request != null && request.inicioUtcMinute != null && request.inicioUtcMinute >= 0) {
+            LocalDateTime utc = LocalDateTime.of(
+                LocalDate.ofEpochDay(Math.floorDiv(request.inicioUtcMinute, 1440)),
+                LocalTime.of(Math.floorMod(request.inicioUtcMinute, 1440) / 60, Math.floorMod(request.inicioUtcMinute, 1440) % 60)
+            );
+            LocalDateTime local = OperationalTime.utcToLocal(utc, OperationalTime.DEFAULT_OPERATION_GMT);
+            return new SimulationStart(
+                local.toLocalDate().format(FECHA_FORMAT),
+                local.toString(),
+                utc,
+                request.inicioUtcMinute
+            );
+        }
+
+        LocalDateTime local = parseSimulationStartLocal(request);
+        LocalDateTime utc = OperationalTime.localToUtc(local, OperationalTime.DEFAULT_OPERATION_GMT);
+        return new SimulationStart(
+            local.toLocalDate().format(FECHA_FORMAT),
+            local.toString(),
+            utc,
+            OperationalTime.absoluteUtcMinute(utc)
+        );
+    }
+
+    private LocalDateTime parseSimulationStartLocal(SimulationRequest request) {
+        String raw = request != null ? request.inicioLocal : null;
+        if (raw == null || raw.isBlank()) {
+            raw = request != null ? request.inicio : null;
+        }
+        if (raw == null || raw.isBlank()) {
+            return LocalDateTime.of(LocalDate.now(OperationalTime.resolveFallbackOperationalZone()), LocalTime.MIDNIGHT);
+        }
+
+        String value = raw.trim();
+        if (value.matches("\\d{8}")) {
+            return LocalDateTime.of(LocalDate.parse(value, FECHA_FORMAT), LocalTime.MIDNIGHT);
+        }
+        if (value.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            return LocalDateTime.of(LocalDate.parse(value), LocalTime.MIDNIGHT);
+        }
+        return LocalDateTime.parse(value.length() == 16 ? value + ":00" : value);
+    }
+
     private String resolverArchivoEnvios(SimulationRequest request) {
 
         if (request.envios == null || request.envios.isBlank()) {
@@ -1565,6 +1644,23 @@ public class SimulationService {
         );
     }
 
+    private List<Envio> filtrarEnviosDesdeInicio(
+        SimulationRequest request,
+        List<Envio> envios
+    ) {
+        if (envios == null || envios.isEmpty()) {
+            return envios;
+        }
+        SimulationStart start = resolveSimulationStart(request);
+        Integer endExclusive = (request != null && request.dias != null && request.dias > 0)
+            ? start.inicioUtcMinute + (request.dias * 1440)
+            : null;
+        return envios.stream()
+            .filter(e -> e.horaIngresoMin >= start.inicioUtcMinute)
+            .filter(e -> endExclusive == null || e.horaIngresoMin < endExclusive)
+            .collect(java.util.stream.Collectors.toList());
+    }
+
     private int resolverDiasExtra(
         SimulationRequest request,
         int maxSlaHoras
@@ -1586,6 +1682,7 @@ public class SimulationService {
         List<WarehouseStatusDto> almacenes,
         Map<String, RespuestaRutaEnvioDto> rutasPorPaquete,
         long totalMaletas,
+        SimulationStart start,
         int diaMin,
         int diaMax,
         int diasExtra
@@ -1624,6 +1721,9 @@ public class SimulationService {
 
         return new SimulationData(
             inicioFinal,
+            start.inicioLocalText,
+            start.inicioUtc.toString(),
+            start.inicioUtcMinute,
             finFinal,
             diaMin,
             diaMax,
@@ -1638,4 +1738,11 @@ public class SimulationService {
             enviosPorVuelo
         );
     }
+
+    private record SimulationStart(
+        String inicioDate,
+        String inicioLocalText,
+        LocalDateTime inicioUtc,
+        int inicioUtcMinute
+    ) {}
 }

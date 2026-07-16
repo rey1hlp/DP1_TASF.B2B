@@ -159,10 +159,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       return null
     }
 
-    const displayMinuteRaw =
-      simulation.displayOffset !== null
-        ? currentMinute + simulation.displayOffset
-        : currentMinute
+    const displayMinuteRaw = currentMinute
 
     if (displayMinuteRaw === null) {
       return null

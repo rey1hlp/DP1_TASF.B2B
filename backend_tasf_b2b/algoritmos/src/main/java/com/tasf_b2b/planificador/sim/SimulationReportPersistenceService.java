@@ -92,6 +92,9 @@ public class SimulationReportPersistenceService {
         snapshot.simulationId = simulationId;
         snapshot.versionNumber = nextVersion;
         snapshot.inicio = data.inicio;
+        snapshot.inicioLocal = data.inicioLocal;
+        snapshot.inicioUtc = data.inicioUtc != null ? LocalDateTime.parse(data.inicioUtc) : null;
+        snapshot.inicioUtcMinute = data.inicioUtcMinute;
         snapshot.fin = data.fin;
         snapshot.diaMin = data.diaMin;
         snapshot.diaMax = data.diaMax;
@@ -128,6 +131,9 @@ public class SimulationReportPersistenceService {
         dto.simulationId = snapshot.simulationId;
         dto.versionNumber = snapshot.versionNumber;
         dto.inicio = snapshot.inicio;
+        dto.inicioLocal = snapshot.inicioLocal;
+        dto.inicioUtc = snapshot.inicioUtc;
+        dto.inicioUtcMinute = snapshot.inicioUtcMinute;
         dto.fin = snapshot.fin;
         dto.diaMin = snapshot.diaMin;
         dto.diaMax = snapshot.diaMax;
@@ -728,6 +734,9 @@ public class SimulationReportPersistenceService {
         csv.writeNext(new String[] {"summary", "simulation_id", snapshot.simulationId});
         csv.writeNext(new String[] {"summary", "version", String.valueOf(snapshot.versionNumber)});
         csv.writeNext(new String[] {"summary", "inicio", snapshot.inicio});
+        csv.writeNext(new String[] {"summary", "inicio_local", snapshot.inicioLocal});
+        csv.writeNext(new String[] {"summary", "inicio_utc", snapshot.inicioUtc != null ? snapshot.inicioUtc.toString() : ""});
+        csv.writeNext(new String[] {"summary", "inicio_utc_minute", snapshot.inicioUtcMinute != null ? String.valueOf(snapshot.inicioUtcMinute) : ""});
         csv.writeNext(new String[] {"summary", "fin", snapshot.fin});
         csv.writeNext(new String[] {"summary", "total_envios", String.valueOf(snapshot.totalEnvios)});
         csv.writeNext(new String[] {"summary", "total_maletas", String.valueOf(snapshot.totalMaletas)});

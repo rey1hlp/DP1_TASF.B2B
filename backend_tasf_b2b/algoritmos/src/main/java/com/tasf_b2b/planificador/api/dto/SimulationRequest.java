@@ -3,6 +3,9 @@ package com.tasf_b2b.planificador.api.dto;
 public class SimulationRequest {
     public String envios;
     public String inicio;
+    public String inicioLocal;
+    public String inicioUtc;
+    public Integer inicioUtcMinute;
     public String fin;
     public Integer dias;
     public Integer maxEnvios;

@@ -19,6 +19,15 @@ public class SimulationRunEntity {
     @Column(name = "inicio", length = 8)
     public String inicio;
 
+    @Column(name = "inicio_local", length = 19)
+    public String inicioLocal;
+
+    @Column(name = "inicio_utc")
+    public LocalDateTime inicioUtc;
+
+    @Column(name = "inicio_utc_minute")
+    public Integer inicioUtcMinute;
+
     @Column(name = "fin", length = 8)
     public String fin;
 

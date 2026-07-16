@@ -317,6 +317,9 @@ public class SimulationRegistry {
         if (payload instanceof SimulationInitMessage init) {
             init.simulationId = simulationId;
             init.inicio = data.inicio;
+            init.inicioLocal = data.inicioLocal;
+            init.inicioUtc = data.inicioUtc;
+            init.inicioUtcMinute = data.inicioUtcMinute;
             init.fin = data.fin;
             init.diaMin = data.diaMin;
             init.diaMax = data.diaMax;
@@ -331,6 +334,9 @@ public class SimulationRegistry {
         if (payload instanceof SimulationAppendMessage append) {
             append.simulationId = simulationId;
             append.inicio = data.inicio;
+            append.inicioLocal = data.inicioLocal;
+            append.inicioUtc = data.inicioUtc;
+            append.inicioUtcMinute = data.inicioUtcMinute;
             append.fin = data.fin;
             append.diaMin = data.diaMin;
             append.diaMax = data.diaMax;
@@ -373,7 +379,9 @@ public class SimulationRegistry {
             if (state == null || state.data == null || state.status != SimulationState.Status.READY) {
                 continue;
             }
-            long baseMin = (long) state.data.diaMin * 24L * 60L;
+            long baseMin = state.data.inicioUtcMinute > 0
+                ? state.data.inicioUtcMinute
+                : (long) state.data.diaMin * 24L * 60L;
             long maxMin = ((long) (state.data.diaMax + state.data.diasExtra + 1)) * 24L * 60L;
 
             for (SessionContext ctx : new ArrayList<>(entry.getValue())) {
@@ -475,6 +483,9 @@ public class SimulationRegistry {
 
         return new SimulationData(
             base.inicio != null ? base.inicio : extra.inicio,
+            base.inicioLocal != null ? base.inicioLocal : extra.inicioLocal,
+            base.inicioUtc != null ? base.inicioUtc : extra.inicioUtc,
+            Math.min(base.inicioUtcMinute, extra.inicioUtcMinute),
             extra.fin != null ? extra.fin : base.fin,
             diaMin,
             diaMax,

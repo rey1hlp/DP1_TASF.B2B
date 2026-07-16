@@ -30,6 +30,9 @@ export type AirportDto = {
 export type SimulationRequest = {
   envios?: string
   inicio?: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin?: string
   dias?: number
   maxEnvios?: number
@@ -55,6 +58,9 @@ export type SimulationResponse = {
   simulationId: string
   status: string
   inicio?: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin?: string
   envios?: number
   maletas?: number
@@ -93,6 +99,9 @@ export type WsInitMessage = {
   type: 'init'
   simulationId: string
   inicio: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin: string
   diaMin: number
   diaMax: number
@@ -108,6 +117,9 @@ export type WsAppendMessage = {
   type: 'append'
   simulationId: string
   inicio: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin: string
   diaMin: number
   diaMax: number
