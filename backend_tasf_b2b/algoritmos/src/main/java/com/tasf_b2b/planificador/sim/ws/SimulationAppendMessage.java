@@ -9,6 +9,9 @@ public class SimulationAppendMessage {
     public String type = "append";
     public String simulationId;
     public String inicio;
+    public String inicioLocal;
+    public String inicioUtc;
+    public Integer inicioUtcMinute;
     public String fin;
     public int diaMin;
     public int diaMax;

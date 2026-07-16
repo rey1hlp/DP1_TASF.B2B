@@ -3,7 +3,7 @@ import type { FlightCrudDto } from '../types/sim'
 import { cancelFlightDay, createFlight, deleteFlight, listAirports, listFlights, updateFlight, uploadFlightsTxt } from '../services/api'
 import type { AirportCrudDto } from '../types/sim'
 import { useSimulationContext } from '../contexts/SimulationContext'
-import { formatDateTime, formatFileSize, formatInteger, formatIsoDateFromDayIndex } from '../utils/time'
+import { formatFileSize, formatGmtOffset, formatInteger, formatIsoDateFromDayIndex } from '../utils/time'
 import { appendCancelledFlightDay } from '../utils/cancelledFlightTraces'
 
 interface FlightsCrudProps {
@@ -40,12 +40,16 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
 
   const [activeOaciList, setActiveOaciList] = useState<'origen' | 'destino' | null>(null)
   const [form, setForm] = useState<FlightCrudDto>({
-    codigo: '',
-    origenOaci: '',
-    destinoOaci: '',
-    salida: '',
-    llegada: '',
-    capacidad: 150,
+	    codigo: '',
+	    origenOaci: '',
+	    destinoOaci: '',
+	    salidaLocal: '',
+	    llegadaLocal: '',
+	    salidaUtcOffsetMin: 0,
+	    duracionMin: 0,
+	    origenGmt: 0,
+	    destinoGmt: 0,
+	    capacidad: 150,
     cancelado: false,
   })
   const [capacidadText, setCapacidadText] = useState('150')
@@ -82,12 +86,16 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
 
   const resetForm = () => {
     setForm({
-      codigo: '',
-      origenOaci: '',
-      destinoOaci: '',
-      salida: '',
-      llegada: '',
-      capacidad: 150,
+	      codigo: '',
+	      origenOaci: '',
+	      destinoOaci: '',
+	      salidaLocal: '',
+	      llegadaLocal: '',
+	      salidaUtcOffsetMin: 0,
+	      duracionMin: 0,
+	      origenGmt: 0,
+	      destinoGmt: 0,
+	      capacidad: 150,
       cancelado: false,
     })
     setCapacidadText('150')
@@ -151,10 +159,7 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       return null
     }
 
-    const displayMinuteRaw =
-      simulation.displayOffset !== null
-        ? currentMinute + simulation.displayOffset
-        : currentMinute
+    const displayMinuteRaw = currentMinute
 
     if (displayMinuteRaw === null) {
       return null
@@ -167,15 +172,6 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       contextDate: formatIsoDateFromDayIndex(dayIndex),
       contextMinuteOfDay: minuteOfDay,
     }
-  }
-
-  const getMinuteOfDay = (value: string) => {
-    const parsed = new Date(value)
-    if (Number.isNaN(parsed.getTime())) {
-      return null
-    }
-
-    return parsed.getHours() * 60 + parsed.getMinutes() + parsed.getSeconds() / 60
   }
 
   const handleCancelDay = async (id?: number) => {
@@ -198,8 +194,8 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
       const flight = items.find((item) => item.id === id) ?? allItems.find((item) => item.id === id)
       const origin = flight ? airportCatalog.find((airport) => airport.codigoOaci.toUpperCase() === flight.origenOaci.toUpperCase()) : null
       const destination = flight ? airportCatalog.find((airport) => airport.codigoOaci.toUpperCase() === flight.destinoOaci.toUpperCase()) : null
-      const salidaMin = flight ? getMinuteOfDay(flight.salida) : null
-      const llegadaMin = flight ? getMinuteOfDay(flight.llegada) : null
+	      const salidaMin = flight ? flight.salidaUtcOffsetMin : null
+	      const llegadaMin = flight ? flight.salidaUtcOffsetMin + flight.duracionMin : null
 
       console.log('[FlightsCrud] cancel day', {
         flightId: id,
@@ -411,8 +407,8 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
             <span className="flight-code">{item.codigo}</span>
             <span>{formatLocation(item.origenOaci, item.origenCiudad)}</span>
             <span>{formatLocation(item.destinoOaci, item.destinoCiudad)}</span>
-            <span className="datetime">{formatDateTime(item.salida)}</span>
-            <span className="datetime">{formatDateTime(item.llegada)}</span>
+	            <span className="datetime">{`${item.salidaLocal} ${formatGmtOffset(item.origenGmt)}`}</span>
+	            <span className="datetime">{`${item.llegadaLocal} ${formatGmtOffset(item.destinoGmt)}`}</span>
             <span className="capacity">{formatInteger(item.capacidad)}</span>
             <span className={`status-badge ${item.cancelado ? 'cancelled' : 'active'}`}>
               {item.cancelado ? 'Cancelado' : 'Activo'}
@@ -550,11 +546,11 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
               </label>
               <label className="field">
                 Salida
-                <input type="datetime-local" value={form.salida} onChange={(e) => setForm({ ...form, salida: e.target.value })} />
+	                <input type="time" value={form.salidaLocal} onChange={(e) => setForm({ ...form, salidaLocal: e.target.value })} />
               </label>
               <label className="field">
                 Llegada
-                <input type="datetime-local" value={form.llegada} onChange={(e) => setForm({ ...form, llegada: e.target.value })} />
+	                <input type="time" value={form.llegadaLocal} onChange={(e) => setForm({ ...form, llegadaLocal: e.target.value })} />
               </label>
               <label className="field">
                 Capacidad

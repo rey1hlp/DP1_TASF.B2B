@@ -11,6 +11,7 @@ import type { EntityFocusRequest } from '../types/entityFocus'
 
 export type PasoRutaDto = {
   vueloId: number | string
+  planId?: number | string | null
   origen: string
   destino: string
   salidaMin: number

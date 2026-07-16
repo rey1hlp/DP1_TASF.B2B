@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
-import { formatDate, formatDateTime, formatFileSize, formatInteger } from '../utils/time'
+import { formatDateTime, formatFileSize, formatInteger } from '../utils/time'
 
 const EMPTY_FORM: ShipmentCrudDto = {
   codigoPedido: '',
@@ -15,7 +15,7 @@ const EMPTY_FORM: ShipmentCrudDto = {
   diaIndex: 0,
   ingresoUtc: '',
   ingresoLocal: '',
-  gmtOffset: 0,
+  origenGmt: 0,
   cantidad: 1,
   idCliente: '',
   slaHoras: 24,
@@ -36,6 +36,24 @@ function getShipmentStatusClass(status?: ShipmentCrudDto['status']) {
   if (status === 'DELIVERED') return 'delivered'
   if (status === 'CANCELLED') return 'cancelled'
   return 'pending'
+}
+
+function toDatetimeLocalFromGmt(gmt: number): string {
+  const local = new Date(Date.now() + gmt * 60 * 60 * 1000)
+  const yyyy = local.getUTCFullYear()
+  const mm = String(local.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(local.getUTCDate()).padStart(2, '0')
+  const hh = String(local.getUTCHours()).padStart(2, '0')
+  const min = String(local.getUTCMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+}
+
+function datePart(value?: string | null): string {
+  return value ? value.substring(0, 10) : ''
+}
+
+function timePart(value?: string | null): string {
+  return value && value.includes('T') ? value.substring(11, 16) : ''
 }
 
 export default function ShipmentsCrud() {
@@ -64,7 +82,7 @@ export default function ShipmentsCrud() {
     invalidAirportLines: string[]
   } | null>(null)
 
-  const logisticsAirportCode = user?.role === 'LOGISTICS' || user?.role === 'REGISTER'
+  const logisticsAirportCode = user && user.role !== 'ADMIN'
     ? user.airportCode?.trim().toUpperCase() ?? null
     : null
 
@@ -99,11 +117,12 @@ export default function ShipmentsCrud() {
     void load()
   }, [page, query])
 
-  const buildEmptyForm = (airport: AirportCrudDto | null = logisticsAirport): ShipmentCrudDto => ({
-    ...EMPTY_FORM,
-    origen: logisticsAirportCode ?? '',
-    gmtOffset: airport?.gmt ?? EMPTY_FORM.gmtOffset,
-  })
+	  const buildEmptyForm = (airport: AirportCrudDto | null = logisticsAirport): ShipmentCrudDto => ({
+	    ...EMPTY_FORM,
+	    origen: logisticsAirportCode ?? '',
+	    origenGmt: airport?.gmt ?? EMPTY_FORM.origenGmt,
+	    ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : '',
+	  })
 
   const resetForm = () => {
     setForm(buildEmptyForm())
@@ -155,15 +174,16 @@ export default function ShipmentsCrud() {
 
     setActiveOaciList((current) => (current === 'origen' ? null : current))
     setForm((current) => {
-      const nextGmt = logisticsAirport?.gmt ?? current.gmtOffset
-      if (current.origen === logisticsAirportCode && current.gmtOffset === nextGmt) {
-        return current
-      }
-      return {
-        ...current,
-        origen: logisticsAirportCode,
-        gmtOffset: nextGmt,
-      }
+	      const nextGmt = logisticsAirport?.gmt ?? current.origenGmt
+	      if (current.origen === logisticsAirportCode && current.origenGmt === nextGmt) {
+	        return current
+	      }
+	      return {
+	        ...current,
+	        origen: logisticsAirportCode,
+	        origenGmt: nextGmt,
+	        ingresoLocal: toDatetimeLocalFromGmt(nextGmt),
+	      }
     })
   }, [isModalOpen, logisticsAirport?.gmt, logisticsAirportCode])
 
@@ -174,61 +194,21 @@ export default function ShipmentsCrud() {
     void loadLogisticsAirport()
   }, [isModalOpen, logisticsAirport, logisticsAirportCode])
 
-  const computeIngresoUtc = (ingresoLocal: string, gmtOffset: number) => {
-    if (!ingresoLocal) {
-      return ''
-    }
-    const match = ingresoLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-    if (!match) {
-      return ''
-    }
-    const [, year, month, day, hour, minute] = match
-    const utcMillis = Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour) - gmtOffset,
-      Number(minute),
-      0,
-      0
-    )
-    return new Date(utcMillis).toISOString().slice(0, 16)
-  }
-
-  const normalizeFecha = (fecha: string, ingresoLocal: string) => {
-    const digits = fecha.trim().replaceAll('-', '')
-    if (/^\d{8}$/.test(digits)) {
-      return digits
-    }
-    return ingresoLocal.slice(0, 10).replaceAll('-', '')
-  }
-
-  const handleSubmit = async () => {
-    setError(null)
-    console.debug('[ShipmentsCrud] submit start', { form })
-    if (!form.codigoPedido || !form.origen || !form.destino || !form.fecha || !form.ingresoLocal || !form.idCliente) {
-      setError('Completa los campos requeridos.')
-      return
-    }
-
-    const effectiveGmtOffset = logisticsAirport?.gmt ?? form.gmtOffset
-    const ingresoUtc = computeIngresoUtc(form.ingresoLocal, effectiveGmtOffset)
-    console.debug('[ShipmentsCrud] computed ingresoUtc', { ingresoUtc, ingresoLocal: form.ingresoLocal, gmtOffset: effectiveGmtOffset })
-    if (!ingresoUtc) {
-      setError('Ingresa una fecha local valida para calcular UTC.')
-      return
-    }
-
-    const payload: ShipmentCrudDto = {
-      ...form,
-      origen: (logisticsAirportCode ?? form.origen).trim().toUpperCase(),
-      destino: form.destino.trim().toUpperCase(),
-      codigoPedido: form.codigoPedido.trim(),
-      idCliente: form.idCliente.trim(),
-      fecha: normalizeFecha(form.fecha, form.ingresoLocal),
-      gmtOffset: effectiveGmtOffset,
-      ingresoUtc,
-    }
+	  const handleSubmit = async () => {
+	    setError(null)
+	    console.debug('[ShipmentsCrud] submit start', { form })
+	    if (!form.codigoPedido || !form.origen || !form.destino || !form.ingresoLocal || !form.idCliente) {
+	      setError('Completa los campos requeridos.')
+	      return
+	    }
+	
+	    const payload: ShipmentCrudDto = {
+	      ...form,
+	      origen: (logisticsAirportCode ?? form.origen).trim().toUpperCase(),
+	      destino: form.destino.trim().toUpperCase(),
+	      codigoPedido: form.codigoPedido.trim(),
+	      idCliente: form.idCliente.trim(),
+	    }
     console.debug('[ShipmentsCrud] payload', payload)
 
     if (form.id) {
@@ -329,7 +309,19 @@ export default function ShipmentsCrud() {
   }
 
   const handleSelectAirport = (kind: 'origen' | 'destino', codigo: string) => {
-    setForm((current) => ({ ...current, [kind]: codigo }))
+	    setForm((current) => {
+	      const airport = airports.find((item) => item.codigoOaci.toUpperCase() === codigo.toUpperCase())
+	      return {
+	        ...current,
+	        [kind]: codigo,
+	        ...(kind === 'origen'
+            ? {
+              origenGmt: airport?.gmt ?? current.origenGmt,
+              ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : current.ingresoLocal,
+            }
+            : {}),
+	      }
+	    })
     setActiveOaciList(null)
   }
 
@@ -377,7 +369,7 @@ export default function ShipmentsCrud() {
             <span>{item.codigoPedido}</span>
             <span>{item.origen}</span>
             <span>{item.destino}</span>
-            <span>{formatDateTime(item.ingresoUtc)}</span>
+	            <span>{formatDateTime(item.ingresoLocal)}</span>
             <span>{formatInteger(item.cantidad)}</span>
             <span>{item.idCliente}</span>
             <span className={`status-badge ${getShipmentStatusClass(item.status)}`}>
@@ -515,23 +507,31 @@ export default function ShipmentsCrud() {
             </div>
           </label>
           <label className="field">
-            Fecha
-            <input value={form.fecha} onChange={(event) => handleChange('fecha', event.target.value)} placeholder="AAAAMMDD" title={formatDate(form.fecha)} />
-          </label>
-          <label className="field">
-            Ingreso local
-            <input type="datetime-local" value={form.ingresoLocal} onChange={(event) => handleChange('ingresoLocal', event.target.value)} />
-          </label>
-          <label className="field">
-            GMT offset
+            Fecha ingreso
             <input
-              type="number"
-              value={form.gmtOffset}
-              disabled={isOriginLocked}
-              title={isOriginLocked ? 'GMT asignado por tu aeropuerto' : undefined}
-              onChange={(event) => handleChange('gmtOffset', Number(event.target.value))}
+              type="date"
+              value={datePart(form.ingresoLocal)}
+              disabled
+              title="Fecha local derivada del aeropuerto origen"
             />
           </label>
+          <label className="field">
+            Hora ingreso
+            <input
+              type="time"
+              value={timePart(form.ingresoLocal)}
+              disabled
+              title="Hora local derivada del aeropuerto origen"
+            />
+          </label>
+	          <label className="field">
+	            GMT origen
+	            <input
+	              value={`GMT${form.origenGmt >= 0 ? '+' : ''}${form.origenGmt}`}
+	              disabled
+	              title="GMT derivado del aeropuerto origen"
+	            />
+	          </label>
           <label className="field">
             Cantidad
             <input type="number" value={form.cantidad} onChange={(event) => handleChange('cantidad', Number(event.target.value))} />

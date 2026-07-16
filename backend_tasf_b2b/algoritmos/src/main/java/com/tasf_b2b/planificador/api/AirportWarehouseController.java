@@ -8,6 +8,7 @@ import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -60,13 +61,13 @@ public class AirportWarehouseController {
         // Query que trae los paquetes cuyo origen es el aeropuerto seleccionado
         // Puedes filtrar por `s.asignado = 0` si solo quieres ver los que están en cola de espera en almacén
         String sql = "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
-                     "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
-                     "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
+	                     "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, ao.gmt as origen_gmt, " +
+	                     "s.ingreso_utc, s.cantidad, " +
                      "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
                      "FROM shipment s " +
                      "JOIN airport ao ON s.origen_id = ao.id " +
                      "JOIN airport ad ON s.destino_id = ad.id " +
-                     "WHERE ao.codigo_oaci = ? ORDER BY s.hora_ingreso_utc DESC";
+	                     "WHERE ao.codigo_oaci = ? ORDER BY s.ingreso_utc DESC";
 
         List<ShipmentCrudDto> shipments = jdbcTemplate.query(sql, (rs, rowNum) -> {
             ShipmentCrudDto dto = new ShipmentCrudDto();
@@ -76,10 +77,10 @@ public class AirportWarehouseController {
             dto.origenCiudad = rs.getString("origen_ciudad");
             dto.destino = rs.getString("destino_oaci");
             dto.destinoCiudad = rs.getString("destino_ciudad");
-            dto.fecha = rs.getString("fecha");
-            dto.ingresoUtc = rs.getTimestamp("hora_ingreso_utc").toLocalDateTime();
-            dto.ingresoLocal = rs.getTimestamp("hora_ingreso_local").toLocalDateTime();
-            dto.gmtOffset = rs.getInt("gmt_offset");
+	            dto.ingresoUtc = rs.getTimestamp("ingreso_utc").toLocalDateTime();
+	            dto.origenGmt = rs.getInt("origen_gmt");
+	            dto.ingresoLocal = OperationalTime.utcToLocal(dto.ingresoUtc, dto.origenGmt);
+	            dto.fecha = dto.ingresoLocal.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
             dto.cantidad = rs.getInt("cantidad");
             dto.idCliente = rs.getString("id_cliente");
             dto.slaHoras = rs.getInt("sla_horas");
@@ -99,14 +100,14 @@ public class AirportWarehouseController {
         }
 
         String sql = "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
-                     "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
-                     "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
+	                     "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, ao.gmt as origen_gmt, " +
+	                     "s.ingreso_utc, s.cantidad, " +
                      "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
                      "FROM shipment s " +
                      "JOIN airport ao ON s.origen_id = ao.id " +
                      "JOIN airport ad ON s.destino_id = ad.id " +
                      "WHERE ao.codigo_oaci = ? OR ad.codigo_oaci = ? " +
-                     "ORDER BY s.hora_ingreso_utc DESC";
+	                     "ORDER BY s.ingreso_utc DESC";
 
         List<ShipmentCrudDto> fallback = jdbcTemplate.query(sql, (rs, rowNum) -> {
             ShipmentCrudDto dto = new ShipmentCrudDto();
@@ -116,10 +117,10 @@ public class AirportWarehouseController {
             dto.origenCiudad = rs.getString("origen_ciudad");
             dto.destino = rs.getString("destino_oaci");
             dto.destinoCiudad = rs.getString("destino_ciudad");
-            dto.fecha = rs.getString("fecha");
-            dto.ingresoUtc = rs.getTimestamp("hora_ingreso_utc").toLocalDateTime();
-            dto.ingresoLocal = rs.getTimestamp("hora_ingreso_local").toLocalDateTime();
-            dto.gmtOffset = rs.getInt("gmt_offset");
+	            dto.ingresoUtc = rs.getTimestamp("ingreso_utc").toLocalDateTime();
+	            dto.origenGmt = rs.getInt("origen_gmt");
+	            dto.ingresoLocal = OperationalTime.utcToLocal(dto.ingresoUtc, dto.origenGmt);
+	            dto.fecha = dto.ingresoLocal.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
             dto.cantidad = rs.getInt("cantidad");
             dto.idCliente = rs.getString("id_cliente");
             dto.slaHoras = rs.getInt("sla_horas");

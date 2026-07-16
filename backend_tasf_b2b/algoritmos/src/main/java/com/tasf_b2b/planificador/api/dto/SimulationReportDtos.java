@@ -12,6 +12,9 @@ public class SimulationReportDtos {
         public String simulationId;
         public int versionNumber;
         public String inicio;
+        public String inicioLocal;
+        public LocalDateTime inicioUtc;
+        public Integer inicioUtcMinute;
         public String fin;
         public Integer diaMin;
         public Integer diaMax;

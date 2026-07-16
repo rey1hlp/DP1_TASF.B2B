@@ -9,6 +9,7 @@ import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
 import com.tasf_b2b.planificador.sim.SimulationService;
@@ -23,8 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDateTime;
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -73,6 +72,15 @@ public class FlightCrudController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/by-code/{codigo}")
+    public ResponseEntity<FlightCrudDto> getFlightByCodigo(@PathVariable String codigo) {
+        FlightEntity entity = repository.findByCodigo(codigo);
+        if (entity == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(toDto(entity));
+    }
+
     @GetMapping("/{id}/shipments")
     public ResponseEntity<List<ShipmentCrudDto>> getShipmentsByFlightRoute(@PathVariable Long id) {
         FlightEntity flight = repository.findById(id).orElse(null);
@@ -82,18 +90,15 @@ public class FlightCrudController {
 
         String origenOaci = flight.origen.codigoOaci.trim().toUpperCase();
         String destinoOaci = flight.destino.codigoOaci.trim().toUpperCase();
-        int salidaMin = flight.salida.getHour() * 60 + flight.salida.getMinute();
-        String fechaVuelo = flight.salida.toLocalDate().format(DateTimeFormatter.BASIC_ISO_DATE);
 
         // Primary: use the in-memory plan to find exactly which shipments are assigned to this flight
-        List<String> codes = dailyPlanningService.getShipmentCodesForFlight(origenOaci, destinoOaci, salidaMin);
+        List<String> codes = dailyPlanningService.getShipmentCodesForFlightPlanId(id.intValue());
         if (!codes.isEmpty()) {
             log.info(
-                "[FLIGHT_CRUD] flight shipments resolved from current plan flightId={} origen={} destino={} salidaMin={} count={}",
+                "[FLIGHT_CRUD] flight shipments resolved from current plan flightId={} origen={} destino={} count={}",
                 id,
                 origenOaci,
                 destinoOaci,
-                salidaMin,
                 codes.size()
             );
             List<ShipmentCrudDto> result = shipmentRepository.findByCodigoPedidoIn(codes).stream()
@@ -103,38 +108,43 @@ public class FlightCrudController {
         }
 
         log.warn(
-            "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} salidaMin={} fecha={} -> trying db route fallback",
-            id,
-            origenOaci,
-            destinoOaci,
-            salidaMin,
-            fechaVuelo
+                "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} -> trying db route fallback",
+                id,
+                origenOaci,
+                destinoOaci
         );
 
-        List<ShipmentCrudDto> routeFallback = shipmentRepository.findByRouteAndFecha(origenOaci, destinoOaci, fechaVuelo)
+        List<ShipmentCrudDto> routeFallback = shipmentRepository.findByRoute(origenOaci, destinoOaci)
             .stream()
             .map(this::shipmentToDto)
             .collect(java.util.stream.Collectors.toList());
         if (!routeFallback.isEmpty()) {
             log.info(
-                "[FLIGHT_CRUD] flight shipments resolved from db route fallback flightId={} origen={} destino={} fecha={} count={}",
+                "[FLIGHT_CRUD] flight shipments resolved from db route fallback flightId={} origen={} destino={} count={}",
                 id,
                 origenOaci,
                 destinoOaci,
-                fechaVuelo,
                 routeFallback.size()
             );
             return ResponseEntity.ok(routeFallback);
         }
 
         log.warn(
-            "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} salidaMin={} -> returning empty list",
+            "[FLIGHT_CRUD] flight shipments not found in current plan flightId={} origen={} destino={} -> returning empty list",
             id,
             origenOaci,
-            destinoOaci,
-            salidaMin
+            destinoOaci
         );
         return ResponseEntity.ok(List.of());
+    }
+
+    @GetMapping("/by-code/{codigo}/shipments")
+    public ResponseEntity<List<ShipmentCrudDto>> getShipmentsByFlightCodigo(@PathVariable String codigo) {
+        FlightEntity flight = repository.findByCodigo(codigo);
+        if (flight == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return getShipmentsByFlightRoute(flight.id);
     }
 
     private ShipmentCrudDto shipmentToDto(ShipmentEntity entity) {
@@ -145,10 +155,10 @@ public class FlightCrudController {
         dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
         dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
         dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
-        dto.fecha = entity.fecha;
+        dto.fecha = entity.origen != null ? OperationalTime.dateKeyFromUtc(entity.ingresoUtc, entity.origen.gmt) : null;
         dto.ingresoUtc = entity.ingresoUtc;
-        dto.ingresoLocal = entity.ingresoLocal;
-        dto.gmtOffset = entity.gmtOffset;
+        dto.ingresoLocal = entity.origen != null ? OperationalTime.utcToLocal(entity.ingresoUtc, entity.origen.gmt) : entity.ingresoUtc;
+        dto.origenGmt = entity.origen != null ? entity.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
         dto.cantidad = entity.cantidad;
         dto.idCliente = entity.idCliente;
         dto.slaHoras = entity.slaHoras;
@@ -173,12 +183,12 @@ public class FlightCrudController {
     @PostMapping
     public ResponseEntity<FlightCrudDto> create(@RequestBody FlightCrudDto dto) {
         log.info(
-            "[FLIGHT_CRUD] create request codigo={} origen={} destino={} salida={} llegada={} capacidad={} cancelado={}",
+	            "[FLIGHT_CRUD] create request codigo={} origen={} destino={} salidaLocal={} llegadaLocal={} capacidad={} cancelado={}",
             dto != null ? dto.codigo : null,
             dto != null ? dto.origenOaci : null,
             dto != null ? dto.destinoOaci : null,
-            dto != null ? dto.salida : null,
-            dto != null ? dto.llegada : null,
+	            dto != null ? dto.salidaLocal : null,
+	            dto != null ? dto.llegadaLocal : null,
             dto != null ? dto.capacidad : null,
             dto != null && dto.cancelado
         );
@@ -213,8 +223,6 @@ public class FlightCrudController {
         List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
 
         DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
-        LocalDate baseDate = LocalDate.now();
-
         // Carga de aeropuertos en memoria (una sola consulta)
         long t1 = System.currentTimeMillis();
         Map<String, AirportEntity> mapaAeropuertos = new HashMap<>();
@@ -275,17 +283,14 @@ public class FlightCrudController {
                     continue;
                 }
 
-                LocalDate llegadaDate = llegadaTime.isBefore(salidaTime) 
-                        ? baseDate.plusDays(1) 
-                        : baseDate;
-                LocalDateTime salida = LocalDateTime.of(baseDate, salidaTime);
-                LocalDateTime llegada = LocalDateTime.of(llegadaDate, llegadaTime);
+	                int salidaUtcOffsetMin = OperationalTime.localTimeToUtcOffsetMinute(salidaTime, origen.gmt);
+	                int duracionMin = OperationalTime.durationMinutesBetweenLocalTimes(salidaTime, origen.gmt, llegadaTime, destino.gmt);
 
                 String codigo = generarCodigo(origenOaci, destinoOaci, salidaTxt, llegadaTxt);
 
-                batch.add(new Object[]{
-                        codigo, origen.id, destino.id, salida, llegada, capacidad, false
-                });
+	                batch.add(new Object[]{
+	                        codigo, origen.id, destino.id, salidaUtcOffsetMin, duracionMin, capacidad, false
+	                });
 
                 // Si alcanzamos el tamaño del lote, ejecutamos el batch
                 if (batch.size() >= BATCH_SIZE) {
@@ -333,15 +338,15 @@ public class FlightCrudController {
     // ==================== MÉTODOS PRIVADOS ====================
     private int[] executeFlightBatchOptimized(List<Object[]> batch) {
         String sql = """
-            INSERT INTO flight (codigo, origen_id, destino_id, salida, llegada, capacidad, cancelado)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                origen_id = VALUES(origen_id),
-                destino_id = VALUES(destino_id),
-                salida = VALUES(salida),
-                llegada = VALUES(llegada),
-                capacidad = VALUES(capacidad),
-                cancelado = VALUES(cancelado)
+	            INSERT INTO flight (codigo, origen_id, destino_id, salida_utc_offset_min, duracion_min, capacidad, cancelado)
+	            VALUES (?, ?, ?, ?, ?, ?, ?)
+	            ON DUPLICATE KEY UPDATE
+	                origen_id = VALUES(origen_id),
+	                destino_id = VALUES(destino_id),
+	                salida_utc_offset_min = VALUES(salida_utc_offset_min),
+	                duracion_min = VALUES(duracion_min),
+	                capacidad = VALUES(capacidad),
+	                cancelado = VALUES(cancelado)
             """;
         return jdbcTemplate.batchUpdate(sql, batch);
     }
@@ -431,8 +436,10 @@ public class FlightCrudController {
         entity.origen = origen;
         entity.destino = destino;
         try {
-            entity.salida = LocalDateTime.parse(dto.salida);
-            entity.llegada = LocalDateTime.parse(dto.llegada);
+            LocalTime salidaLocal = parseLocalTime(dto.salidaLocal);
+            LocalTime llegadaLocal = parseLocalTime(dto.llegadaLocal);
+            entity.salidaUtcOffsetMin = OperationalTime.localTimeToUtcOffsetMinute(salidaLocal, origen.gmt);
+            entity.duracionMin = OperationalTime.durationMinutesBetweenLocalTimes(salidaLocal, origen.gmt, llegadaLocal, destino.gmt);
         } catch (Exception ex) {
             return false;
         }
@@ -449,8 +456,12 @@ public class FlightCrudController {
         dto.origenCiudad = entity.origen.ciudad;
         dto.destinoOaci = entity.destino.codigoOaci;
         dto.destinoCiudad = entity.destino.ciudad;
-        dto.salida = entity.salida.toString();
-        dto.llegada = entity.llegada.toString();
+        dto.salidaLocal = formatLocalTimeFromUtcOffset(entity.salidaUtcOffsetMin, entity.origen.gmt);
+        dto.llegadaLocal = formatLocalTimeFromUtcOffset(entity.salidaUtcOffsetMin + entity.duracionMin, entity.destino.gmt);
+        dto.salidaUtcOffsetMin = entity.salidaUtcOffsetMin;
+        dto.duracionMin = entity.duracionMin;
+        dto.origenGmt = entity.origen.gmt;
+        dto.destinoGmt = entity.destino.gmt;
         dto.capacidad = entity.capacidad;
         dto.cancelado = entity.cancelado;
         return dto;
@@ -462,10 +473,30 @@ public class FlightCrudController {
             || !java.util.Objects.equals(previous.codigo, current.codigo)
             || !java.util.Objects.equals(previous.origenOaci, current.origenOaci)
             || !java.util.Objects.equals(previous.destinoOaci, current.destinoOaci)
-            || !java.util.Objects.equals(previous.salida, current.salida)
-            || !java.util.Objects.equals(previous.llegada, current.llegada)
+            || !java.util.Objects.equals(previous.salidaLocal, current.salidaLocal)
+            || !java.util.Objects.equals(previous.llegadaLocal, current.llegadaLocal)
+            || previous.salidaUtcOffsetMin != current.salidaUtcOffsetMin
+            || previous.duracionMin != current.duracionMin
             || previous.capacidad != current.capacidad
             || previous.cancelado != current.cancelado;
+    }
+
+    private LocalTime parseLocalTime(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("missing time");
+        }
+        String trimmed = value.trim();
+        if (trimmed.contains("T")) {
+            return java.time.LocalDateTime.parse(trimmed).toLocalTime();
+        }
+        return LocalTime.parse(trimmed.length() >= 5 ? trimmed.substring(0, 5) : trimmed);
+    }
+
+    private String formatLocalTimeFromUtcOffset(int utcOffsetMin, int gmtHours) {
+        int localMinute = Math.floorMod(utcOffsetMin + (gmtHours * 60), 1440);
+        int hours = localMinute / 60;
+        int minutes = localMinute % 60;
+        return String.format("%02d:%02d", hours, minutes);
     }
 
     public record BulkImportResult(

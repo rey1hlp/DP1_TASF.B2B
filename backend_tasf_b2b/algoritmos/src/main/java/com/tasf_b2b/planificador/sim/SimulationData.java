@@ -10,6 +10,9 @@ import com.tasf_b2b.planificador.api.dto.RespuestaRutaEnvioDto;
 
 public class SimulationData {
     public final String inicio;
+    public final String inicioLocal;
+    public final String inicioUtc;
+    public final int inicioUtcMinute;
     public final String fin;
     public final int diaMin;
     public final int diaMax;
@@ -25,6 +28,9 @@ public class SimulationData {
 
     public SimulationData(
         String inicio,
+        String inicioLocal,
+        String inicioUtc,
+        int inicioUtcMinute,
         String fin,
         int diaMin,
         int diaMax,
@@ -39,6 +45,9 @@ public class SimulationData {
         Map<Integer, List<ShipmentCrudDto>> enviosPorVuelo
     ) {
         this.inicio = inicio;
+        this.inicioLocal = inicioLocal;
+        this.inicioUtc = inicioUtc;
+        this.inicioUtcMinute = inicioUtcMinute;
         this.fin = fin;
         this.diaMin = diaMin;
         this.diaMax = diaMax;

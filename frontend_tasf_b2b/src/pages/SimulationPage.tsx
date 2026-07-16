@@ -224,7 +224,6 @@ export default function SimulationPage() {
     simId,
     requestedStart,
     requestedDays,
-    displayOffset,
     localCompleted,
     ranges,
   } = simulation
@@ -409,6 +408,7 @@ export default function SimulationPage() {
           ? {
             envios: enviosKey,
             inicio: dateOnly,
+            inicioLocal: inicio,
             colapsoIncremental: true,
             bloqueDias: 5,
             intervaloPlanMs: 600000,
@@ -424,6 +424,7 @@ export default function SimulationPage() {
           : {
             envios: enviosKey,
             inicio: dateOnly,
+            inicioLocal: inicio,
             dias,
             maxEnvios: 5000000,
             poblacion: 50,
@@ -480,17 +481,7 @@ export default function SimulationPage() {
   const requestedStartOnlyDate = requestedStart ? requestedStart.substring(0, 10) : null
   const requestedStartIndex = requestedStartOnlyDate ? getDayIndexFromDateString(requestedStartOnlyDate) : null
 
-  let requestedStartMinute: number | null = null
-  if (requestedStartIndex !== null && requestedStart) {
-    requestedStartMinute = requestedStartIndex * 1440
-    if (requestedStart.includes('T')) {
-      const timePart = requestedStart.split('T')[1]
-      if (timePart) {
-        const [hh, mm] = timePart.split(':').map(Number)
-        requestedStartMinute += (hh * 60) + mm
-      }
-    }
-  }
+  const requestedStartMinute = meta?.inicioUtcMinute ?? (requestedStartIndex !== null ? requestedStartIndex * 1440 : null)
 
   const requestedEndMinute =
     requestedStartMinute !== null && requestedDays !== null
@@ -499,25 +490,7 @@ export default function SimulationPage() {
 
   const isPreparing = isStartingSimulation || ((status === 'READY' || status === 'RUNNING') && currentMinute === null)
 
-  // Calcular offset entre el minuto solicitado y el real
-  useEffect(() => {
-    if (requestedStartMinute === null || currentMinute === null) return
-    if (displayOffset === null) {
-      setSimulation((prev) => (
-        {
-          ...prev,
-          displayOffset: requestedStartMinute - currentMinute,
-        }
-      ))
-    }
-  }, [requestedStartMinute, currentMinute, displayOffset, setSimulation])
-
-  const displayMinuteRaw =
-    currentMinute === null
-      ? null
-      : displayOffset !== null
-        ? currentMinute + displayOffset
-        : currentMinute
+  const displayMinuteRaw = currentMinute
 
   // Extraemos el minuto truncado cada 15 minutos de la simulación (ej. 1440, 1455, 1470) para no saturar con consultas por segundo
   const simulatedQuarterMinute = displayMinuteRaw !== null ? Math.floor(displayMinuteRaw / 15) * 15 : null;
@@ -830,6 +803,7 @@ export default function SimulationPage() {
 
       return {
         flightId: segment.flightId,
+        planId: segment.planId,
         origen: segment.origen,
         destino: segment.destino,
         salidaMin: segment.salidaMin,
@@ -1105,6 +1079,8 @@ export default function SimulationPage() {
             if (!seg) return undefined;
             return {
               flightId: seg.flightId,
+              planId: seg.planId,
+              codigo: seg.codigo,
               origen: seg.origen,
               destino: seg.destino,
               capacidad: seg.capacidad,

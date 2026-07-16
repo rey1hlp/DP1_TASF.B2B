@@ -15,7 +15,7 @@ public class ShipmentCrudDto {
     public String fecha;
     public LocalDateTime ingresoUtc;
     public LocalDateTime ingresoLocal;
-    public int gmtOffset;
+    public int origenGmt;
     public int cantidad;
     public String idCliente;
     public int slaHoras;

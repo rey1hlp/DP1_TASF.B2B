@@ -7,8 +7,12 @@ public class FlightCrudDto {
     public String origenCiudad;
     public String destinoOaci;
     public String destinoCiudad;
-    public String salida;
-    public String llegada;
+    public String salidaLocal;
+    public String llegadaLocal;
+    public int salidaUtcOffsetMin;
+    public int duracionMin;
+    public int origenGmt;
+    public int destinoGmt;
     public int capacidad;
     public boolean cancelado;
 }

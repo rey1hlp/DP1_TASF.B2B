@@ -12,6 +12,8 @@ import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
+import com.tasf_b2b.planificador.utils.OperationalTime;
+import com.tasf_b2b.planificador.utils.UtilArchivos;
 
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -34,7 +36,7 @@ import java.util.stream.Collectors;
 @Service
 public class DailyOperationService {
     private static final Logger log = LoggerFactory.getLogger(DailyOperationService.class);
-    private static final ZoneId ZONE = ZoneId.of("America/Lima");
+    private static final ZoneId ZONE = OperationalTime.resolveFallbackOperationalZone();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -58,7 +60,8 @@ public class DailyOperationService {
         String airportFilter = normalizeAirport(airportText);
 
         OffsetDateTime now = OffsetDateTime.now(ZONE);
-        int currentMinute = now.getHour() * 60 + now.getMinute();
+        int dayIndex = UtilArchivos.obtenerDiaIndex(now.toLocalDate().format(DateTimeFormatter.BASIC_ISO_DATE));
+        int currentMinute = dayIndex * 1440 + now.getHour() * 60 + now.getMinute() - (OperationalTime.DEFAULT_OPERATION_GMT * 60);
         log.info(
             "[DAILY_OP] buildSnapshot dateText={} airportText={} windowText={} selectedDate={} airportFilter={} currentMinute={}",
             dateText,
@@ -80,7 +83,7 @@ public class DailyOperationService {
 
         List<ShipmentEntity> shipmentsForDate = shipmentRepository.findAll().stream()
             .filter(this::isValidShipment)
-            .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipment.fecha))
+            .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipmentLocalDateKey(shipment)))
             .collect(Collectors.toList());
         log.info("[DAILY_OP] shipments matched snapshot={}", shipmentsForDate.size());
 
@@ -143,7 +146,7 @@ public class DailyOperationService {
         // 2. Filtramos los cargamentos por la fecha seleccionada usando tu misma lógica nativa
         List<ShipmentEntity> shipmentsForDate = shipmentRepository.findAll().stream()
             .filter(this::isValidShipment)
-            .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipment.fecha))
+            .filter(shipment -> selectedDate == null || selectedDate.toString().replace("-", "").equals(shipmentLocalDateKey(shipment)))
             .collect(Collectors.toList());
 
         // 3. Calculamos la foto de ocupación de almacenes en base a esos cargamentos
@@ -346,7 +349,7 @@ public class DailyOperationService {
             && shipment.codigoPedido != null && !shipment.codigoPedido.isBlank()
             && shipmentOrigen(shipment) != null
             && shipmentDestino(shipment) != null
-            && shipment.fecha != null && !shipment.fecha.isBlank();
+            && shipment.ingresoUtc != null;
     }
 
     private String shipmentOrigen(ShipmentEntity shipment) {
@@ -383,10 +386,10 @@ public class DailyOperationService {
         dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
         dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
         dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
-        dto.fecha = entity.fecha;
         dto.ingresoUtc = entity.ingresoUtc;
-        dto.ingresoLocal = entity.ingresoLocal;
-        dto.gmtOffset = entity.gmtOffset;
+        dto.origenGmt = entity.origen != null ? entity.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
+        dto.ingresoLocal = OperationalTime.utcToLocal(entity.ingresoUtc, dto.origenGmt);
+        dto.fecha = dto.ingresoLocal.format(DateTimeFormatter.BASIC_ISO_DATE);
         dto.cantidad = entity.cantidad;
         dto.idCliente = entity.idCliente;
         dto.slaHoras = entity.slaHoras;
@@ -394,10 +397,17 @@ public class DailyOperationService {
         dto.auditDateIns = entity.auditDateIns;
         dto.vueloIds = route != null && route.ruta != null
             ? route.ruta.stream()
-                .map(step -> String.valueOf(step.vueloId))
+                .map(step -> String.valueOf(step.planId != null ? step.planId : step.vueloId))
                 .distinct()
                 .toList()
             : List.of();
         return dto;
+    }
+
+    private String shipmentLocalDateKey(ShipmentEntity shipment) {
+        if (shipment == null || shipment.ingresoUtc == null || shipment.origen == null) {
+            return null;
+        }
+        return OperationalTime.dateKeyFromUtc(shipment.ingresoUtc, shipment.origen.gmt);
     }
 }

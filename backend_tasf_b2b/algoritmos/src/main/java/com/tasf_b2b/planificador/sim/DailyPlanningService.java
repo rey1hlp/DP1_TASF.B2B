@@ -27,6 +27,7 @@ import com.tasf_b2b.planificador.persistence.ShipmentEntity;
 import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 import com.tasf_b2b.planificador.utils.BagCodeResolver;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +50,7 @@ import java.util.stream.Collectors;
 @Service
 public class DailyPlanningService {
     private static final Logger log = LoggerFactory.getLogger(DailyPlanningService.class);
-    private static final ZoneId ZONE = ZoneId.of("America/Lima");
+    private static final ZoneId ZONE = OperationalTime.resolveFallbackOperationalZone();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
     private static final int WINDOW_SIZE_MIN = 70;
     private static final int WINDOW_STEP_MIN = 20;
@@ -279,10 +280,12 @@ public class DailyPlanningService {
 
     private PlanWindow resolveCurrentWindow(boolean snapToStep) {
         OffsetDateTime now = OffsetDateTime.now(ZONE);
-        int currentMinute = now.getHour() * 60 + now.getMinute();
+        String planDate = now.toLocalDate().format(DATE_FORMAT);
+        int dayIndex = UtilArchivos.obtenerDiaIndex(planDate);
+        int localMinute = now.getHour() * 60 + now.getMinute();
+        int currentMinute = dayIndex * 1440 + localMinute - (OperationalTime.DEFAULT_OPERATION_GMT * 60);
         int windowStart = snapToStep ? (currentMinute / WINDOW_STEP_MIN) * WINDOW_STEP_MIN : currentMinute;
         int windowEnd = windowStart + WINDOW_SIZE_MIN;
-        String planDate = now.toLocalDate().format(DATE_FORMAT);
         return new PlanWindow(planDate, windowStart, windowEnd);
     }
 
@@ -330,7 +333,7 @@ public class DailyPlanningService {
                 canceled++;
                 continue;
             }
-            if (entity.origen == null || entity.destino == null || entity.salida == null || entity.llegada == null) {
+            if (entity.origen == null || entity.destino == null || entity.duracionMin <= 0) {
                 invalid++;
                 continue;
             }
@@ -346,21 +349,21 @@ public class DailyPlanningService {
                 invalidAirport++;
                 continue;
             }
-            int salidaMin = entity.salida.getHour() * 60 + entity.salida.getMinute();
-            int llegadaMin = entity.llegada.getHour() * 60 + entity.llegada.getMinute();
+            int salidaMin = entity.salidaUtcOffsetMin;
+            int llegadaMin = entity.salidaUtcOffsetMin + entity.duracionMin;
             int capacidad = entity.capacidad;
             int planId = entity.id != null ? entity.id.intValue() : id;
 
-            planes.add(new Vuelo(id++, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, planId));
+            planes.add(new Vuelo(id++, origen, destino, salidaMin, llegadaMin, capacidad, -1, null, planId, entity.codigo));
             loaded++;
             log.info(
-                "[DAILY_PLAN] flight accepted id={} codigo={} origen={} destino={} salida={} llegada={} capacidad={} cancelado={}",
+	                "[DAILY_PLAN] flight accepted id={} codigo={} origen={} destino={} salidaOffset={} duracion={} capacidad={} cancelado={}",
                 entity.id,
                 entity.codigo,
                 origen,
                 destino,
-                entity.salida,
-                entity.llegada,
+	                entity.salidaUtcOffsetMin,
+	                entity.duracionMin,
                 capacidad,
                 entity.cancelado
             );
@@ -396,25 +399,23 @@ public class DailyPlanningService {
             if (entity.status == ShipmentStatus.DELIVERED || entity.status == ShipmentStatus.CANCELLED) {
                 continue;
             }
-            LocalDate shipmentDate;
-            try {
-                shipmentDate = LocalDate.parse(entity.fecha, DATE_FORMAT);
-            } catch (Exception e) {
-                invalid++;
-                continue;
-            }
-            // Skip shipments from future dates; past-dated pending shipments are eligible
-            if (shipmentDate.isAfter(planLocalDate)) {
-                futureDate++;
-                continue;
-            }
-            int hh = entity.ingresoLocal.getHour();
-            int mm = entity.ingresoLocal.getMinute();
-            int ingresoMin = hh * 60 + mm;
             String origen = shipmentOrigen(entity);
             String destino = shipmentDestino(entity);
             Aeropuerto aeroOrigen = aeropuertos.get(origen);
             Aeropuerto aeroDestino = aeropuertos.get(destino);
+            if (aeroOrigen == null) {
+                invalid++;
+                continue;
+            }
+            java.time.LocalDateTime ingresoLocal = OperationalTime.utcToLocal(entity.ingresoUtc, aeroOrigen.gmt);
+            LocalDate shipmentDate = ingresoLocal.toLocalDate();
+            if (shipmentDate.isAfter(planLocalDate)) {
+                futureDate++;
+                continue;
+            }
+            int hh = ingresoLocal.getHour();
+            int mm = ingresoLocal.getMinute();
+            int ingresoMin = OperationalTime.absoluteUtcMinute(entity.ingresoUtc);
             int sla = entity.slaHoras > 0 ? entity.slaHoras : (aeroOrigen != null && aeroDestino != null)
                 ? aeroOrigen.calcularSla(aeroDestino)
                 : 24;
@@ -429,24 +430,24 @@ public class DailyPlanningService {
                 entity.codigoPedido,
                 origen,
                 destino,
-                entity.fecha,
+                shipmentDate.format(DATE_FORMAT),
                 hh,
                 mm,
                 Math.max(0, entity.cantidad),
                 entity.idCliente,
                 sla,
-                null
+                aeroOrigen
             );
             envio.status = entity.status;
             envios.add(envio);
             loaded++;
             log.info(
-                "[DAILY_PLAN] shipment accepted pedido={} origen={} destino={} fecha={} ingresoLocal={} ingresoMin={} asignado={} cantidad={} sla={}",
+	                "[DAILY_PLAN] shipment accepted pedido={} origen={} destino={} fecha={} ingresoLocal={} ingresoUtcMin={} asignado={} cantidad={} sla={}",
                 entity.codigoPedido,
                 origen,
                 destino,
-                entity.fecha,
-                entity.ingresoLocal,
+	                shipmentDate.format(DATE_FORMAT),
+	                ingresoLocal,
                 ingresoMin,
                 entity.status,
                 entity.cantidad,
@@ -524,10 +525,11 @@ public class DailyPlanningService {
                     seg = new FlightSegmentDto();
                     seg.flightId = vuelo.id;
                     seg.planId = vuelo.idPlan;
+                    seg.codigo = vuelo.codigo;
                     seg.origen = vuelo.origen;
                     seg.destino = vuelo.destino;
-                    seg.salidaMin = minuteOfDay(vuelo.salidaMin);
-                    seg.llegadaMin = seg.salidaMin + Math.max(0, vuelo.llegadaMin - vuelo.salidaMin);
+                    seg.salidaMin = vuelo.salidaMin;
+                    seg.llegadaMin = vuelo.llegadaMin;
                     seg.capacidad = vuelo.capacidad;
                     Aeropuerto aO = aeropuertos.get(vuelo.origen);
                     Aeropuerto aD = aeropuertos.get(vuelo.destino);
@@ -616,8 +618,8 @@ public class DailyPlanningService {
                         paso.planId = v.idPlan;
                         paso.origen = v.origen;
                         paso.destino = v.destino;
-                        paso.salidaMin = minuteOfDay(v.salidaMin);
-                        paso.llegadaMin = paso.salidaMin + Math.max(0, v.llegadaMin - v.salidaMin);
+                        paso.salidaMin = v.salidaMin;
+                        paso.llegadaMin = v.llegadaMin;
                         dto.ruta.add(paso);
                     }
                 }
@@ -636,8 +638,7 @@ public class DailyPlanningService {
             && shipment.codigoPedido != null && !shipment.codigoPedido.isBlank()
             && shipmentOrigen(shipment) != null
             && shipmentDestino(shipment) != null
-            && shipment.fecha != null && !shipment.fecha.isBlank()
-            && shipment.ingresoLocal != null
+            && shipment.ingresoUtc != null
             && shipment.idCliente != null && !shipment.idCliente.isBlank();
     }
 
@@ -710,6 +711,21 @@ public class DailyPlanningService {
         return result;
     }
 
+    public List<String> getShipmentCodesForFlightPlanId(int planId) {
+        List<String> result = new ArrayList<>();
+        for (Map.Entry<String, RespuestaRutaEnvioDto> entry : lastRutasPorPaquete.entrySet()) {
+            RespuestaRutaEnvioDto route = entry.getValue();
+            if (route == null || route.ruta == null) continue;
+            for (PasoRutaDto paso : route.ruta) {
+                if (paso.planId != null && paso.planId == planId) {
+                    result.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
     public List<ShipmentCrudDto> getShipmentsByAirport(String airportCode) {
         String airport = normalizeAirport(airportCode);
         if (airport == null || lastRutasPorPaquete.isEmpty()) {
@@ -762,10 +778,10 @@ public class DailyPlanningService {
         dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
         dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
         dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
-        dto.fecha = entity.fecha;
         dto.ingresoUtc = entity.ingresoUtc;
-        dto.ingresoLocal = entity.ingresoLocal;
-        dto.gmtOffset = entity.gmtOffset;
+        dto.origenGmt = entity.origen != null ? entity.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
+        dto.ingresoLocal = OperationalTime.utcToLocal(entity.ingresoUtc, dto.origenGmt);
+        dto.fecha = dto.ingresoLocal.format(DATE_FORMAT);
         dto.cantidad = entity.cantidad;
         dto.idCliente = entity.idCliente;
         dto.slaHoras = entity.slaHoras;

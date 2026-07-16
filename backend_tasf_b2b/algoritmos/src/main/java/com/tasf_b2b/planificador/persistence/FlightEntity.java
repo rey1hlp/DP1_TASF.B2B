@@ -21,11 +21,11 @@ public class FlightEntity {
     @JoinColumn(name = "destino_id")
     public AirportEntity destino;
 
-    @Column(name = "salida", nullable = false)
-    public LocalDateTime salida;
+    @Column(name = "salida_utc_offset_min", nullable = false)
+    public int salidaUtcOffsetMin;
 
-    @Column(name = "llegada", nullable = false)
-    public LocalDateTime llegada;
+    @Column(name = "duracion_min", nullable = false)
+    public int duracionMin;
 
     @Column(name = "capacidad", nullable = false)
     public int capacidad;

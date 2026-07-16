@@ -3,6 +3,7 @@ package com.tasf_b2b.planificador.api.dto;
 public class FlightSegmentDto {
     public int flightId;
     public int planId;
+    public String codigo;
     public String origen;
     public String destino;
     public int salidaMin;

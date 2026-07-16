@@ -24,6 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -90,6 +92,9 @@ public class SimulationReportPersistenceService {
         snapshot.simulationId = simulationId;
         snapshot.versionNumber = nextVersion;
         snapshot.inicio = data.inicio;
+        snapshot.inicioLocal = data.inicioLocal;
+        snapshot.inicioUtc = data.inicioUtc != null ? LocalDateTime.parse(data.inicioUtc) : null;
+        snapshot.inicioUtcMinute = data.inicioUtcMinute;
         snapshot.fin = data.fin;
         snapshot.diaMin = data.diaMin;
         snapshot.diaMax = data.diaMax;
@@ -126,6 +131,9 @@ public class SimulationReportPersistenceService {
         dto.simulationId = snapshot.simulationId;
         dto.versionNumber = snapshot.versionNumber;
         dto.inicio = snapshot.inicio;
+        dto.inicioLocal = snapshot.inicioLocal;
+        dto.inicioUtc = snapshot.inicioUtc;
+        dto.inicioUtcMinute = snapshot.inicioUtcMinute;
         dto.fin = snapshot.fin;
         dto.diaMin = snapshot.diaMin;
         dto.diaMax = snapshot.diaMax;
@@ -372,8 +380,8 @@ public class SimulationReportPersistenceService {
                 entity.flightCodigo = flight.codigo;
                 entity.origen = flight.origen != null ? flight.origen.codigoOaci : null;
                 entity.destino = flight.destino != null ? flight.destino.codigoOaci : null;
-                entity.salida = flight.salida;
-                entity.llegada = flight.llegada;
+                entity.salida = scheduledLocalDateTime(cancellation.fechaCancelacion, flight, true);
+                entity.llegada = scheduledLocalDateTime(cancellation.fechaCancelacion, flight, false);
             }
             entities.add(entity);
         }
@@ -406,6 +414,20 @@ public class SimulationReportPersistenceService {
             drafts.put(draft.codigoPedido, draft);
         }
         return drafts;
+    }
+
+    private LocalDateTime scheduledLocalDateTime(LocalDate operationDate, FlightEntity flight, boolean departure) {
+        if (operationDate == null || flight == null) {
+            return null;
+        }
+        int originGmt = flight.origen != null ? flight.origen.gmt : 0;
+        int destinationGmt = flight.destino != null ? flight.destino.gmt : originGmt;
+        int departureLocalTotal = flight.salidaUtcOffsetMin + (originGmt * 60);
+        int arrivalLocalTotal = flight.salidaUtcOffsetMin + flight.duracionMin + (destinationGmt * 60);
+        int total = departure ? departureLocalTotal : arrivalLocalTotal;
+        int dayOffset = Math.floorDiv(total, 1440) - Math.floorDiv(departureLocalTotal, 1440);
+        int minute = Math.floorMod(total, 1440);
+        return LocalDateTime.of(operationDate.plusDays(dayOffset), LocalTime.of(minute / 60, minute % 60));
     }
 
     private void saveRoutes(Long snapshotId, Map<String, RouteDraft> drafts, Set<String> impactedCodes) {
@@ -712,6 +734,9 @@ public class SimulationReportPersistenceService {
         csv.writeNext(new String[] {"summary", "simulation_id", snapshot.simulationId});
         csv.writeNext(new String[] {"summary", "version", String.valueOf(snapshot.versionNumber)});
         csv.writeNext(new String[] {"summary", "inicio", snapshot.inicio});
+        csv.writeNext(new String[] {"summary", "inicio_local", snapshot.inicioLocal});
+        csv.writeNext(new String[] {"summary", "inicio_utc", snapshot.inicioUtc != null ? snapshot.inicioUtc.toString() : ""});
+        csv.writeNext(new String[] {"summary", "inicio_utc_minute", snapshot.inicioUtcMinute != null ? String.valueOf(snapshot.inicioUtcMinute) : ""});
         csv.writeNext(new String[] {"summary", "fin", snapshot.fin});
         csv.writeNext(new String[] {"summary", "total_envios", String.valueOf(snapshot.totalEnvios)});
         csv.writeNext(new String[] {"summary", "total_maletas", String.valueOf(snapshot.totalMaletas)});

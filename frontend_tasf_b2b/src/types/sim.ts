@@ -30,6 +30,9 @@ export type AirportDto = {
 export type SimulationRequest = {
   envios?: string
   inicio?: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin?: string
   dias?: number
   maxEnvios?: number
@@ -55,6 +58,9 @@ export type SimulationResponse = {
   simulationId: string
   status: string
   inicio?: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin?: string
   envios?: number
   maletas?: number
@@ -66,6 +72,7 @@ export type SimulationResponse = {
 export type FlightSegmentDto = {
   flightId: number
   planId: number
+  codigo?: string | null
   origen: string
   destino: string
   salidaMin: number
@@ -93,6 +100,9 @@ export type WsInitMessage = {
   type: 'init'
   simulationId: string
   inicio: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin: string
   diaMin: number
   diaMax: number
@@ -108,6 +118,9 @@ export type WsAppendMessage = {
   type: 'append'
   simulationId: string
   inicio: string
+  inicioLocal?: string
+  inicioUtc?: string
+  inicioUtcMinute?: number
   fin: string
   diaMin: number
   diaMax: number
@@ -259,8 +272,12 @@ export type FlightCrudDto = {
   origenCiudad?: string
   destinoOaci: string
   destinoCiudad?: string
-  salida: string
-  llegada: string
+  salidaLocal: string
+  llegadaLocal: string
+  salidaUtcOffsetMin: number
+  duracionMin: number
+  origenGmt: number
+  destinoGmt: number
   capacidad: number
   cancelado: boolean
 }
@@ -276,7 +293,7 @@ export type ShipmentCrudDto = {
   diaIndex: number
   ingresoUtc: string
   ingresoLocal: string
-  gmtOffset: number
+  origenGmt: number
   cantidad: number
   idCliente: string
   slaHoras: number

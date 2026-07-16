@@ -449,6 +449,8 @@ export default function MapView({
     return segments.find((segment) => segment.flightId === previewFlightId) ?? null
   }, [segments, previewFlightId])
 
+  const getVisibleFlightId = (flight: FlightSegmentDto) => flight.planId ?? flight.flightId
+
   useEffect(() => {
     setDetailStage('flight')
     setFlightShipments([])
@@ -472,6 +474,7 @@ export default function MapView({
 
     let cancelled = false
     const activeFlightId = previewFlight?.flightId ?? previewFlightId
+    const catalogFlightId = previewFlight ? getVisibleFlightId(previewFlight) : activeFlightId
     type ShipmentRoute = {
       codigoPedido: string
       estado: string
@@ -498,6 +501,7 @@ export default function MapView({
 
       console.log('[MapView] fallback minute sweep', {
         flightId: activeFlightId,
+        catalogFlightId,
         simId,
         startMinute,
         endMinute,
@@ -523,6 +527,7 @@ export default function MapView({
           const codes = (await response.json()) as string[]
           console.log('[MapView] fallback minute query', {
             flightId: activeFlightId,
+            catalogFlightId,
             simId,
             minute,
             total: codes.length,
@@ -536,6 +541,7 @@ export default function MapView({
 
       console.log('[MapView] fallback unique shipment codes', {
         flightId: activeFlightId,
+        catalogFlightId,
         simId,
         totalCodes: uniqueCodes.length,
         sample: uniqueCodes.slice(0, 10),
@@ -601,11 +607,12 @@ export default function MapView({
               planId: previewFlight?.planId,
               salidaMin: previewFlight?.salidaMin,
             })
-          : await getShipmentsByFlight(activeFlightId)
+          : await getShipmentsByFlight(catalogFlightId, previewFlight?.codigo)
 
         if (!cancelled) {
           console.log('[MapView] flight shipments loaded', {
             flightId: activeFlightId,
+            catalogFlightId,
             simId,
             total: result.length,
             codes: result.slice(0, 10).map((shipment) => shipment.codigoPedido),
@@ -615,10 +622,11 @@ export default function MapView({
 
           if (result.length === 0 && simId) {
             try {
-              const flightCrudFallback = await getShipmentsByFlight(activeFlightId)
+              const flightCrudFallback = await getShipmentsByFlight(catalogFlightId, previewFlight?.codigo)
               if (!cancelled) {
                 console.warn('[MapView] simulation shipments empty, fallback to flight crud', {
                   flightId: activeFlightId,
+                  catalogFlightId,
                   simId,
                   total: flightCrudFallback.length,
                   codes: flightCrudFallback.slice(0, 10).map((shipment) => shipment.codigoPedido),
@@ -1146,7 +1154,7 @@ export default function MapView({
       const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, mapZoom, isDimmed, isSelectedFlight)
 
       const tooltipParts = [
-        `Vuelo ${seg.flightId}`,
+        `Vuelo ${getVisibleFlightId(seg)}`,
         `${seg.origen} → ${seg.destino}`,
         capacity !== undefined
           ? `Maletas: ${formatBags(seg.carga)} / ${formatBags(capacity)}`
@@ -1703,7 +1711,7 @@ export default function MapView({
           actionLabel="Ver detalle completo"
           secondaryActionLabel="Ver envíos"
           onSecondaryAction={openShipmentsStage}
-          badge={`Vuelo ${previewFlight.flightId}`}
+          badge={`Vuelo ${getVisibleFlightId(previewFlight)}`}
           metrics={[
             {
               label: 'Uso',
@@ -1733,7 +1741,7 @@ export default function MapView({
         <div className="map-floating-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
-              <span className="map-floating-card-badge">Vuelo {previewFlight.flightId}</span>
+              <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
               <strong>Envíos asignados</strong>
             </div>
             <button

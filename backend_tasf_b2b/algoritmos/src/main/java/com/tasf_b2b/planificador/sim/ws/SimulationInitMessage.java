@@ -9,6 +9,9 @@ public class SimulationInitMessage {
     public String type = "init";
     public String simulationId;
     public String inicio;
+    public String inicioLocal;
+    public String inicioUtc;
+    public Integer inicioUtcMinute;
     public String fin;
     public int diaMin;
     public int diaMax;
