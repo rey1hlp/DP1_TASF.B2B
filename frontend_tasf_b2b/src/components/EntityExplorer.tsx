@@ -1,4 +1,4 @@
-import { ArrowUpDown, CircleDot, Clock3, Filter, MapPin, Package, PlaneLanding, PlaneTakeoff, Search } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, CircleDot, Clock3, Filter, MapPin, Package, PlaneLanding, PlaneTakeoff, Search, Timer } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
@@ -73,6 +73,7 @@ export type EntityShipmentRoute = {
 }
 
 export type ShipmentCategory = 'PLANIFICADOS' | 'EN_VUELO' | 'ENTREGADOS'
+type SidebarView = 'shipment-detail' | 'bag-detail'
 
 export type EntityExplorerProps = {
   flights: EntityFlightItem[]
@@ -287,6 +288,173 @@ function buildBagCodes(codigoPedido: string, cantidad?: number) {
   return Array.from({ length: total }, (_, index) => formatBagCode(codigoPedido, index))
 }
 
+function maxBagTotal(...values: Array<number | null | undefined>) {
+  return Math.max(
+    0,
+    ...values
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+      .map((value) => Math.max(0, Math.floor(value))),
+  )
+}
+
+function normalizeEntityCode(value?: string | null) {
+  return value?.trim().toLowerCase() ?? ''
+}
+
+function isLikelyBagCode(value: string) {
+  return /-\d{3}$/.test(value.trim())
+}
+
+function getBagNumberFromCode(value?: string | null) {
+  const match = value?.trim().match(/-(\d{3})$/)
+  return match ? Number(match[1]) : undefined
+}
+
+function getShipmentStatusKind(status?: string, hasRoute = true) {
+  const normalized = status?.toUpperCase()
+  if (normalized === 'DELIVERED' || normalized === 'ENTREGADO') return 'delivered'
+  if (normalized === 'CANCELLED' || normalized === 'CANCELADO') return 'cancelled'
+  if (normalized === 'SIN_RUTA_ENCONTRADA' || !hasRoute) return 'no-route'
+  return 'active'
+}
+
+function getRouteStepState(step: EntityRouteStep, currentMinute: number | null) {
+  if (currentMinute === null) return 'pending'
+  if (currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin) return 'active'
+  if (currentMinute > step.llegadaMin) return 'done'
+  return 'pending'
+}
+
+type BagListProps = {
+  shipmentCode: string
+  totalBags: number
+  selectedBagCode: string | null
+  onSelectBag: (bagCode: string) => void
+}
+
+function BagList({ shipmentCode, totalBags, selectedBagCode, onSelectBag }: BagListProps) {
+  return (
+    <div className="entity-bag-panel">
+      <div className="entity-toolbar-label">
+        Maletas de {shipmentCode}
+      </div>
+      <div className="entity-bag-list">
+        {buildBagCodes(shipmentCode, totalBags).map((bagCode) => (
+          <button
+            key={bagCode}
+            type="button"
+            className={`entity-bag-chip ${selectedBagCode === bagCode ? 'active' : ''}`}
+            onClick={() => onSelectBag(bagCode)}
+          >
+            {bagCode}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+type BagDetailPanelProps = {
+  route: EntityShipmentRoute | null
+  selectedBagCode: string | null
+  currentMinute: number | null
+  shipmentSearchError: string | null
+  onBack: () => void
+}
+
+function BagDetailPanel({
+  route,
+  selectedBagCode,
+  currentMinute,
+  shipmentSearchError,
+  onBack,
+}: BagDetailPanelProps) {
+  const displayedCode = route?.codigoMaleta || selectedBagCode || route?.codigoPedido || '--'
+  const dynamicStatus = route ? getDynamicShipmentStatus(route, currentMinute) : 'Cargando ruta'
+  const statusKind = getShipmentStatusKind(route?.estado, Boolean(route?.ruta.length))
+  const inferredBagNumber = route?.numeroMaleta ?? getBagNumberFromCode(selectedBagCode)
+  const pieceLabel =
+    inferredBagNumber && route?.totalMaletas
+      ? `${inferredBagNumber} de ${route.totalMaletas}`
+      : route?.totalMaletas
+        ? `-- de ${route.totalMaletas}`
+        : '--'
+
+  return (
+    <section className="bag-detail-card" aria-label="Detalle de maleta">
+      <button
+        type="button"
+        className="bag-detail-back"
+        onClick={onBack}
+      >
+        <ArrowLeft size={16} />
+        <span>Volver al envío</span>
+      </button>
+
+      <div className="bag-detail-heading">
+        <Package size={18} />
+        <div>
+          <span>Ficha de Detalle de la Maleta</span>
+          <strong>{displayedCode}</strong>
+        </div>
+      </div>
+
+      {shipmentSearchError && !route ? (
+        <div className="bag-detail-error">{shipmentSearchError}</div>
+      ) : null}
+
+      {!route && !shipmentSearchError ? (
+        <div className="bag-detail-loading">Consultando ruta de la maleta...</div>
+      ) : null}
+
+      {route ? (
+        <>
+          <div className="bag-detail-summary">
+            <div>
+              <span>ID</span>
+              <strong>{displayedCode}</strong>
+            </div>
+            <div>
+              <span>Estado</span>
+              <strong className={`bag-detail-state ${statusKind}`}>{dynamicStatus}</strong>
+            </div>
+            <div>
+              <span>Pieza</span>
+              <strong>{pieceLabel}</strong>
+            </div>
+            <div>
+              <span>Tiempo total</span>
+              <strong>{formatDurationHours(route.tiempoTotalHoras)}</strong>
+            </div>
+          </div>
+
+          <div className="bag-detail-route-title">
+            <Timer size={14} />
+            <span>Tramos</span>
+          </div>
+
+          <div className="bag-detail-route">
+            {route.ruta.length === 0 ? (
+              <div className={`bag-detail-empty ${statusKind}`}>No hay tramos registrados.</div>
+            ) : (
+              route.ruta.map((step, index) => (
+                <div
+                  key={`${step.vueloId}-${step.origen}-${step.destino}-${index}`}
+                  className={`bag-detail-step ${getRouteStepState(step, currentMinute)}`}
+                >
+                  <span>{step.vueloId ?? '--'}</span>
+                  <strong>{step.origen} → {step.destino}</strong>
+                  <small>{formatMinuteRange(step.salidaMin, step.llegadaMin)}</small>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      ) : null}
+    </section>
+  )
+}
+
 export default function EntityExplorer({
   flights,
   airports,
@@ -324,8 +492,6 @@ export default function EntityExplorer({
   shipmentDestinationFilter = '',
   onShipmentDestinationFilterChange,
 }: EntityExplorerProps) {
-  void currentMinute
-  void getDynamicShipmentStatus
   const flightListRef = useRef<HTMLDivElement>(null)
   const airportListRef = useRef<HTMLDivElement>(null)
   const shipmentListRef = useRef<HTMLDivElement>(null)
@@ -347,6 +513,8 @@ export default function EntityExplorer({
   const [isShipmentSortMenuOpen, setIsShipmentSortMenuOpen] = useState(false)
   const [shipmentQuery, setShipmentQuery] = useState("");
   const [expandedShipmentCode, setExpandedShipmentCode] = useState<string | null>(null);
+  const [sidebarView, setSidebarView] = useState<SidebarView>('shipment-detail')
+  const [selectedBagCode, setSelectedBagCode] = useState<string | null>(null)
 
   const { simulation } = useSimulationContext();
   const simId = simulation.simId;
@@ -712,12 +880,36 @@ export default function EntityExplorer({
         : null
     )
   const selectedShipmentBagTotal = selectedShipmentCodeForBags
-    ? (
-        baseShipmentItems.find((shipment) => shipment.codigoPedido === selectedShipmentCodeForBags)?.cantidadMaletas
-        ?? shipmentQuantities[selectedShipmentCodeForBags]
-        ?? 0
+    ? maxBagTotal(
+        baseShipmentItems.find((shipment) => shipment.codigoPedido === selectedShipmentCodeForBags)?.cantidadMaletas,
+        selectedShipmentRoute?.codigoPedido === selectedShipmentCodeForBags
+          ? selectedShipmentRoute.totalMaletas
+          : undefined,
+        shipmentQuantities[selectedShipmentCodeForBags],
       )
     : 0
+  const selectedBagRoute = useMemo(() => {
+    if (!selectedBagCode || !selectedShipmentRoute) {
+      return null
+    }
+
+    const expectedBagCode = normalizeEntityCode(selectedBagCode)
+    const routeBagCode = normalizeEntityCode(selectedShipmentRoute.codigoMaleta)
+    if (routeBagCode && routeBagCode === expectedBagCode) {
+      return selectedShipmentRoute
+    }
+
+    const routeShipmentCode = normalizeEntityCode(selectedShipmentRoute.codigoPedido)
+    if (
+      selectedShipmentRoute.consultaMaleta &&
+      routeShipmentCode &&
+      expectedBagCode.startsWith(`${routeShipmentCode}-`)
+    ) {
+      return selectedShipmentRoute
+    }
+
+    return null
+  }, [selectedBagCode, selectedShipmentRoute])
 
   const hasActiveFlightFilters =
     Boolean(flightFilters.codeQuery.trim()) ||
@@ -869,13 +1061,41 @@ export default function EntityExplorer({
     if (event.key !== "Enter") return;
     const query = shipmentQuery.trim()
     if (query) {
+      if (isLikelyBagCode(query)) {
+        setSelectedBagCode(query)
+        setSidebarView('bag-detail')
+      } else {
+        setSelectedBagCode(null)
+        setSidebarView('shipment-detail')
+      }
       onSearchShipment(query)
       return
     }
 
     const target = orderedShipmentItems[0];
-    if (target) onSearchShipment(target.codigoPedido);
+    if (target) {
+      setSelectedBagCode(null)
+      setSidebarView('shipment-detail')
+      onSearchShipment(target.codigoPedido);
+    }
   };
+
+  const handleSelectShipment = (codigo: string) => {
+    setSelectedBagCode(null)
+    setSidebarView('shipment-detail')
+    setExpandedShipmentCode((current) => (current ? codigo : current))
+    onSearchShipment(codigo)
+  }
+
+  const handleSelectBag = (bagCode: string) => {
+    setSelectedBagCode(bagCode)
+    setSidebarView('bag-detail')
+    onSearchShipment(bagCode)
+  }
+
+  const handleBackToShipmentDetail = () => {
+    setSidebarView('shipment-detail')
+  }
 
   const clearShipmentFilters = () => {
     setShipmentQuery('')
@@ -1329,7 +1549,17 @@ export default function EntityExplorer({
   );
 
   const renderShipments = () => (
-    <>
+    <div className={`shipment-sidebar-view ${sidebarView === 'bag-detail' ? 'is-bag-detail' : 'is-shipment-detail'}`}>
+      {sidebarView === 'bag-detail' ? (
+        <BagDetailPanel
+          route={selectedBagRoute}
+          selectedBagCode={selectedBagCode}
+          currentMinute={currentMinute}
+          shipmentSearchError={shipmentSearchError}
+          onBack={handleBackToShipmentDetail}
+        />
+      ) : (
+        <>
       {onSelectedShipmentCategoryChange && (
         <div className="shipment-category-selector">
           <button
@@ -1542,11 +1772,11 @@ export default function EntityExplorer({
                   role="button"
                   tabIndex={0}
                   title="Click para ver la ruta completa"
-                  onClick={() => onSearchShipment(codigo)}
+                  onClick={() => handleSelectShipment(codigo)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
-                      onSearchShipment(codigo)
+                      handleSelectShipment(codigo)
                     }
                   }}
                 >
@@ -1590,23 +1820,12 @@ export default function EntityExplorer({
         </div>
       </div>
       {selectedShipmentCodeForBags && selectedShipmentBagTotal ? (
-        <div className="entity-bag-panel">
-          <div className="entity-toolbar-label">
-            Maletas de {selectedShipmentCodeForBags}
-          </div>
-          <div className="entity-bag-list">
-            {buildBagCodes(selectedShipmentCodeForBags, selectedShipmentBagTotal).map((bagCode) => (
-              <button
-                key={bagCode}
-                type="button"
-                className="entity-bag-chip"
-                onClick={() => onSearchShipment(bagCode)}
-              >
-                {bagCode}
-              </button>
-            ))}
-          </div>
-        </div>
+        <BagList
+          shipmentCode={selectedShipmentCodeForBags}
+          totalBags={selectedShipmentBagTotal}
+          selectedBagCode={selectedBagCode}
+          onSelectBag={handleSelectBag}
+        />
       ) : null}
       <div className="flight-hint">
         {labels?.shipmentHint ??
@@ -1660,7 +1879,9 @@ export default function EntityExplorer({
           ))}
         </div>
       )}
-    </>
+        </>
+      )}
+    </div>
   );
 
   const renderAirports = () => (

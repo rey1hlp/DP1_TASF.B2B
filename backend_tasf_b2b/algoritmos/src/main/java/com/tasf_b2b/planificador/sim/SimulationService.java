@@ -387,7 +387,10 @@ public class SimulationService {
             int minutoSalidaInicial = primerTramo.salidaMin;
             int minutoEntregaFinal = ultimoTramo.llegadaMin;
 
-            int cantidadMaletas = 1; // Asumimos 1 por ahora
+            ShipmentCrudDto shipment = state.data.enviosPorCodigo != null
+                ? state.data.enviosPorCodigo.get(codigoPedido)
+                : null;
+            int cantidadMaletas = shipment != null ? Math.max(0, shipment.cantidad) : 0;
 
             // Definimos las variables base para el DTO
             String origenGlobal = primerTramo.origen;

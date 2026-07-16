@@ -34,7 +34,7 @@ import {
 } from '../utils/mapRouteStyles'
 import { buildGeodesicArcPoints, getGeodesicPointAtProgress, type MapLatLng } from '../utils/mapGeodesic'
 import MapFloatingCard from './MapFloatingCard'
-import ShipmentRouteTracker, { type TrackerShipmentRoute } from './ShipmentRouteTracker'
+import type { TrackerShipmentRoute } from './ShipmentRouteTracker'
 import useMapSelectionFocus from '../hooks/useMapSelectionFocus'
 import type { CancelledFlightTrace } from '../utils/cancelledFlightTraces'
 
@@ -372,7 +372,6 @@ export default function MapView({
   selectedFlightId,
   selectedAirportCode,
   selectedShipmentRoute,
-  shipmentSearchError,
   isFullscreen,
   isPanelCollapsed = false,
   isToolbarCollapsed = false,
@@ -387,7 +386,6 @@ export default function MapView({
   onFlightDetailRequest,
   onFlightPreview,
   onSearchShipment,
-  onClearShipmentRoute,
   onToggleFullscreen,
   showCancelledDetails = true,
 }: MapViewProps) {
@@ -409,8 +407,6 @@ export default function MapView({
   const [airportShipmentsLoading, setAirportShipmentsLoading] = useState(false)
   const [airportShipmentsError, setAirportShipmentsError] = useState<string | null>(null)
   const [selectedAirportShipment, setSelectedAirportShipment] = useState<ShipmentCrudDto | null>(null)
-  const [trackerCode, setTrackerCode] = useState<string | null>(null)
-  const [isTrackerOpen, setIsTrackerOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isMapLayerFiltersOpen, setIsMapLayerFiltersOpen] = useState(false)
   const [visibleTimeItems, setVisibleTimeItems] = useState({
@@ -438,15 +434,6 @@ export default function MapView({
     () => new Set((cancelledFlightTraces ?? []).map((trace) => trace.flightId)),
     [cancelledFlightTraces],
   )
-
-  useEffect(() => {
-    if (!selectedShipmentRoute?.consultaMaleta || !selectedShipmentRoute.codigoMaleta) {
-      return
-    }
-
-    setTrackerCode(selectedShipmentRoute.codigoMaleta)
-    setIsTrackerOpen(true)
-  }, [selectedShipmentRoute?.codigoMaleta, selectedShipmentRoute?.consultaMaleta])
 
   const previewAirport = useMemo(() => {
     if (previewAirportCode === null) {
@@ -828,8 +815,6 @@ export default function MapView({
   }
 
   const trackBag = (bagCode: string) => {
-    setTrackerCode(bagCode)
-    setIsTrackerOpen(true)
     void onSearchShipment?.(bagCode)
   }
 
@@ -1715,17 +1700,6 @@ export default function MapView({
           )}
         </div>
       ) : null}
-      <ShipmentRouteTracker
-        selectedShipmentRoute={selectedShipmentRoute}
-        shipmentSearchError={shipmentSearchError}
-        currentMinute={currentMinute}
-        trackedCode={trackerCode}
-        isOpen={isTrackerOpen}
-        onSearchShipment={onSearchShipment}
-        onClearShipmentRoute={onClearShipmentRoute}
-        onTrackedCodeChange={setTrackerCode}
-        onOpenChange={setIsTrackerOpen}
-      />
       {previewFlight && detailStage === 'flight' ? (
         <MapFloatingCard
           actionLabel="Ver detalle completo"

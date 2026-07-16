@@ -519,6 +519,45 @@
   background: #f3f7fc;
 }
 
+.shipment-sidebar-view {
+  min-width: 0;
+  animation-duration: 0.22s;
+  animation-fill-mode: both;
+  animation-timing-function: ease;
+}
+
+.shipment-sidebar-view.is-shipment-detail {
+  animation-name: shipmentPanelReturn;
+}
+
+.shipment-sidebar-view.is-bag-detail {
+  animation-name: shipmentPanelEnter;
+}
+
+@keyframes shipmentPanelEnter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shipmentPanelReturn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .entity-shipment-card {
   position: relative;
   box-sizing: border-box;
@@ -753,6 +792,221 @@
   border: 1px solid #d9e4f4;
   border-radius: 8px;
   background: #f8fbff;
+}
+
+.entity-bag-chip.active {
+  border-color: #2f62b5;
+  background: #eaf2ff;
+  color: #173763;
+  box-shadow: inset 0 0 0 1px rgba(47, 98, 181, 0.16);
+}
+
+.bag-detail-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bag-detail-back {
+  width: fit-content;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #cfdaec;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #21436f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.bag-detail-back:hover {
+  border-color: #2f62b5;
+  background: #f0f6ff;
+}
+
+.bag-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #d9e4f4;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.bag-detail-heading svg {
+  flex: 0 0 auto;
+  color: #2f62b5;
+}
+
+.bag-detail-heading div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bag-detail-heading span {
+  color: #65738a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bag-detail-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bag-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bag-detail-summary div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #e2e7f0;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.bag-detail-summary span {
+  color: #65738a;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bag-detail-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bag-detail-state {
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #e7f6fb;
+  color: #075985;
+}
+
+.bag-detail-state.delivered {
+  background: #e8f7ed;
+  color: #1f7a3d;
+}
+
+.bag-detail-state.cancelled {
+  background: #fff1f1;
+  color: #a3322b;
+}
+
+.bag-detail-state.no-route {
+  background: #fff7df;
+  color: #895b00;
+}
+
+.bag-detail-route-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #52647d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bag-detail-route {
+  display: grid;
+  gap: 8px;
+}
+
+.bag-detail-step {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 9px 10px;
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #edf6ff;
+}
+
+.bag-detail-step.active {
+  border-color: #14b8a6;
+  background: #e5fbf7;
+  box-shadow: inset 4px 0 0 #14b8a6;
+}
+
+.bag-detail-step.done {
+  border-color: #d8dde7;
+  background: #f1f5f9;
+}
+
+.bag-detail-step span {
+  grid-row: span 2;
+  align-self: center;
+  color: #2f62b5;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.bag-detail-step.active span {
+  color: #0f766e;
+}
+
+.bag-detail-step.done span {
+  color: #64748b;
+}
+
+.bag-detail-step strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bag-detail-step small {
+  color: #55657c;
+  font-size: 12px;
+}
+
+.bag-detail-empty,
+.bag-detail-loading,
+.bag-detail-error {
+  padding: 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bag-detail-empty,
+.bag-detail-loading {
+  border: 1px dashed #cfd8e8;
+  background: #f8fbff;
+  color: #56677f;
+}
+
+.bag-detail-error {
+  border: 1px solid #f2b8b5;
+  background: #fff5f5;
+  color: #a3322b;
 }
 
 .entity-airport-status {
