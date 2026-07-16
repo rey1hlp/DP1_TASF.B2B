@@ -26,6 +26,7 @@ import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.utils.ReporteRutas;
 import com.tasf_b2b.planificador.utils.ReporteSinRuta;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 import com.tasf_b2b.planificador.utils.RutaResolver;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
 import com.tasf_b2b.planificador.persistence.FlightDayCancellationEntity;
@@ -444,10 +445,10 @@ public class SimulationService {
         dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
         dto.destino      = entity.destino != null ? entity.destino.codigoOaci : null;
         dto.destinoCiudad= entity.destino != null ? entity.destino.ciudad : null;
-        dto.fecha        = entity.fecha;
         dto.ingresoUtc   = entity.ingresoUtc;
-        dto.ingresoLocal = entity.ingresoLocal;
-        dto.gmtOffset    = entity.gmtOffset;
+        dto.origenGmt    = entity.origen != null ? entity.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
+        dto.ingresoLocal = OperationalTime.utcToLocal(entity.ingresoUtc, dto.origenGmt);
+        dto.fecha        = dto.ingresoLocal.format(FECHA_FORMAT);
         dto.cantidad     = entity.cantidad;
         dto.idCliente    = entity.idCliente;
         dto.slaHoras     = entity.slaHoras;
@@ -462,7 +463,7 @@ public class SimulationService {
         dto.origen = envio.origen;
         dto.destino = envio.destino;
         dto.fecha = envio.fecha;
-        dto.gmtOffset = envio.gmtOffset;
+        dto.origenGmt = envio.gmtOffset;
         dto.cantidad = envio.cantidad;
         dto.idCliente = envio.idCliente;
         dto.slaHoras = envio.slaHoras;
@@ -1414,7 +1415,7 @@ public class SimulationService {
             if (entity.cancelado) {
                 continue;
             }
-            if (entity.origen == null || entity.destino == null || entity.salida == null || entity.llegada == null) {
+            if (entity.origen == null || entity.destino == null || entity.duracionMin <= 0) {
                 continue;
             }
             String origen = entity.origen.codigoOaci;
@@ -1427,8 +1428,8 @@ public class SimulationService {
             if (!oaciValidos.contains(origen) || !oaciValidos.contains(destino)) {
                 continue;
             }
-            int salidaMin = entity.salida.getHour() * 60 + entity.salida.getMinute();
-            int llegadaMin = entity.llegada.getHour() * 60 + entity.llegada.getMinute();
+            int salidaMin = entity.salidaUtcOffsetMin;
+            int llegadaMin = entity.salidaUtcOffsetMin + entity.duracionMin;
             int capacidad = entity.capacidad;
             int planId = entity.id != null ? entity.id.intValue() : id;
 

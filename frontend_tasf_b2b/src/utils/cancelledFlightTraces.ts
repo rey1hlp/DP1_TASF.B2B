@@ -38,27 +38,6 @@ type ReadCancelledFlightDaysOptions = {
   includeVirtual?: boolean
 }
 
-function normalizeDateKey(value?: string | null) {
-  if (!value) {
-    return null
-  }
-
-  return value.slice(0, 10)
-}
-
-function getMinuteOfDay(value?: string | null) {
-  if (!value) {
-    return null
-  }
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return null
-  }
-
-  return parsed.getHours() * 60 + parsed.getMinutes() + parsed.getSeconds() / 60
-}
-
 function simulationStorageKey(simulationId: string) {
   return `${SIMULATION_STORAGE_PREFIX}${simulationId}`
 }
@@ -213,11 +192,6 @@ export function buildCancelledFlightTraces(
       return []
     }
 
-    const flightDateKey = normalizeDateKey(flight.salida)
-    if (flightDateKey !== referenceDateKey) {
-      return []
-    }
-
     const isCancelled = flight.cancelado
       || cancelledDays.some((item) => {
         return (item.sourceType ?? 'REAL') === 'REAL'
@@ -234,12 +208,6 @@ export function buildCancelledFlightTraces(
       return []
     }
 
-    const departureMinute = getMinuteOfDay(flight.salida)
-    const arrivalMinute = getMinuteOfDay(flight.llegada)
-    if (departureMinute === null || arrivalMinute === null) {
-      return []
-    }
-
     const offset = useAbsoluteMinuteIndices && referenceDayIndex !== null ? referenceDayIndex * 1440 : 0
 
     return [{
@@ -249,8 +217,8 @@ export function buildCancelledFlightTraces(
       origenLon: origin.longitud,
       destinoLat: destination.latitud,
       destinoLon: destination.longitud,
-      salidaMin: offset + departureMinute,
-      llegadaMin: offset + arrivalMinute,
+      salidaMin: offset + flight.salidaUtcOffsetMin,
+      llegadaMin: offset + flight.salidaUtcOffsetMin + flight.duracionMin,
     }]
   })
 

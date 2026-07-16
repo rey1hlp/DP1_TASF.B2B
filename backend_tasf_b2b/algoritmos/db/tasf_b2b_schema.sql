@@ -62,8 +62,8 @@ CREATE TABLE flight (
   codigo VARCHAR(20) NOT NULL,
   origen_id BIGINT NOT NULL,
   destino_id BIGINT NOT NULL,
-  salida DATETIME NOT NULL,
-  llegada DATETIME NOT NULL,
+  salida_utc_offset_min INT NOT NULL,
+  duracion_min INT NOT NULL,
   capacidad INT NOT NULL,
   cancelado TINYINT(1) NOT NULL DEFAULT 0,
   audit_date_ins DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -89,17 +89,12 @@ CREATE TABLE shipment (
   codigo_pedido   VARCHAR(40) NOT NULL,
   origen_id       BIGINT NOT NULL,
   destino_id      BIGINT NOT NULL,
-  fecha           CHAR(8) NOT NULL,
   cantidad        INT NOT NULL,
   id_cliente      VARCHAR(64) NOT NULL,
   sla_horas       INT NOT NULL,
 
   -- Momento de ingreso: fuente de verdad en UTC
-  hora_ingreso_utc     DATETIME NOT NULL,
-  -- Hora local preservada como dato de negocio (no derivada)
-  hora_ingreso_local   DATETIME NOT NULL,
-  -- Offset en el momento del registro (puede cambiar por DST)
-  gmt_offset      INT NOT NULL,
+  ingreso_utc     DATETIME NOT NULL,
   -- Estado del envío: PENDING, IN_TRANSIT, DELIVERED, CANCELLED
   status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   audit_date_ins  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -109,8 +104,8 @@ CREATE TABLE shipment (
 
   PRIMARY KEY (id),
   UNIQUE KEY uk_shipment_codigo_pedido (codigo_pedido),
-  INDEX idx_shipment_ingreso_utc (hora_ingreso_utc),
-  INDEX idx_shipment_origen_fecha (origen_id, hora_ingreso_utc),
+  INDEX idx_shipment_ingreso_utc (ingreso_utc),
+  INDEX idx_shipment_origen_ingreso (origen_id, ingreso_utc),
   INDEX idx_shipment_status (status),
   INDEX idx_shipment_created_by (created_by_user_id),
   INDEX idx_shipment_updated_by (updated_by_user_id),

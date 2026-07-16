@@ -24,6 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -372,8 +374,8 @@ public class SimulationReportPersistenceService {
                 entity.flightCodigo = flight.codigo;
                 entity.origen = flight.origen != null ? flight.origen.codigoOaci : null;
                 entity.destino = flight.destino != null ? flight.destino.codigoOaci : null;
-                entity.salida = flight.salida;
-                entity.llegada = flight.llegada;
+                entity.salida = scheduledLocalDateTime(cancellation.fechaCancelacion, flight, true);
+                entity.llegada = scheduledLocalDateTime(cancellation.fechaCancelacion, flight, false);
             }
             entities.add(entity);
         }
@@ -406,6 +408,20 @@ public class SimulationReportPersistenceService {
             drafts.put(draft.codigoPedido, draft);
         }
         return drafts;
+    }
+
+    private LocalDateTime scheduledLocalDateTime(LocalDate operationDate, FlightEntity flight, boolean departure) {
+        if (operationDate == null || flight == null) {
+            return null;
+        }
+        int originGmt = flight.origen != null ? flight.origen.gmt : 0;
+        int destinationGmt = flight.destino != null ? flight.destino.gmt : originGmt;
+        int departureLocalTotal = flight.salidaUtcOffsetMin + (originGmt * 60);
+        int arrivalLocalTotal = flight.salidaUtcOffsetMin + flight.duracionMin + (destinationGmt * 60);
+        int total = departure ? departureLocalTotal : arrivalLocalTotal;
+        int dayOffset = Math.floorDiv(total, 1440) - Math.floorDiv(departureLocalTotal, 1440);
+        int minute = Math.floorMod(total, 1440);
+        return LocalDateTime.of(operationDate.plusDays(dayOffset), LocalTime.of(minute / 60, minute % 60));
     }
 
     private void saveRoutes(Long snapshotId, Map<String, RouteDraft> drafts, Set<String> impactedCodes) {

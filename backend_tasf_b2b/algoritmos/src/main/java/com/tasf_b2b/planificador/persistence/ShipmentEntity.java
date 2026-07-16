@@ -21,17 +21,8 @@ public class ShipmentEntity {
     @JoinColumn(name = "destino_id")
     public AirportEntity destino;
 
-    @Column(name = "fecha", length = 8, nullable = false)
-    public String fecha;
-
-    @Column(name = "hora_ingreso_utc", nullable = false)
+    @Column(name = "ingreso_utc", nullable = false)
     public LocalDateTime ingresoUtc;
-
-    @Column(name = "hora_ingreso_local", nullable = false)
-    public LocalDateTime ingresoLocal;
-
-    @Column(name = "gmt_offset", nullable = false)
-    public int gmtOffset;
 
     @Column(name = "cantidad", nullable = false)
     public int cantidad;

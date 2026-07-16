@@ -19,13 +19,11 @@ public interface ShipmentRepository extends JpaRepository<ShipmentEntity, Long> 
         select s from ShipmentEntity s
         where upper(s.origen.codigoOaci) = upper(:origen)
           and upper(s.destino.codigoOaci) = upper(:destino)
-          and s.fecha = :fecha
         order by s.auditDateIns desc
         """)
-    List<ShipmentEntity> findByRouteAndFecha(
+    List<ShipmentEntity> findByRoute(
         @Param("origen") String origen,
-        @Param("destino") String destino,
-        @Param("fecha") String fecha
+        @Param("destino") String destino
     );
 
     @Query("""

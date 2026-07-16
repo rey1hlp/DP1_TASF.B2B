@@ -1,6 +1,7 @@
 package com.tasf_b2b.planificador.api;
 
 import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
+import com.tasf_b2b.planificador.auth.AuthenticatedUser;
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentEntity;
@@ -8,6 +9,7 @@ import com.tasf_b2b.planificador.persistence.ShipmentRepository;
 import com.tasf_b2b.planificador.persistence.ShipmentStatus;
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
 import com.tasf_b2b.planificador.utils.UtilArchivos;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -82,13 +85,13 @@ public class ShipmentCrudController {
 
         StringBuilder sql = new StringBuilder(
             "SELECT s.id, s.codigo_pedido, ao.codigo_oaci as origen_oaci, ao.ciudad as origen_ciudad, " +
-            "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, s.fecha, " +
-            "s.hora_ingreso_utc, s.hora_ingreso_local, s.gmt_offset, s.cantidad, " +
+            "ad.codigo_oaci as destino_oaci, ad.ciudad as destino_ciudad, ao.gmt as origen_gmt, " +
+            "s.ingreso_utc, s.cantidad, " +
             "s.id_cliente, s.sla_horas, s.status, s.audit_date_ins " +
             "FROM shipment s " +
             "JOIN airport ao ON s.origen_id = ao.id " +
             "JOIN airport ad ON s.destino_id = ad.id " +
-            "WHERE s.fecha = ?"
+            "WHERE DATE_FORMAT(DATE_ADD(s.ingreso_utc, INTERVAL ao.gmt HOUR), '%Y%m%d') = ?"
         );
 
         List<Object> params = new ArrayList<>();
@@ -99,7 +102,7 @@ public class ShipmentCrudController {
             params.add(airport.toUpperCase(Locale.ROOT));
         }
 
-        sql.append(" ORDER BY s.hora_ingreso_utc DESC");
+        sql.append(" ORDER BY s.ingreso_utc DESC");
 
         List<ShipmentCrudDto> shipments = jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
             ShipmentCrudDto dto = new ShipmentCrudDto();
@@ -109,10 +112,10 @@ public class ShipmentCrudController {
             dto.origenCiudad = rs.getString("origen_ciudad");
             dto.destino = rs.getString("destino_oaci");
             dto.destinoCiudad = rs.getString("destino_ciudad");
-            dto.fecha = rs.getString("fecha");
-            dto.ingresoUtc = rs.getTimestamp("hora_ingreso_utc").toLocalDateTime();
-            dto.ingresoLocal = rs.getTimestamp("hora_ingreso_local").toLocalDateTime();
-            dto.gmtOffset = rs.getInt("gmt_offset");
+            dto.ingresoUtc = rs.getTimestamp("ingreso_utc").toLocalDateTime();
+            dto.origenGmt = rs.getInt("origen_gmt");
+            dto.ingresoLocal = OperationalTime.utcToLocal(dto.ingresoUtc, dto.origenGmt);
+            dto.fecha = dto.ingresoLocal.format(DATE_FORMAT);
             dto.cantidad = rs.getInt("cantidad");
             dto.idCliente = rs.getString("id_cliente");
             dto.slaHoras = rs.getInt("sla_horas");
@@ -125,35 +128,31 @@ public class ShipmentCrudController {
     }
 
     @PostMapping
-    public ResponseEntity<ShipmentCrudDto> create(@RequestBody ShipmentCrudDto dto) {
+    public ResponseEntity<ShipmentCrudDto> create(@RequestBody ShipmentCrudDto dto, Authentication authentication) {
         log.info(
-            "[SHIPMENT_CRUD] create request pedido={} origen={} destino={} fecha={} ingresoLocal={} ingresoUtc={} gmtOffset={} cantidad={} cliente={} slaHoras={} status={}",
+            "[SHIPMENT_CRUD] create request pedido={} origen={} destino={} ingresoLocal={} cantidad={} cliente={} slaHoras={} status={}",
             dto != null ? dto.codigoPedido : null,
             dto != null ? dto.origen : null,
             dto != null ? dto.destino : null,
-            dto != null ? dto.fecha : null,
             dto != null ? dto.ingresoLocal : null,
-            dto != null ? dto.ingresoUtc : null,
-            dto != null ? Integer.valueOf(dto.gmtOffset) : null,
             dto != null ? dto.cantidad : null,
             dto != null ? dto.idCliente : null,
             dto != null ? dto.slaHoras : null,
             dto != null ? dto.status : ShipmentStatus.PENDING
         );
         ShipmentEntity entity = new ShipmentEntity();
-        if (!apply(entity, dto)) {
+        if (!apply(entity, dto, authenticatedUser(authentication))) {
             log.warn("[SHIPMENT_CRUD] create rejected by validation");
             return ResponseEntity.badRequest().build();
         }
         ShipmentEntity saved = repository.save(entity);
         log.info(
-            "[SHIPMENT_CRUD] create saved id={} pedido={} fecha={} ingresoLocal={} status={}",
-            saved.id,
-            saved.codigoPedido,
-            saved.fecha,
-            saved.ingresoLocal,
-            saved.status
-        );
+	            "[SHIPMENT_CRUD] create saved id={} pedido={} ingresoUtc={} status={}",
+	            saved.id,
+	            saved.codigoPedido,
+	            saved.ingresoUtc,
+	            saved.status
+	        );
         dailyPlanningService.replanNow("SHIPMENT_CREATE", "nuevo envio");
         return ResponseEntity.ok(toDto(saved));
     }
@@ -261,17 +260,14 @@ public class ShipmentCrudController {
                 }
 
                 LocalDateTime ingresoLocal = LocalDateTime.of(date, localTime);
-                LocalDateTime ingresoUtc = ingresoLocal.minusHours(originAirport.gmt);
+                LocalDateTime ingresoUtc = OperationalTime.localToUtc(ingresoLocal, originAirport.gmt);
                 int slaHoras = computeSla(originAirport, destinoAirport);
 
                 batch.add(new Object[]{
                     codigoPedido,
                     originAirport.id,
                     destinoAirport.id,
-                    fecha,
                     ingresoUtc,
-                    ingresoLocal,
-                    originAirport.gmt,
                     cantidad,
                     idCliente,
                     slaHoras,
@@ -313,15 +309,12 @@ public class ShipmentCrudController {
     private int[] executeShipmentBatch(List<Object[]> batch) {
         String sql = 
             "INSERT INTO shipment " +
-            "(codigo_pedido, origen_id, destino_id, fecha, hora_ingreso_utc, hora_ingreso_local, gmt_offset, cantidad, id_cliente, sla_horas, status) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+            "(codigo_pedido, origen_id, destino_id, ingreso_utc, cantidad, id_cliente, sla_horas, status) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
             "AS new ON DUPLICATE KEY UPDATE " +
             "origen_id = new.origen_id, " +
             "destino_id = new.destino_id, " +
-            "fecha = new.fecha, " +
-            "hora_ingreso_utc = new.hora_ingreso_utc, " +
-            "hora_ingreso_local = new.hora_ingreso_local, " +
-            "gmt_offset = new.gmt_offset, " +
+            "ingreso_utc = new.ingreso_utc, " +
             "cantidad = new.cantidad, " +
             "id_cliente = new.id_cliente, " +
             "sla_horas = new.sla_horas, " +
@@ -341,7 +334,7 @@ public class ShipmentCrudController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ShipmentCrudDto> update(@PathVariable Long id, @RequestBody ShipmentCrudDto payload) {
+    public ResponseEntity<ShipmentCrudDto> update(@PathVariable Long id, @RequestBody ShipmentCrudDto payload, Authentication authentication) {
         log.info("[SHIPMENT_CRUD] update request id={} pedido={}", id, payload != null ? payload.codigoPedido : null);
         ShipmentEntity entity = repository.findById(id).orElse(null);
         if (entity == null) {
@@ -349,17 +342,16 @@ public class ShipmentCrudController {
             return ResponseEntity.notFound().build();
         }
         ShipmentCrudDto previous = toDto(entity);
-        if (!apply(entity, payload)) {
+        if (!apply(entity, payload, authenticatedUser(authentication))) {
             log.warn("[SHIPMENT_CRUD] update rejected by validation id={}", id);
             return ResponseEntity.badRequest().build();
         }
         ShipmentEntity saved = repository.save(entity);
         log.info(
-            "[SHIPMENT_CRUD] update saved id={} pedido={} fecha={} ingresoLocal={} status={} requiresReplan={}",
+            "[SHIPMENT_CRUD] update saved id={} pedido={} ingresoUtc={} status={} requiresReplan={}",
             saved.id,
             saved.codigoPedido,
-            saved.fecha,
-            saved.ingresoLocal,
+            saved.ingresoUtc,
             saved.status,
             requiresReplan(previous, toDto(saved))
         );
@@ -380,11 +372,14 @@ public class ShipmentCrudController {
         return ResponseEntity.noContent().build();
     }
 
-    private boolean apply(ShipmentEntity target, ShipmentCrudDto source) {
-        if (!isValid(source)) {
+    private boolean apply(ShipmentEntity target, ShipmentCrudDto source, AuthenticatedUser user) {
+        if (!isValid(source, user)) {
             return false;
         }
-        AirportEntity origen = airportRepository.findByCodigoOaci(normalizeAirport(source.origen));
+        String origenCode = user != null && user.airportCode() != null && !user.airportCode().isBlank()
+            ? user.airportCode()
+            : source.origen;
+        AirportEntity origen = airportRepository.findByCodigoOaci(normalizeAirport(origenCode));
         AirportEntity destino = airportRepository.findByCodigoOaci(normalizeAirport(source.destino));
         if (origen == null || destino == null) {
             return false;
@@ -393,10 +388,7 @@ public class ShipmentCrudController {
         target.codigoPedido = source.codigoPedido.trim();
         target.origen = origen;
         target.destino = destino;
-        target.fecha = normalizeFecha(source);
-        target.ingresoUtc = source.ingresoUtc;
-        target.ingresoLocal = source.ingresoLocal;
-        target.gmtOffset = source.gmtOffset;
+        target.ingresoUtc = OperationalTime.localToUtc(source.ingresoLocal, origen.gmt);
         target.cantidad = Math.max(0, source.cantidad);
         target.idCliente = source.idCliente.trim();
         target.slaHoras = source.slaHoras;
@@ -412,10 +404,10 @@ public class ShipmentCrudController {
         dto.origenCiudad = entity.origen != null ? entity.origen.ciudad : null;
         dto.destino = entity.destino != null ? entity.destino.codigoOaci : null;
         dto.destinoCiudad = entity.destino != null ? entity.destino.ciudad : null;
-        dto.fecha = entity.fecha;
         dto.ingresoUtc = entity.ingresoUtc;
-        dto.ingresoLocal = entity.ingresoLocal;
-        dto.gmtOffset = entity.gmtOffset;
+        dto.origenGmt = entity.origen != null ? entity.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
+        dto.ingresoLocal = OperationalTime.utcToLocal(entity.ingresoUtc, dto.origenGmt);
+        dto.fecha = dto.ingresoLocal.format(DATE_FORMAT);
         dto.cantidad = entity.cantidad;
         dto.idCliente = entity.idCliente;
         dto.slaHoras = entity.slaHoras;
@@ -424,12 +416,11 @@ public class ShipmentCrudController {
         return dto;
     }
 
-    private boolean isValid(ShipmentCrudDto dto) {
+    private boolean isValid(ShipmentCrudDto dto, AuthenticatedUser user) {
         return dto != null
             && dto.codigoPedido != null && !dto.codigoPedido.isBlank()
-            && dto.origen != null && !dto.origen.isBlank()
+            && ((dto.origen != null && !dto.origen.isBlank()) || (user != null && user.airportCode() != null && !user.airportCode().isBlank()))
             && dto.destino != null && !dto.destino.isBlank()
-            && dto.ingresoUtc != null
             && dto.ingresoLocal != null
             && dto.idCliente != null && !dto.idCliente.isBlank();
     }
@@ -437,8 +428,7 @@ public class ShipmentCrudController {
     private boolean requiresReplan(ShipmentCrudDto previous, ShipmentCrudDto current) {
         return !Objects.equals(previous.origen, current.origen)
             || !Objects.equals(previous.destino, current.destino)
-            || !Objects.equals(previous.fecha, current.fecha)
-            || !Objects.equals(previous.ingresoLocal, current.ingresoLocal)
+            || !Objects.equals(previous.ingresoUtc, current.ingresoUtc)
             || previous.cantidad != current.cantidad
             || previous.slaHoras != current.slaHoras
             || previous.status != current.status;
@@ -446,16 +436,6 @@ public class ShipmentCrudController {
 
     private String normalizeAirport(String airportCode) {
         return airportCode == null ? null : airportCode.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String normalizeFecha(ShipmentCrudDto dto) {
-        if (dto.fecha != null && !dto.fecha.isBlank()) {
-            String digits = dto.fecha.trim().replace("-", "");
-            if (digits.matches("\\d{8}")) {
-                return digits;
-            }
-        }
-        return dto.ingresoLocal.format(DATE_FORMAT);
     }
 
     private String extractOrigin(String filename) {
@@ -477,6 +457,11 @@ public class ShipmentCrudController {
             ? destino.continente.trim()
             : UtilArchivos.obtenerContinente(destino.codigoOaci);
         return origenContinente.equalsIgnoreCase(destinoContinente) ? 24 : 48;
+    }
+
+    private AuthenticatedUser authenticatedUser(Authentication authentication) {
+        Object principal = authentication != null ? authentication.getPrincipal() : null;
+        return principal instanceof AuthenticatedUser user ? user : null;
     }
 
     public record BulkImportResult(

@@ -7,6 +7,7 @@ import com.tasf_b2b.planificador.persistence.FlightEntity;
 import com.tasf_b2b.planificador.persistence.FlightRepository;
 import com.tasf_b2b.planificador.sim.DailyPlanningService;
 import com.tasf_b2b.planificador.sim.SimulationService;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/db/flights")
 public class FlightCancellationController {
     private static final Logger log = LoggerFactory.getLogger(FlightCancellationController.class);
-    private static final ZoneId ZONE = ZoneId.of("America/Lima");
+    private static final ZoneId ZONE = OperationalTime.resolveFallbackOperationalZone();
 
     private final FlightDayCancellationRepository cancellationRepository;
     private final FlightRepository flightRepository;
@@ -95,7 +95,7 @@ public class FlightCancellationController {
             id,
             requestedDate,
             effectiveDate,
-            flight.salida != null ? flight.salida.toLocalTime().getHour() * 60 + flight.salida.toLocalTime().getMinute() - 60 : null,
+	            departureLocalMinute(flight) - 60,
             dto.contextDate,
             dto.contextMinuteOfDay,
             simulationContextUsed
@@ -149,7 +149,7 @@ public class FlightCancellationController {
         String contextDate,
         Integer contextMinuteOfDay
     ) {
-        if (flight == null || flight.salida == null || requestedDate == null) {
+        if (flight == null || requestedDate == null) {
             return requestedDate;
         }
 
@@ -177,9 +177,8 @@ public class FlightCancellationController {
             referenceTime = now.toLocalTime();
         }
 
-        LocalTime departureTime = flight.salida.toLocalTime();
         int referenceMinute = referenceTime.getHour() * 60 + referenceTime.getMinute();
-        int cutoffMinute = departureTime.getHour() * 60 + departureTime.getMinute() - 60;
+        int cutoffMinute = departureLocalMinute(flight) - 60;
         if (referenceMinute > cutoffMinute) {
             log.info(
                 "[FLIGHT_CANCEL] effective date moved to next day by cutoff baseDate={} referenceTime={} cutoffMinute={} usingSimulationClock={}",
@@ -211,6 +210,11 @@ public class FlightCancellationController {
         return dto != null
             && ((dto.contextDate != null && !dto.contextDate.isBlank())
             || dto.contextMinuteOfDay != null);
+    }
+
+    private int departureLocalMinute(FlightEntity flight) {
+        int gmt = flight != null && flight.origen != null ? flight.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
+        return Math.floorMod(flight.salidaUtcOffsetMin + (gmt * 60), 1440);
     }
 
     @GetMapping("/{id}/day-cancels")

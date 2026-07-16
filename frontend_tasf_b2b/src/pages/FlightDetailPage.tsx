@@ -53,12 +53,17 @@ export default function FlightDetailPage({
               origenOaci: simulationFlight.origen,
               destino: simulationFlight.destino,
               destinoOaci: simulationFlight.destino,
-              origenCiudad: "Simulado",
-              destinoCiudad: "Simulado",
-              fechaSalida: "",
-              fechaLlegada: "",
-              capacidad: simulationFlight.capacidad || 0,
-            } as any);
+	              origenCiudad: "Simulado",
+	              destinoCiudad: "Simulado",
+	              salidaLocal: formatClockFromMinute(simulationFlight.salidaMin ?? 0),
+	              llegadaLocal: formatClockFromMinute(simulationFlight.llegadaMin ?? 0),
+	              salidaUtcOffsetMin: simulationFlight.salidaMin ?? 0,
+	              duracionMin: Math.max(0, (simulationFlight.llegadaMin ?? 0) - (simulationFlight.salidaMin ?? 0)),
+	              origenGmt: 0,
+	              destinoGmt: 0,
+	              capacidad: simulationFlight.capacidad || 0,
+	              cancelado: false,
+	            } as any);
           }
           setShipments([]);
         } else {

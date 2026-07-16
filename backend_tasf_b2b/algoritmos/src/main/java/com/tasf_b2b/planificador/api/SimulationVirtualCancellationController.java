@@ -7,6 +7,7 @@ import com.tasf_b2b.planificador.persistence.SimulationRunRepository;
 import com.tasf_b2b.planificador.persistence.SimulationVirtualCancellationEntity;
 import com.tasf_b2b.planificador.persistence.SimulationVirtualCancellationRepository;
 import com.tasf_b2b.planificador.sim.SimulationService;
+import com.tasf_b2b.planificador.utils.OperationalTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,7 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/simulations/{simId}")
 public class SimulationVirtualCancellationController {
-    private static final ZoneId ZONE = ZoneId.of("America/Lima");
+    private static final ZoneId ZONE = OperationalTime.resolveFallbackOperationalZone();
 
     private final SimulationVirtualCancellationRepository virtualCancellationRepository;
     private final SimulationRunRepository simulationRunRepository;
@@ -128,7 +129,7 @@ public class SimulationVirtualCancellationController {
         String contextDate,
         Integer contextMinuteOfDay
     ) {
-        if (flight == null || flight.salida == null || requestedDate == null) {
+        if (flight == null || requestedDate == null) {
             return requestedDate;
         }
 
@@ -154,8 +155,7 @@ public class SimulationVirtualCancellationController {
         }
 
         int referenceMinute = referenceTime.getHour() * 60 + referenceTime.getMinute();
-        LocalTime departureTime = flight.salida.toLocalTime();
-        int cutoffMinute = departureTime.getHour() * 60 + departureTime.getMinute() - 60;
+        int cutoffMinute = departureLocalMinute(flight) - 60;
         return referenceMinute > cutoffMinute ? baseDate.plusDays(1) : baseDate;
     }
 
@@ -187,5 +187,10 @@ public class SimulationVirtualCancellationController {
         }
         String trimmed = value.trim();
         return trimmed.length() > 160 ? trimmed.substring(0, 160) : trimmed;
+    }
+
+    private int departureLocalMinute(FlightEntity flight) {
+        int gmt = flight != null && flight.origen != null ? flight.origen.gmt : OperationalTime.DEFAULT_OPERATION_GMT;
+        return Math.floorMod(flight.salidaUtcOffsetMin + (gmt * 60), 1440);
     }
 }

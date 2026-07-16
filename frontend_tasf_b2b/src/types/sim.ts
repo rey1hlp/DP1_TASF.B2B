@@ -259,8 +259,12 @@ export type FlightCrudDto = {
   origenCiudad?: string
   destinoOaci: string
   destinoCiudad?: string
-  salida: string
-  llegada: string
+  salidaLocal: string
+  llegadaLocal: string
+  salidaUtcOffsetMin: number
+  duracionMin: number
+  origenGmt: number
+  destinoGmt: number
   capacidad: number
   cancelado: boolean
 }
@@ -276,7 +280,7 @@ export type ShipmentCrudDto = {
   diaIndex: number
   ingresoUtc: string
   ingresoLocal: string
-  gmtOffset: number
+  origenGmt: number
   cantidad: number
   idCliente: string
   slaHoras: number
