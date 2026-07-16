@@ -66,12 +66,22 @@ public class ShipmentCrudController {
     public ResponseEntity<Page<ShipmentCrudDto>> list(
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
-        @RequestParam(required = false) String query
+        @RequestParam(required = false) String query,
+        Authentication authentication
     ) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<ShipmentEntity> result = (query == null || query.isBlank())
-            ? repository.findAllByOrderByAuditDateInsDesc(pageable)
-            : repository.searchOrderByAuditDateInsDesc(query.trim(), pageable);
+        AuthenticatedUser user = authenticatedUser(authentication);
+        String airport = userAirportCode(user);
+        Page<ShipmentEntity> result;
+        if (airport != null) {
+            result = (query == null || query.isBlank())
+                ? repository.findVisibleForAirport(airport, pageable)
+                : repository.searchVisibleForAirport(airport, query.trim(), pageable);
+        } else {
+            result = (query == null || query.isBlank())
+                ? repository.findAllByOrderByAuditDateInsDesc(pageable)
+                : repository.searchOrderByAuditDateInsDesc(query.trim(), pageable);
+        }
         return ResponseEntity.ok(result.map(this::toDto));
     }
 
@@ -159,7 +169,7 @@ public class ShipmentCrudController {
 
     @PostMapping("/import-txt")
     @Transactional
-    public ResponseEntity<BulkImportResult> importTxt(@RequestParam("file") MultipartFile file) throws IOException {
+    public ResponseEntity<BulkImportResult> importTxt(@RequestParam("file") MultipartFile file, Authentication authentication) throws IOException {
         
         long startAll = System.currentTimeMillis();
 
@@ -171,6 +181,11 @@ public class ShipmentCrudController {
         if (originOaci == null) {
             log.warn("[SHIPMENT_CRUD] import rejected because filename does not match standard");
             return ResponseEntity.badRequest().build();
+        }
+        String assignedAirport = userAirportCode(authenticatedUser(authentication));
+        if (assignedAirport != null && !assignedAirport.equalsIgnoreCase(originOaci)) {
+            log.warn("[SHIPMENT_CRUD] import rejected because assigned airport does not match file origin assigned={} origin={}", assignedAirport, originOaci);
+            return ResponseEntity.status(403).build();
         }
 
         AirportEntity originAirport = airportRepository.findByCodigoOaci(originOaci);
@@ -342,6 +357,10 @@ public class ShipmentCrudController {
             return ResponseEntity.notFound().build();
         }
         ShipmentCrudDto previous = toDto(entity);
+        if (!canAccessShipment(entity, authenticatedUser(authentication))) {
+            log.warn("[SHIPMENT_CRUD] update rejected by airport scope id={}", id);
+            return ResponseEntity.status(403).build();
+        }
         if (!apply(entity, payload, authenticatedUser(authentication))) {
             log.warn("[SHIPMENT_CRUD] update rejected by validation id={}", id);
             return ResponseEntity.badRequest().build();
@@ -362,10 +381,15 @@ public class ShipmentCrudController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (!repository.existsById(id)) {
+    public ResponseEntity<Void> delete(@PathVariable Long id, Authentication authentication) {
+        ShipmentEntity entity = repository.findById(id).orElse(null);
+        if (entity == null) {
             log.warn("[SHIPMENT_CRUD] delete rejected because shipment does not exist id={}", id);
             return ResponseEntity.notFound().build();
+        }
+        if (!canAccessShipment(entity, authenticatedUser(authentication))) {
+            log.warn("[SHIPMENT_CRUD] delete rejected by airport scope id={}", id);
+            return ResponseEntity.status(403).build();
         }
         log.info("[SHIPMENT_CRUD] delete id={}", id);
         repository.deleteById(id);
@@ -376,8 +400,8 @@ public class ShipmentCrudController {
         if (!isValid(source, user)) {
             return false;
         }
-        String origenCode = user != null && user.airportCode() != null && !user.airportCode().isBlank()
-            ? user.airportCode()
+        String origenCode = userAirportCode(user) != null
+            ? userAirportCode(user)
             : source.origen;
         AirportEntity origen = airportRepository.findByCodigoOaci(normalizeAirport(origenCode));
         AirportEntity destino = airportRepository.findByCodigoOaci(normalizeAirport(source.destino));
@@ -388,7 +412,10 @@ public class ShipmentCrudController {
         target.codigoPedido = source.codigoPedido.trim();
         target.origen = origen;
         target.destino = destino;
-        target.ingresoUtc = OperationalTime.localToUtc(source.ingresoLocal, origen.gmt);
+        LocalDateTime ingresoLocal = source.ingresoLocal != null
+            ? source.ingresoLocal
+            : OperationalTime.utcToLocal(LocalDateTime.now(), origen.gmt);
+        target.ingresoUtc = OperationalTime.localToUtc(ingresoLocal, origen.gmt);
         target.cantidad = Math.max(0, source.cantidad);
         target.idCliente = source.idCliente.trim();
         target.slaHoras = source.slaHoras;
@@ -421,7 +448,6 @@ public class ShipmentCrudController {
             && dto.codigoPedido != null && !dto.codigoPedido.isBlank()
             && ((dto.origen != null && !dto.origen.isBlank()) || (user != null && user.airportCode() != null && !user.airportCode().isBlank()))
             && dto.destino != null && !dto.destino.isBlank()
-            && dto.ingresoLocal != null
             && dto.idCliente != null && !dto.idCliente.isBlank();
     }
 
@@ -462,6 +488,22 @@ public class ShipmentCrudController {
     private AuthenticatedUser authenticatedUser(Authentication authentication) {
         Object principal = authentication != null ? authentication.getPrincipal() : null;
         return principal instanceof AuthenticatedUser user ? user : null;
+    }
+
+    private String userAirportCode(AuthenticatedUser user) {
+        return user != null && user.airportCode() != null && !user.airportCode().isBlank()
+            ? normalizeAirport(user.airportCode())
+            : null;
+    }
+
+    private boolean canAccessShipment(ShipmentEntity entity, AuthenticatedUser user) {
+        String airport = userAirportCode(user);
+        if (airport == null) {
+            return true;
+        }
+        String origen = entity.origen != null ? normalizeAirport(entity.origen.codigoOaci) : null;
+        String destino = entity.destino != null ? normalizeAirport(entity.destino.codigoOaci) : null;
+        return airport.equals(origen) || airport.equals(destino);
     }
 
     public record BulkImportResult(

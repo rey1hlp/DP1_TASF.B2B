@@ -38,6 +38,24 @@ function getShipmentStatusClass(status?: ShipmentCrudDto['status']) {
   return 'pending'
 }
 
+function toDatetimeLocalFromGmt(gmt: number): string {
+  const local = new Date(Date.now() + gmt * 60 * 60 * 1000)
+  const yyyy = local.getUTCFullYear()
+  const mm = String(local.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(local.getUTCDate()).padStart(2, '0')
+  const hh = String(local.getUTCHours()).padStart(2, '0')
+  const min = String(local.getUTCMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+}
+
+function datePart(value?: string | null): string {
+  return value ? value.substring(0, 10) : ''
+}
+
+function timePart(value?: string | null): string {
+  return value && value.includes('T') ? value.substring(11, 16) : ''
+}
+
 export default function ShipmentsCrud() {
   const { user } = useAuth()
   const [items, setItems] = useState<ShipmentCrudDto[]>([])
@@ -64,7 +82,7 @@ export default function ShipmentsCrud() {
     invalidAirportLines: string[]
   } | null>(null)
 
-  const logisticsAirportCode = user?.role === 'LOGISTICS' || user?.role === 'REGISTER'
+  const logisticsAirportCode = user && user.role !== 'ADMIN'
     ? user.airportCode?.trim().toUpperCase() ?? null
     : null
 
@@ -103,6 +121,7 @@ export default function ShipmentsCrud() {
 	    ...EMPTY_FORM,
 	    origen: logisticsAirportCode ?? '',
 	    origenGmt: airport?.gmt ?? EMPTY_FORM.origenGmt,
+	    ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : '',
 	  })
 
   const resetForm = () => {
@@ -163,6 +182,7 @@ export default function ShipmentsCrud() {
 	        ...current,
 	        origen: logisticsAirportCode,
 	        origenGmt: nextGmt,
+	        ingresoLocal: toDatetimeLocalFromGmt(nextGmt),
 	      }
     })
   }, [isModalOpen, logisticsAirport?.gmt, logisticsAirportCode])
@@ -294,7 +314,12 @@ export default function ShipmentsCrud() {
 	      return {
 	        ...current,
 	        [kind]: codigo,
-	        ...(kind === 'origen' ? { origenGmt: airport?.gmt ?? current.origenGmt } : {}),
+	        ...(kind === 'origen'
+            ? {
+              origenGmt: airport?.gmt ?? current.origenGmt,
+              ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : current.ingresoLocal,
+            }
+            : {}),
 	      }
 	    })
     setActiveOaciList(null)
@@ -481,10 +506,24 @@ export default function ShipmentsCrud() {
               ) : null}
             </div>
           </label>
-	          <label className="field">
-	            Ingreso local
-	            <input type="datetime-local" value={form.ingresoLocal} onChange={(event) => handleChange('ingresoLocal', event.target.value)} />
-	          </label>
+          <label className="field">
+            Fecha ingreso
+            <input
+              type="date"
+              value={datePart(form.ingresoLocal)}
+              disabled
+              title="Fecha local derivada del aeropuerto origen"
+            />
+          </label>
+          <label className="field">
+            Hora ingreso
+            <input
+              type="time"
+              value={timePart(form.ingresoLocal)}
+              disabled
+              title="Hora local derivada del aeropuerto origen"
+            />
+          </label>
 	          <label className="field">
 	            GMT origen
 	            <input

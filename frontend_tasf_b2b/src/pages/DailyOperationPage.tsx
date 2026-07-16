@@ -182,6 +182,7 @@ export default function DailyOperationPage() {
   const [alerts, setAlerts] = useState<OperationAlert[]>([])
 
   const [now, setNow] = useState(() => new Date())
+  const [serverCurrentMinute, setServerCurrentMinute] = useState<number | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(true)
@@ -284,7 +285,8 @@ export default function DailyOperationPage() {
     }
   }
 
-  const currentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
+  const fallbackCurrentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
+  const currentMinute = serverCurrentMinute ?? fallbackCurrentMinute
   const operationDateKey = getLimaDateKey()
   const cancelledFlightTraces = useMemo(() => {
     return buildCancelledFlightTraces(
@@ -300,6 +302,10 @@ export default function DailyOperationPage() {
     console.debug('[DailyOperationPage] applySnapshot', snapshot)
     if (snapshot.segments) {
       setSegments(snapshot.segments)
+    }
+
+    if (typeof snapshot.currentMinute === 'number') {
+      setServerCurrentMinute(snapshot.currentMinute)
     }
 
     if (snapshot.warehouseSnapshot) {
@@ -535,12 +541,17 @@ export default function DailyOperationPage() {
     return baseFiltered.filter(seg => airportCodes.has(seg.origen) || airportCodes.has(seg.destino))
   }, [segments, mapFilters, ranges, mapAirports])
 
+  const visibleActiveSegments = useMemo(() => {
+    return mapSegments.filter(
+      (segment) => currentMinute >= segment.salidaMin && currentMinute <= segment.llegadaMin
+    )
+  }, [currentMinute, mapSegments])
 
 
   const mapFilterCounts = useMemo(() => ({
-    flights: mapSegments.length,
+    flights: visibleActiveSegments.length,
     warehouses: mapAirports.length,
-  }), [mapAirports.length, mapSegments.length])
+  }), [mapAirports.length, visibleActiveSegments.length])
 
   useEffect(() => {
     if (
@@ -625,7 +636,7 @@ export default function DailyOperationPage() {
   }, [segments, activeSegments, shipmentSummary, ranges, warehouseSnapshot])
 
   const activeFlightItems = useMemo(() => {
-    return activeSegments.map((segment) => ({
+    return visibleActiveSegments.map((segment) => ({
       flightId: segment.flightId,
       origen: segment.origen,
       destino: segment.destino,
@@ -643,7 +654,7 @@ export default function DailyOperationPage() {
           ? resolveSemaphoreColor((segment.carga * 100) / segment.capacidad, ranges).fill
           : undefined,
     }))
-  }, [activeSegments, currentMinute, ranges])
+  }, [currentMinute, ranges, visibleActiveSegments])
   
   const upcomingFlightItems = useMemo(() => {
     return upcomingSegments.map((segment) => ({
