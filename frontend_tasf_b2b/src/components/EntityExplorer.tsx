@@ -57,6 +57,7 @@ export type EntityAirportItem = {
 
 export type EntityRouteStep = {
   vueloId: number | string
+  planId?: number | string | null
   origen: string
   destino: string
   salidaMin: number
@@ -495,7 +496,7 @@ function BagDetailPanel({
                   key={`${step.vueloId}-${step.origen}-${step.destino}-${index}`}
                   className={`bag-detail-step ${getRouteStepState(step, currentMinute)}`}
                 >
-                  <span>{step.vueloId ?? '--'}</span>
+                  <span>{step.planId ?? step.vueloId ?? '--'}</span>
                   <strong>{step.origen} → {step.destino}</strong>
                   <small>{formatMinuteRange(step.salidaMin, step.llegadaMin)}</small>
                 </div>
@@ -2063,7 +2064,7 @@ export default function EntityExplorer({
               }}
             >
               <div className="flight-label">
-                {step.vueloId} | {step.origen} → {step.destino}
+                {step.planId ?? step.vueloId} | {step.origen} → {step.destino}
               </div>
               <div className="flight-meta">
                 Salida {formatOperationalMinuteRange(step.salidaMin, step.llegadaMin)}

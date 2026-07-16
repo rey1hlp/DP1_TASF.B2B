@@ -397,7 +397,7 @@ public class DailyOperationService {
         dto.auditDateIns = entity.auditDateIns;
         dto.vueloIds = route != null && route.ruta != null
             ? route.ruta.stream()
-                .map(step -> String.valueOf(step.vueloId))
+                .map(step -> String.valueOf(step.planId != null ? step.planId : step.vueloId))
                 .distinct()
                 .toList()
             : List.of();

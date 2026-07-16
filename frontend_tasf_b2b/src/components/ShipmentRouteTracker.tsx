@@ -5,6 +5,7 @@ import { formatDurationHours, formatMinuteRange } from '../utils/time'
 
 export type TrackerRouteStep = {
   vueloId?: number | string
+  planId?: number | string | null
   origen: string
   destino: string
   salidaMin: number
@@ -246,7 +247,7 @@ export default function ShipmentRouteTracker({
                   className={`shipment-tracker-step ${getStepState(step, currentMinute)}`}
                   key={`${step.vueloId}-${step.origen}-${step.destino}-${index}`}
                 >
-                  <span>{step.vueloId ?? '--'}</span>
+                  <span>{step.planId ?? step.vueloId ?? '--'}</span>
                   <strong>{step.origen} → {step.destino}</strong>
                   <small>{formatMinuteRange(step.salidaMin, step.llegadaMin)}</small>
                 </div>

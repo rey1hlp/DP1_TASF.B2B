@@ -395,7 +395,7 @@ public class SimulationService {
             int cantidadMaletas = shipment != null ? Math.max(0, shipment.cantidad) : 0;
             String idCliente = shipment != null ? shipment.idCliente : null;
             List<String> vueloIds = infoRuta.ruta.stream()
-                .map(tramo -> String.valueOf(tramo.vueloId))
+                .map(tramo -> String.valueOf(tramo.planId != null ? tramo.planId : tramo.vueloId))
                 .distinct()
                 .toList();
 
