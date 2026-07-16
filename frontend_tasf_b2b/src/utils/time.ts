@@ -70,6 +70,37 @@ function formatUtcDateTime(value: Date): string {
   )
 }
 
+function normalizeGmtOffsetMinutes(value?: number | null): number | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null
+  }
+  return Math.round(value * 60)
+}
+
+function shiftAbsoluteMinuteByGmt(minute: number, gmt?: number | null): number {
+  const offsetMinutes = normalizeGmtOffsetMinutes(gmt)
+  return offsetMinutes === null ? minute : minute + offsetMinutes
+}
+
+function shiftDateByGmt(value: Date, gmt?: number | null): Date {
+  const offsetMinutes = normalizeGmtOffsetMinutes(gmt)
+  if (offsetMinutes === null) {
+    return value
+  }
+  return new Date(value.getTime() + offsetMinutes * 60 * 1000)
+}
+
+function formatDateTimeWithGmt(value: Date, gmt?: number | null): string {
+  const shifted = shiftDateByGmt(value, gmt)
+  return formatDateTimeParts(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate(),
+    shifted.getUTCHours(),
+    shifted.getUTCMinutes(),
+  )
+}
+
 export function formatDateTime(value?: string | Date | number | null): string {
   if (value === null || value === undefined || value === '') {
     return '--'
@@ -214,6 +245,32 @@ export function formatSimDateTimeFromMinute(minute?: number | null): string {
   )
 }
 
+export function formatSimMinuteWithGmt(
+  minute?: number | null,
+  gmt?: number | null,
+  includeDate = false,
+): string {
+  if (minute === null || minute === undefined || !Number.isFinite(minute)) {
+    return '--'
+  }
+  return formatSimMinute(
+    shiftAbsoluteMinuteByGmt(Math.floor(minute), gmt),
+    includeDate,
+  )
+}
+
+export function formatSimDateTimeFromMinuteWithGmt(
+  minute?: number | null,
+  gmt?: number | null,
+): string {
+  if (minute === null || minute === undefined || !Number.isFinite(minute)) {
+    return '--'
+  }
+  return formatSimDateTimeFromMinute(
+    shiftAbsoluteMinuteByGmt(Math.floor(minute), gmt),
+  )
+}
+
 export function parseShipmentDepartureMinute(value?: string | number | null): number | null {
   if (value === null || value === undefined || value === '') {
     return null
@@ -236,20 +293,26 @@ export function parseShipmentDepartureMinute(value?: string | number | null): nu
   return null
 }
 
-export function formatShipmentDepartureTime(value?: string | number | null): string {
+export function formatShipmentDepartureTime(
+  value?: string | number | null,
+  gmt?: number | null,
+): string {
   if (value === null || value === undefined || value === '') {
     return '--'
   }
 
   const minute = parseShipmentDepartureMinute(value)
   if (minute !== null) {
-    return formatSimDateTimeFromMinute(minute)
+    return formatSimDateTimeFromMinuteWithGmt(minute, gmt)
   }
 
   const raw = String(value).trim()
   const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)
   const parsed = new Date(raw)
   if (hasTimezone && !Number.isNaN(parsed.getTime())) {
+    if (normalizeGmtOffsetMinutes(gmt) !== null) {
+      return formatDateTimeWithGmt(parsed, gmt)
+    }
     return `${formatUtcDateTime(parsed)} UTC`
   }
 
@@ -268,6 +331,32 @@ export function formatMinuteRange(start?: number | null, end?: number | null): s
     return `${formatSimMinute(start, true)} - ${formatSimMinute(end, true)}`
   }
   return `${formatSimMinute(start, includeDate)} - ${formatSimMinute(end, false)}`
+}
+
+export function formatMinuteRangeWithGmt(
+  start?: number | null,
+  end?: number | null,
+  startGmt?: number | null,
+  endGmt?: number | null,
+): string {
+  if (start === null || start === undefined || end === null || end === undefined) {
+    return '--'
+  }
+
+  const localizedStart = shiftAbsoluteMinuteByGmt(Math.floor(start), startGmt)
+  const localizedEnd = shiftAbsoluteMinuteByGmt(Math.floor(end), endGmt)
+  const startDay = Math.floor(localizedStart / 1440)
+  const endDay = Math.floor(localizedEnd / 1440)
+  const hasDifferentOffsets =
+    normalizeGmtOffsetMinutes(startGmt) !== normalizeGmtOffsetMinutes(endGmt)
+  const includeFullDate = hasDifferentOffsets || startDay !== endDay
+  const includeDate = includeFullDate || startDay !== 0 || endDay !== 0
+
+  if (includeFullDate) {
+    return `${formatSimMinute(localizedStart, true)} - ${formatSimMinute(localizedEnd, true)}`
+  }
+
+  return `${formatSimMinute(localizedStart, includeDate)} - ${formatSimMinute(localizedEnd, false)}`
 }
 
 export function formatOperationalMinuteRange(start?: number | null, end?: number | null): string {

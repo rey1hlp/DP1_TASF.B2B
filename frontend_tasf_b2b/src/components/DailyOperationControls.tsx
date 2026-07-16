@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import EntityExplorer, { type EntityAirportItem, type EntityFlightItem } from './EntityExplorer'
+import type { EnvioDetalleDto } from '../types/sim'
 import {
   formatInteger,
 } from '../utils/time'
@@ -62,6 +63,7 @@ export type DailyOperationControlsProps = {
   onSelectFlight: (flightId: number) => void
 
   airportItems: EntityAirportItem[]
+  airportGmtByCode: Record<string, number>
 
   selectedAirportCode: string | null
   onSelectAirport: (codigoOaci: string) => void
@@ -84,6 +86,7 @@ export type DailyOperationControlsProps = {
   shipmentQuantities?: Record<string, number>
   shipmentFlightIds?: Record<string, string[]>
   shipmentClientIds?: Record<string, string | null | undefined>
+  entityShipments?: EnvioDetalleDto[]
   flightTextFilters: FlightTextFilters
   onFlightTextFiltersChange: (filters: FlightTextFilters) => void
   airportTextFilters: AirportTextFilters
@@ -111,6 +114,7 @@ export default function DailyOperationControls({
   selectedFlightId,
   onSelectFlight,
   airportItems,
+  airportGmtByCode,
   selectedAirportCode,
   onSelectAirport,
   alerts,
@@ -124,6 +128,7 @@ export default function DailyOperationControls({
   shipmentQuantities,
   shipmentFlightIds,
   shipmentClientIds,
+  entityShipments = [],
   flightTextFilters,
   onFlightTextFiltersChange,
   airportTextFilters,
@@ -352,10 +357,12 @@ export default function DailyOperationControls({
           <EntityExplorer
             flights={allFlights}
             airports={airportItems}
+            airportGmtByCode={airportGmtByCode}
             shipments={sampleShipments}
             shipmentQuantities={shipmentQuantities}
             shipmentFlightIds={shipmentFlightIds}
             shipmentClientIds={shipmentClientIds}
+            shipmentsEnVuelo={entityShipments}
             selectedFlightId={selectedFlightId}
             selectedAirportCode={selectedAirportCode}
             selectedShipmentRoute={selectedShipmentRoute}

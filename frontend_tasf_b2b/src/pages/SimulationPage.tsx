@@ -331,6 +331,14 @@ export default function SimulationPage() {
       .catch((err) => setError(err.message))
   }, [])
 
+  const airportGmtByCode = useMemo(
+    () =>
+      Object.fromEntries(
+        airports.map((airport) => [airport.codigoOaci.toUpperCase(), airport.gmt]),
+      ),
+    [airports],
+  )
+
   useEffect(() => {
     let cancelled = false
 
@@ -1177,6 +1185,7 @@ export default function SimulationPage() {
               selectedFlightId={selectedFlightId}
               onSelectFlight={handleSelectFlight}
               airportItems={airportItems}
+              airportGmtByCode={airportGmtByCode}
               selectedAirportCode={selectedAirportCode}
               onSelectAirport={handleSelectAirport}
               isCollapsed={isPanelCollapsed}
