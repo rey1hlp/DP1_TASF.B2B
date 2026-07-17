@@ -57,35 +57,35 @@ type DailyOperationSnapshot = {
 
 type DailyOperationEvent =
   | {
-      type: 'SNAPSHOT'
-      payload: DailyOperationSnapshot
-    }
+    type: 'SNAPSHOT'
+    payload: DailyOperationSnapshot
+  }
   | {
-      type: 'FLIGHTS_UPDATED'
-      payload: {
-        segments: MapSegment[]
-      }
+    type: 'FLIGHTS_UPDATED'
+    payload: {
+      segments: MapSegment[]
     }
+  }
   | {
-      type: 'WAREHOUSE_UPDATED'
-      payload: {
-        warehouseSnapshot: WarehouseSnapshot
-      }
+    type: 'WAREHOUSE_UPDATED'
+    payload: {
+      warehouseSnapshot: WarehouseSnapshot
     }
+  }
   | {
-      type: 'SHIPMENTS_UPDATED'
-      payload: {
-        shipmentSummary: ShipmentSummary
-      }
+    type: 'SHIPMENTS_UPDATED'
+    payload: {
+      shipmentSummary: ShipmentSummary
     }
+  }
   | {
-      type: 'ALERT_CREATED'
-      payload: OperationAlert
-    }
+    type: 'ALERT_CREATED'
+    payload: OperationAlert
+  }
 
-function getCurrentMinuteOfDay(date: Date) {
-  return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
-}
+//function getCurrentMinuteOfDay(date: Date) {
+//  return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
+//}
 
 function getFlightStatusLabel(status?: FlightStatus) {
   if (status === 'PLANNED') return 'Planificado'
@@ -135,6 +135,12 @@ function syncSelectedShipmentRoute(
   }
 }
 
+function mapStatusToEnvioEstado(status?: ShipmentCrudDto['status']): EnvioDetalleDto['estado'] {
+  if (status === 'IN_TRANSIT') return 'EN_VUELO'
+  if (status === 'DELIVERED') return 'ENTREGADO'
+  return 'PLANIFICADO'
+}
+
 function mapShipmentsToEntityItems(shipments?: ShipmentCrudDto[]): EnvioDetalleDto[] {
   if (!shipments?.length) {
     return []
@@ -147,7 +153,7 @@ function mapShipmentsToEntityItems(shipments?: ShipmentCrudDto[]): EnvioDetalleD
     ut: shipment.ingresoUtc || shipment.ingresoLocal || '',
     cantidadMaletas: shipment.cantidad,
     idCliente: shipment.idCliente,
-    estado: (shipment.status ?? 'PENDING') as EnvioDetalleDto['estado'],
+    estado: mapStatusToEnvioEstado(shipment.status),
     minutoEntrega: null,
     vueloIds: shipment.vueloIds ?? [],
   }))
@@ -483,61 +489,63 @@ export default function DailyOperationPage() {
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-      // ✅ Si ya hay conexión abierta, no crear otra
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        return
-      }
+    // ✅ Si ya hay conexión abierta, no crear otra
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      return
+    }
 
-      const socketUrl = buildDailyOperationWsUrl()
-      console.log('[WS] Connecting to:', socketUrl)
-      const socket = new WebSocket(socketUrl)
-      socketRef.current = socket
+    const socketUrl = buildDailyOperationWsUrl()
+    console.log('[WS] Connecting to:', socketUrl)
+    const socket = new WebSocket(socketUrl)
+    socketRef.current = socket
 
-      socket.onopen = () => {
-        console.log('[WS] ✅ Connected')
-        setSocketConnected(true)
-      }
+    socket.onopen = () => {
+      console.log('[WS] ✅ Connected')
+      setSocketConnected(true)
+    }
 
-      socket.onclose = (event) => {
-        console.log('[WS] ❌ Closed:', event.code, event.reason)
-        setSocketConnected(false)
-      }
+    socket.onclose = (event) => {
+      console.log('[WS] ❌ Closed:', event.code, event.reason)
+      setSocketConnected(false)
+    }
 
-      socket.onerror = (error) => {
-        console.error('[WS] ⚠️ Error:', error)
-        setSocketConnected(false)
-      }
+    socket.onerror = (error) => {
+      console.error('[WS] ⚠️ Error:', error)
+      setSocketConnected(false)
+    }
 
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as DailyOperationEvent
-          console.log('[WS] Message received:', message.type)
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as DailyOperationEvent
+        console.log('[WS] Message received:', message.type)
 
-          if (message.type === 'SNAPSHOT') {
-            applySnapshot(message.payload)
-            return
-          }
-          // ... resto igual
-        } catch (err) {
-          console.error('[WS] Parse error:', err)
-          setError('Se recibió un evento inválido desde operación diaria.')
+        if (message.type === 'SNAPSHOT') {
+          applySnapshot(message.payload)
+          return
         }
+        // ... resto igual
+      } catch (err) {
+        console.error('[WS] Parse error:', err)
+        setError('Se recibió un evento inválido desde operación diaria.')
       }
+    }
 
-      return () => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.close()
-        }
+    return () => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close()
       }
-    }, [applySnapshot])
+    }
+  }, [applySnapshot])
 
   const activeSegments = useMemo(() => {
+    if (currentMinute === null) return []
     return segments.filter(
       (segment) => currentMinute >= segment.salidaMin && currentMinute <= segment.llegadaMin
     )
   }, [segments, currentMinute])
 
   const upcomingSegments = useMemo(() => {
+    if (currentMinute === null) return []
     return segments
       .filter((segment) => segment.salidaMin > currentMinute)
       .sort((a, b) => a.salidaMin - b.salidaMin)
@@ -555,6 +563,7 @@ export default function DailyOperationPage() {
   }, [segments, mapFilters, ranges, mapAirports])
 
   const visibleActiveSegments = useMemo(() => {
+    if (currentMinute === null) return []
     return mapSegments.filter(
       (segment) => currentMinute >= segment.salidaMin && currentMinute <= segment.llegadaMin
     )
@@ -584,8 +593,8 @@ export default function DailyOperationPage() {
     }
   }, [mapAirports, selectedAirportCode])
 
-  const totalFlights = segments.length;
-  const totalActiveFlights = activeSegments.length;
+  const totalFlights = segments.length
+  const totalActiveFlights = activeSegments.length
 
   const stats = useMemo(() => {
     const totalFlights = segments.length
@@ -595,15 +604,15 @@ export default function DailyOperationPage() {
       (acc, segment) => acc + (segment.capacidad ?? 0),
       0
     )
-  
+
     const capacityPct = totalCapacity > 0 ? (totalCargo * 100) / totalCapacity : 0
     const activePct = totalFlights > 0 ? (totalActive * 100) / totalFlights : 0
-  
+
     const shipmentProgressPct = shipmentSummary?.total
       ? ((shipmentSummary.delivered + shipmentSummary.inTransit + shipmentSummary.assigned) * 100) /
-        shipmentSummary.total
+      shipmentSummary.total
       : 0
-  
+
     let totalWarehouseOcupacion = 0
     let totalWarehouseCapacidad = 0
     Object.values(warehouseSnapshot).forEach((w) => {
@@ -656,7 +665,7 @@ export default function DailyOperationPage() {
       destino: segment.destino,
       salidaMin: segment.salidaMin,
       llegadaMin: segment.llegadaMin,
-      estado: getFlightStatusLabel(getSegmentStatus(segment, currentMinute)),
+      estado: getFlightStatusLabel(currentMinute !== null ? getSegmentStatus(segment, currentMinute) : undefined),
       carga: segment.carga,
       capacidad: segment.capacidad,
       porcentaje:
@@ -669,7 +678,7 @@ export default function DailyOperationPage() {
           : undefined,
     }))
   }, [currentMinute, ranges, visibleActiveSegments])
-  
+
   const upcomingFlightItems = useMemo(() => {
     return upcomingSegments.map((segment) => ({
       flightId: segment.flightId,
@@ -678,7 +687,7 @@ export default function DailyOperationPage() {
       destino: segment.destino,
       salidaMin: segment.salidaMin,
       llegadaMin: segment.llegadaMin,
-      estado: getFlightStatusLabel(getSegmentStatus(segment, currentMinute)),
+      estado: getFlightStatusLabel(currentMinute !== null ? getSegmentStatus(segment, currentMinute) : undefined),
       carga: segment.carga,
       capacidad: segment.capacidad,
       porcentaje:
@@ -691,7 +700,7 @@ export default function DailyOperationPage() {
           : undefined,
     }))
   }, [upcomingSegments, currentMinute, ranges])
-  
+
   const airportItems = useMemo(() => {
     const airportFlightTimings = buildAirportFlightTimings(segments, currentMinute)
 
@@ -714,7 +723,7 @@ export default function DailyOperationPage() {
         : undefined,
     }))
   }, [airports, currentMinute, ranges, segments, warehouseSnapshot])
-  
+
   const lastSyncLabel = formatDateTime(lastSyncAt)
 
   const handleSelectFlight = (flightId: number) => {

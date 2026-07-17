@@ -117,12 +117,12 @@ export default function ShipmentsCrud() {
     void load()
   }, [page, query])
 
-	  const buildEmptyForm = (airport: AirportCrudDto | null = logisticsAirport): ShipmentCrudDto => ({
-	    ...EMPTY_FORM,
-	    origen: logisticsAirportCode ?? '',
-	    origenGmt: airport?.gmt ?? EMPTY_FORM.origenGmt,
-	    ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : '',
-	  })
+  const buildEmptyForm = (airport: AirportCrudDto | null = logisticsAirport): ShipmentCrudDto => ({
+    ...EMPTY_FORM,
+    origen: logisticsAirportCode ?? '',
+    origenGmt: airport?.gmt ?? EMPTY_FORM.origenGmt,
+    ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : '',
+  })
 
   const resetForm = () => {
     setForm(buildEmptyForm())
@@ -174,16 +174,16 @@ export default function ShipmentsCrud() {
 
     setActiveOaciList((current) => (current === 'origen' ? null : current))
     setForm((current) => {
-	      const nextGmt = logisticsAirport?.gmt ?? current.origenGmt
-	      if (current.origen === logisticsAirportCode && current.origenGmt === nextGmt) {
-	        return current
-	      }
-	      return {
-	        ...current,
-	        origen: logisticsAirportCode,
-	        origenGmt: nextGmt,
-	        ingresoLocal: toDatetimeLocalFromGmt(nextGmt),
-	      }
+      const nextGmt = logisticsAirport?.gmt ?? current.origenGmt
+      if (current.origen === logisticsAirportCode && current.origenGmt === nextGmt) {
+        return current
+      }
+      return {
+        ...current,
+        origen: logisticsAirportCode,
+        origenGmt: nextGmt,
+        ingresoLocal: toDatetimeLocalFromGmt(nextGmt),
+      }
     })
   }, [isModalOpen, logisticsAirport?.gmt, logisticsAirportCode])
 
@@ -194,21 +194,21 @@ export default function ShipmentsCrud() {
     void loadLogisticsAirport()
   }, [isModalOpen, logisticsAirport, logisticsAirportCode])
 
-	  const handleSubmit = async () => {
-	    setError(null)
-	    console.debug('[ShipmentsCrud] submit start', { form })
-	    if (!form.codigoPedido || !form.origen || !form.destino || !form.ingresoLocal || !form.idCliente) {
-	      setError('Completa los campos requeridos.')
-	      return
-	    }
-	
-	    const payload: ShipmentCrudDto = {
-	      ...form,
-	      origen: (logisticsAirportCode ?? form.origen).trim().toUpperCase(),
-	      destino: form.destino.trim().toUpperCase(),
-	      codigoPedido: form.codigoPedido.trim(),
-	      idCliente: form.idCliente.trim(),
-	    }
+  const handleSubmit = async () => {
+    setError(null)
+    console.debug('[ShipmentsCrud] submit start', { form })
+    if (!form.codigoPedido || !form.origen || !form.destino || !form.ingresoLocal || !form.idCliente) {
+      setError('Completa los campos requeridos.')
+      return
+    }
+
+    const payload: ShipmentCrudDto = {
+      ...form,
+      origen: (logisticsAirportCode ?? form.origen).trim().toUpperCase(),
+      destino: form.destino.trim().toUpperCase(),
+      codigoPedido: form.codigoPedido.trim(),
+      idCliente: form.idCliente.trim(),
+    }
     console.debug('[ShipmentsCrud] payload', payload)
 
     if (form.id) {
@@ -251,6 +251,15 @@ export default function ShipmentsCrud() {
     if (!uploadFile) {
       setUploadError('Selecciona un archivo .txt')
       return
+    }
+
+    // --- NUEVA VALIDACIÓN DE ROL POR NOMBRE DE ARCHIVO ---
+    if (logisticsAirportCode) {
+      const expectedFileName = `_envios_${logisticsAirportCode}_.txt`.toLowerCase();
+      if (uploadFile.name.toLowerCase() !== expectedFileName) {
+        setUploadError(`Permiso denegado. Solo puedes cargar el archivo de tu aeropuerto asignado: _envios_${logisticsAirportCode}_.txt`);
+        return;
+      }
     }
 
     setUploadLoading(true)
@@ -309,19 +318,19 @@ export default function ShipmentsCrud() {
   }
 
   const handleSelectAirport = (kind: 'origen' | 'destino', codigo: string) => {
-	    setForm((current) => {
-	      const airport = airports.find((item) => item.codigoOaci.toUpperCase() === codigo.toUpperCase())
-	      return {
-	        ...current,
-	        [kind]: codigo,
-	        ...(kind === 'origen'
-            ? {
-              origenGmt: airport?.gmt ?? current.origenGmt,
-              ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : current.ingresoLocal,
-            }
-            : {}),
-	      }
-	    })
+    setForm((current) => {
+      const airport = airports.find((item) => item.codigoOaci.toUpperCase() === codigo.toUpperCase())
+      return {
+        ...current,
+        [kind]: codigo,
+        ...(kind === 'origen'
+          ? {
+            origenGmt: airport?.gmt ?? current.origenGmt,
+            ingresoLocal: airport ? toDatetimeLocalFromGmt(airport.gmt) : current.ingresoLocal,
+          }
+          : {}),
+      }
+    })
     setActiveOaciList(null)
   }
 
@@ -369,7 +378,7 @@ export default function ShipmentsCrud() {
             <span>{item.codigoPedido}</span>
             <span>{item.origen}</span>
             <span>{item.destino}</span>
-	            <span>{formatDateTime(item.ingresoLocal)}</span>
+            <span>{formatDateTime(item.ingresoLocal)}</span>
             <span>{formatInteger(item.cantidad)}</span>
             <span>{item.idCliente}</span>
             <span className={`status-badge ${getShipmentStatusClass(item.status)}`}>
@@ -390,7 +399,16 @@ export default function ShipmentsCrud() {
           <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
             <h2>Archivo TXT de envios</h2>
             <p>Formato: codigoPedido-AAAAMMDD-HH-MM-DESTINO-CANTIDAD-IDCLIENTE</p>
-            <p>Nombre requerido: <code>_envios_OACI_.txt</code>, por ejemplo <code>_envios_EBCI_.txt</code></p>
+
+            {logisticsAirportCode ? (
+              <p>
+                Nombre requerido para tu usuario: <strong><code>_envios_{logisticsAirportCode}_.txt</code></strong>
+                <br />
+                <small style={{ color: '#6c757d' }}>Como registrador, solo tienes permisos para cargar envíos de tu aeropuerto asignado.</small>
+              </p>
+            ) : (
+              <p>Nombre requerido: <code>_envios_OACI_.txt</code>, por ejemplo <code>_envios_EBCI_.txt</code></p>
+            )}
             <div className="upload-actions">
               <label className="btn ghost">
                 Seleccionar archivo
@@ -524,14 +542,14 @@ export default function ShipmentsCrud() {
               title="Hora local derivada del aeropuerto origen"
             />
           </label>
-	          <label className="field">
-	            GMT origen
-	            <input
-	              value={`GMT${form.origenGmt >= 0 ? '+' : ''}${form.origenGmt}`}
-	              disabled
-	              title="GMT derivado del aeropuerto origen"
-	            />
-	          </label>
+          <label className="field">
+            GMT origen
+            <input
+              value={`GMT${form.origenGmt >= 0 ? '+' : ''}${form.origenGmt}`}
+              disabled
+              title="GMT derivado del aeropuerto origen"
+            />
+          </label>
           <label className="field">
             Cantidad
             <input type="number" value={form.cantidad} onChange={(event) => handleChange('cantidad', Number(event.target.value))} />

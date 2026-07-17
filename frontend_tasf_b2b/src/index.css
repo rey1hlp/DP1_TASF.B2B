@@ -69,9 +69,9 @@ body {
 
 .app-topbar {
   height: 56px;
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 160px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
 
   padding: 0 1.5rem;
@@ -84,10 +84,12 @@ body {
 }
 
 .topbar-main {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .topbar-page-summary {
@@ -147,6 +149,7 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex: 0 0 auto;
 }
 
 .topbar-icon-button {
@@ -201,6 +204,9 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .topbar-user-meta {
