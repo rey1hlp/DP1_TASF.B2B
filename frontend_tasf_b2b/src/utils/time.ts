@@ -77,7 +77,7 @@ function normalizeGmtOffsetMinutes(value?: number | null): number | null {
   return Math.round(value * 60)
 }
 
-function shiftAbsoluteMinuteByGmt(minute: number, gmt?: number | null): number {
+export function shiftAbsoluteMinuteByGmt(minute: number, gmt?: number | null): number {
   const offsetMinutes = normalizeGmtOffsetMinutes(gmt)
   return offsetMinutes === null ? minute : minute + offsetMinutes
 }

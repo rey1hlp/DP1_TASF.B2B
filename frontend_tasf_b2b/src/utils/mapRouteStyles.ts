@@ -64,7 +64,7 @@ export const ALL_FLIGHTS_ROUTE_BASE_STYLE = {
 } satisfies Omit<L.PolylineOptions, 'color'>
 
 export const CANCELLED_ROUTE_STYLE = {
-  weight: 3,
+  weight: 1.4,
   color: '#dc2626',
   opacity: 1,
   dashArray: '10, 8',
@@ -74,7 +74,7 @@ export const CANCELLED_ROUTE_STYLE = {
 } satisfies L.PolylineOptions
 
 export const VIRTUAL_CANCELLED_ROUTE_STYLE = {
-  weight: 3,
+  weight: 1.4,
   color: '#d97706',
   opacity: 1,
   dashArray: '4, 8',

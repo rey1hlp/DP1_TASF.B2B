@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import type { FlightCrudDto, ShipmentCrudDto } from '../types/sim'
 import { getFlightById, getShipmentsByFlight } from '../services/api'
 import {
@@ -8,7 +8,8 @@ import {
   formatDurationHours,
   formatPercent,
   formatDateFromDayIndex,
-  formatClockFromMinute
+  formatClockFromMinute,
+  shiftAbsoluteMinuteByGmt
 } from '../utils/time'
 
 interface FlightDetailPageProps {
@@ -40,10 +41,13 @@ export default function FlightDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [filterOrigen, setFilterOrigen] = useState('');
   const [filterDestino, setFilterDestino] = useState('');
+  const lastFlightIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const loadDetail = async () => {
-      setLoading(true);
+      if (lastFlightIdRef.current !== flightId) {
+        setLoading(true);
+      }
       setError(null);
       try {
         if (isSimulation) {
@@ -55,14 +59,14 @@ export default function FlightDetailPage({
               origenOaci: simulationFlight.origen,
               destino: simulationFlight.destino,
               destinoOaci: simulationFlight.destino,
-	              origenCiudad: "Simulado",
-	              destinoCiudad: "Simulado",
-	              salidaLocal: formatClockFromMinute(simulationFlight.salidaMin ?? 0),
-	              llegadaLocal: formatClockFromMinute(simulationFlight.llegadaMin ?? 0),
-	              salidaUtcOffsetMin: simulationFlight.salidaMin ?? 0,
-	              duracionMin: Math.max(0, (simulationFlight.llegadaMin ?? 0) - (simulationFlight.salidaMin ?? 0)),
-	              origenGmt: 0,
-	              destinoGmt: 0,
+              origenCiudad: "Simulado",
+              destinoCiudad: "Simulado",
+              salidaLocal: formatClockFromMinute(shiftAbsoluteMinuteByGmt(simulationFlight.salidaMin ?? 0, simulationFlight.origenGmt ?? 0)),
+              llegadaLocal: formatClockFromMinute(shiftAbsoluteMinuteByGmt(simulationFlight.llegadaMin ?? 0, simulationFlight.destinoGmt ?? 0)),
+              salidaUtcOffsetMin: simulationFlight.salidaMin ?? 0,
+              duracionMin: Math.max(0, (simulationFlight.llegadaMin ?? 0) - (simulationFlight.salidaMin ?? 0)),
+              origenGmt: simulationFlight.origenGmt ?? 0,
+              destinoGmt: simulationFlight.destinoGmt ?? 0,
 	              capacidad: simulationFlight.capacidad || 0,
 	              cancelado: false,
 	            } as any);
@@ -80,6 +84,7 @@ export default function FlightDetailPage({
         console.error(err);
         setError(err?.message || 'Error al cargar los datos del vuelo');
       } finally {
+        lastFlightIdRef.current = flightId;
         setLoading(false);
       }
     };
@@ -110,8 +115,14 @@ export default function FlightDetailPage({
   }
 
   // Tiempos simulados de vuelo
-  const salidaMin = simulationFlight?.salidaMin ?? 0;
-  const llegadaMin = simulationFlight?.llegadaMin ?? 0;
+  const rawSalidaMin = simulationFlight?.salidaMin ?? 0;
+  const rawLlegadaMin = simulationFlight?.llegadaMin ?? 0;
+  const origenGmt = simulationFlight?.origenGmt ?? 0;
+  const destinoGmt = simulationFlight?.destinoGmt ?? 0;
+
+  const salidaMin = shiftAbsoluteMinuteByGmt(Math.floor(rawSalidaMin), origenGmt);
+  const llegadaMin = shiftAbsoluteMinuteByGmt(Math.floor(rawLlegadaMin), destinoGmt);
+
   const fechaSalidaSim = formatDateFromDayIndex(Math.floor(salidaMin / 1440));
   const horaSalidaSim = formatClockFromMinute(salidaMin);
   const fechaLlegadaSim = formatDateFromDayIndex(Math.floor(llegadaMin / 1440));

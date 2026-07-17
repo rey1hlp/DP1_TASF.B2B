@@ -195,6 +195,9 @@ public class DailyPlanningService {
                 "[DAILY_PLAN] planning result={}",
                 mejor != null ? ("fitness=" + mejor.fitness + ", factible=" + mejor.esFactible()) : "null"
             );
+            
+            enforceStrictCapacity(mejor, envios);
+            
             List<FlightSegmentDto> segmentos = construirSegmentos(mejor, envios, aeropuertos);
             log.info("[DAILY_PLAN] segments built={}", segmentos.size());
 
@@ -592,6 +595,31 @@ public class DailyPlanningService {
         }
 
         return snapshot;
+    }
+
+    private void enforceStrictCapacity(Individuo ind, List<Envio> envios) {
+        if (ind == null || ind.asignaciones == null) return;
+        Map<Integer, Integer> cargaVuelo = new HashMap<>();
+        for (int i = 0; i < envios.size(); i++) {
+            Ruta ruta = ind.asignaciones[i];
+            if (ruta == null || ruta.vuelos == null || ruta.vuelos.isEmpty()) continue;
+            
+            boolean canFit = true;
+            for (Vuelo v : ruta.vuelos) {
+                int current = cargaVuelo.getOrDefault(v.id, 0);
+                if (current + envios.get(i).cantidad > v.capacidad) {
+                    canFit = false;
+                    break;
+                }
+            }
+            if (canFit) {
+                for (Vuelo v : ruta.vuelos) {
+                    cargaVuelo.put(v.id, cargaVuelo.getOrDefault(v.id, 0) + envios.get(i).cantidad);
+                }
+            } else {
+                ind.asignaciones[i] = null; // Rejected due to capacity overflow, leaves bags in origin
+            }
+        }
     }
 
     private Map<String, RespuestaRutaEnvioDto> construirRutasPorPaquete(Individuo mejor, List<Envio> envios) {

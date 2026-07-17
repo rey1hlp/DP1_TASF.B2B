@@ -29,11 +29,13 @@ import { resolveSemaphoreColor, resolveSemaphoreLevel } from '../utils/semaphore
 import FlightDetailPage from './FlightDetailPage'
 import { appendCancelledFlightDay, buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
 import SimulationReportModal from '../components/SimulationReportModal'
+import { useAuth } from '../contexts/AuthContext'
 
 import {
   formatDurationHours,
   formatCompactDate,
   formatDateTime,
+  formatSimDateTimeFromMinuteWithGmt,
   formatElapsedReal,
   formatIsoDateFromDayIndex,
   formatInteger,
@@ -94,6 +96,7 @@ async function fetchSimulationShipments(simId: string, minute: number | null): P
 }
 
 export default function SimulationPage() {
+  const { user } = useAuth()
   const [airports, setAirports] = useState<AirportDto[]>([])
   const [flightCatalog, setFlightCatalog] = useState<FlightCrudDto[]>([])
   const [cancelledDays, setCancelledDays] = useState(() => readCancelledFlightDays({ includeVirtual: false }))
@@ -623,7 +626,8 @@ export default function SimulationPage() {
     }
 
     const minute = displayMinute ?? meta.diaMin * 1440
-    return formatDateTime(minute * 60 * 1000)
+    const userGmt = user?.airportCode ? airportGmtByCode[user.airportCode] ?? -5 : -5
+    return formatSimDateTimeFromMinuteWithGmt(minute, userGmt)
   })()
 
   const simDurationMapLabel = (() => {
@@ -1095,6 +1099,8 @@ export default function SimulationPage() {
               salidaMin: seg.salidaMin,
               llegadaMin: seg.llegadaMin,
               ocupacion: seg.carga,
+              origenGmt: airportGmtByCode[seg.origen] ?? 0,
+              destinoGmt: airportGmtByCode[seg.destino] ?? 0,
             };
           })()}
           onVolver={() => setFullDetailFlightId(null)}
@@ -1135,6 +1141,7 @@ export default function SimulationPage() {
                 onSpeedChange={handlePlaybackSpeedChange}
               />
               <MapView
+                isSimulation={true}
                 airports={mapAirports}
                 segments={mapSegments}
                 currentMinute={displayMinute}

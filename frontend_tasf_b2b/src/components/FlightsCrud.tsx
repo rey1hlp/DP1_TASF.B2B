@@ -65,7 +65,6 @@ export default function FlightsCrud({ onViewDetail }: FlightsCrudProps) {
         const result = await listFlights(0, 1000, query)
         setAllItems(result.content)
         setItems(result.content)
-        setPage(0)
       } else {
         const result = await listFlights(page, 10, query)
         setItems(result.content)

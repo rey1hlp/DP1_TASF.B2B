@@ -759,6 +759,10 @@ body {
   will-change: transform;
 }
 
+.plane-marker.daily-plane {
+  transition: transform 1s linear;
+}
+
 .plane-marker-hitbox {
   width: 40px;
   height: 40px;

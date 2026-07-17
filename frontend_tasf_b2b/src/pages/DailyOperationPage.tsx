@@ -292,8 +292,11 @@ export default function DailyOperationPage() {
     }
   }
 
-  const fallbackCurrentMinute = useMemo(() => getCurrentMinuteOfDay(now), [now])
-  const currentMinute = serverCurrentMinute ?? fallbackCurrentMinute
+  const currentMinute = useMemo(() => {
+    if (serverCurrentMinute === null) return null
+    const elapsedMs = now.getTime() - new Date(lastSyncAt || now).getTime()
+    return serverCurrentMinute + (elapsedMs / 60000)
+  }, [now, serverCurrentMinute, lastSyncAt])
   const operationDateKey = getLimaDateKey()
   const airportGmtByCode = useMemo(
     () =>
@@ -811,6 +814,7 @@ export default function DailyOperationPage() {
       >
         <div className="map-placeholder">
           <MapView
+            isSimulation={false}
             airports={mapAirports}
             segments={mapSegments}
             currentMinute={currentMinute}

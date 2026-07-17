@@ -131,6 +131,7 @@ export type MapViewProps = {
   onSearchShipment?: (codigo: string) => void | Promise<void>
   onClearShipmentRoute?: () => void
   onToggleFullscreen: () => void
+  isSimulation?: boolean
   showCancelledDetails?: boolean
 }
 
@@ -269,6 +270,7 @@ function buildPlaneIcon(
   zoom: number,
   dimmed = false,
   isSelected = false,
+  isSimulation = true,
 ) {
   // está dibujado apuntando en diagonal (hacia arriba a la derecha).
   const rotation = heading - 45
@@ -297,7 +299,7 @@ function buildPlaneIcon(
   </svg>`
 
   return L.divIcon({
-    className: 'plane-marker',
+    className: isSimulation ? 'plane-marker' : 'plane-marker daily-plane',
     html: `<div class="plane-marker-hitbox"><div style="transform:rotate(${rotation}deg);width:${visualSize}px;height:${visualSize}px;opacity:${dimmed ? 0.4 : 1}">${svg}</div></div>`,
     iconSize: [PLANE_MARKER_HITBOX_SIZE, PLANE_MARKER_HITBOX_SIZE],
     iconAnchor: [PLANE_MARKER_HITBOX_SIZE / 2, PLANE_MARKER_HITBOX_SIZE / 2],
@@ -387,6 +389,7 @@ export default function MapView({
   onFlightPreview,
   onSearchShipment,
   onToggleFullscreen,
+  isSimulation = true,
   showCancelledDetails = true,
 }: MapViewProps) {
   const { simulation } = useSimulationContext()
@@ -1151,7 +1154,7 @@ export default function MapView({
       const anySelectionActive = selectedFlightId !== null || selectedShipmentRoute != null
       const isDimmed = anySelectionActive && !isSelected
 
-      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, mapZoom, isDimmed, isSelectedFlight)
+      const icon = buildPlaneIcon(heading, seg.carga, seg.capacidad, ranges, mapZoom, isDimmed, isSelectedFlight, isSimulation)
 
       const tooltipParts = [
         `Vuelo ${getVisibleFlightId(seg)}`,
