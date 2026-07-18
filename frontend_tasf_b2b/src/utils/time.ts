@@ -101,6 +101,51 @@ function formatDateTimeWithGmt(value: Date, gmt?: number | null): string {
   )
 }
 
+function parseUtcDateTime(value?: string | Date | number | null): Date | null {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  if (typeof value === 'number') {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+
+  const raw = value.trim()
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)
+  const utcLikeMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/)
+  if (!hasTimezone && utcLikeMatch) {
+    const [, yyyy, mm, dd, hh, min, sec] = utcLikeMatch
+    return new Date(Date.UTC(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(hh),
+      Number(min),
+      Number(sec ?? '0'),
+    ))
+  }
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export function formatUtcDateTimeForClock(
+  value?: string | Date | number | null,
+  gmt?: number | null,
+): string {
+  const parsed = parseUtcDateTime(value)
+  if (!parsed) {
+    return value ? String(value) : '--'
+  }
+  if (normalizeGmtOffsetMinutes(gmt) !== null) {
+    return formatDateTimeWithGmt(parsed, gmt)
+  }
+  return formatDateTime(parsed)
+}
+
 export function formatDateTime(value?: string | Date | number | null): string {
   if (value === null || value === undefined || value === '') {
     return '--'
