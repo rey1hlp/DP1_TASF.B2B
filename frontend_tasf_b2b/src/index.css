@@ -3170,6 +3170,10 @@ body {
   padding: 12px 14px 14px;
 }
 
+.airport-shipments-card {
+  max-width: min(440px, calc(100% - 32px));
+}
+
 .flight-panel-section-heading {
   display: grid;
   gap: 2px;
@@ -3250,11 +3254,72 @@ body {
   min-width: 0;
 }
 
+.airport-shipment-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .flight-shipment-main {
   width: 100%;
   min-width: 0;
   display: grid;
   gap: 5px;
+}
+
+.airport-shipment-filter-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.airport-shipment-filter-tab {
+  min-height: 30px;
+  border: 1px solid #cbd7ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.airport-shipment-filter-tab:hover {
+  background: #f3f7ff;
+}
+
+.airport-shipment-filter-tab.active {
+  border-color: #9ebce8;
+  background: #e8f0fe;
+  color: #1d4e96;
+}
+
+.airport-shipment-direction-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.airport-direction-tag {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  padding: 4px 7px;
+}
+
+.airport-direction-tag.incoming {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.airport-direction-tag.outgoing {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .flight-shipment-code {

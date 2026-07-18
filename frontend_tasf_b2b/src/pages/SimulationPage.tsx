@@ -509,19 +509,6 @@ export default function SimulationPage() {
     void loadShipmentRouteForEntityPanel(shipmentCode)
   }, [loadShipmentRouteForEntityPanel, simId])
 
-  const handleMapBagFocusRequest = useCallback((bagCode: string) => {
-    entityFocusRequestIdRef.current += 1
-    setIsPanelCollapsed(false)
-    setEntityFocusRequest({
-      type: 'bag',
-      id: bagCode,
-      requestId: entityFocusRequestIdRef.current,
-    })
-
-    if (!bagCode || !simId) return
-    void loadShipmentRouteForEntityPanel(bagCode)
-  }, [loadShipmentRouteForEntityPanel, simId])
-
   const handleClearShipmentRoute = useCallback(() => {
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
@@ -1190,7 +1177,6 @@ export default function SimulationPage() {
                 isPanelCollapsed={isPanelCollapsed}
                 onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
                 onShipmentFocusRequest={handleMapShipmentFocusRequest}
-                onBagFocusRequest={handleMapBagFocusRequest}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
                 onFlightPreview={handleMapFlightPreview}

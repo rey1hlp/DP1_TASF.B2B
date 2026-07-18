@@ -344,19 +344,6 @@ export default function DailyOperationPage() {
     void loadShipmentRouteForEntityPanel(shipmentCode)
   }, [loadShipmentRouteForEntityPanel])
 
-  const handleMapBagFocusRequest = useCallback((bagCode: string) => {
-    entityFocusRequestIdRef.current += 1
-    setIsPanelCollapsed(false)
-    setEntityFocusRequest({
-      type: 'bag',
-      id: bagCode,
-      requestId: entityFocusRequestIdRef.current,
-    })
-
-    if (!bagCode) return
-    void loadShipmentRouteForEntityPanel(bagCode)
-  }, [loadShipmentRouteForEntityPanel])
-
   const currentMinute = useMemo(() => {
     if (serverCurrentMinute === null) return null
     const elapsedMs = now.getTime() - new Date(lastSyncAt || now).getTime()
@@ -896,7 +883,6 @@ export default function DailyOperationPage() {
             isPanelCollapsed={isPanelCollapsed}
             onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
             onShipmentFocusRequest={handleMapShipmentFocusRequest}
-            onBagFocusRequest={handleMapBagFocusRequest}
             onClearShipmentRoute={() => {
               setSelectedShipmentRoute(null)
               setShipmentSearchError(null)
