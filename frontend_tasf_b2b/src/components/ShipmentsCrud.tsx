@@ -252,19 +252,20 @@ export default function ShipmentsCrud() {
     setForm(buildEmptyForm())
   }
 
-  const ensureAirports = async (): Promise<AirportCrudDto[]> => {
-    if (airportsLoaded) {
-      return airports
-    }
+  const refreshAirports = async (): Promise<AirportCrudDto[]> => {
     try {
       const result = await listAirports(0, 1000, '')
       setAirports(result.content)
       setAirportsLoaded(true)
       return result.content
     } catch {
-      setAirports([])
-      return []
+      setAirportsLoaded(false)
+      return airports
     }
+  }
+
+  const ensureAirports = async (): Promise<AirportCrudDto[]> => {
+    return airportsLoaded ? airports : refreshAirports()
   }
 
   const loadLogisticsAirport = async (knownAirports: AirportCrudDto[] = airports): Promise<AirportCrudDto | null> => {
@@ -369,19 +370,25 @@ export default function ShipmentsCrud() {
 
     console.debug('[ShipmentsCrud] payload', payload)
 
-    if (form.id) {
-      console.debug('[ShipmentsCrud] updateShipment', { id: form.id })
-      await updateShipment(form.id, payload)
-    } else {
-      console.debug('[ShipmentsCrud] createShipment')
-      const created = await createShipment(payload)
-      setShipmentCodeNotice(created.codigoPedido)
-    }
+    try {
+      if (form.id) {
+        console.debug('[ShipmentsCrud] updateShipment', { id: form.id })
+        await updateShipment(form.id, payload)
+      } else {
+        console.debug('[ShipmentsCrud] createShipment')
+        const created = await createShipment(payload)
+        setShipmentCodeNotice(created.codigoPedido)
+      }
 
-    resetForm()
-    setIsModalOpen(false)
-    console.debug('[ShipmentsCrud] submit done, reloading list')
-    await load()
+      resetForm()
+      setIsModalOpen(false)
+      console.debug('[ShipmentsCrud] submit done, reloading list')
+      await load()
+    } catch (err) {
+      await refreshAirports()
+      const msg = err instanceof Error ? err.message : 'Error inesperado'
+      setError(msg)
+    }
   }
 
   const handleEdit = (item: ShipmentCrudDto) => {
@@ -495,11 +502,15 @@ export default function ShipmentsCrud() {
       }
 
       const result = await uploadShipmentsTxt(fileToUpload)
+      const backendInvalidCapacityLines = result.invalidCapacityLines ?? []
+      if (backendInvalidCapacityLines.length > 0) {
+        await refreshAirports()
+      }
       setUploadResult({
         ...result,
         total: originalTotal || result.total,
         skipped: result.skipped + invalidCapacityLines.length,
-        invalidCapacityLines,
+        invalidCapacityLines: [...invalidCapacityLines, ...backendInvalidCapacityLines],
       })
       await load()
     } catch (err) {
@@ -654,7 +665,7 @@ export default function ShipmentsCrud() {
                 ) : null}
                 {uploadResult.invalidCapacityLines.length > 0 ? (
                   <div>
-                    <div>Los siguientes registros superan la capacidad del aeropuerto origen o destino:</div>
+                    <div>Los siguientes registros tienen cantidad invalida o superan la capacidad del aeropuerto origen o destino:</div>
                     <pre className="upload-list">{uploadResult.invalidCapacityLines.join('\n')}</pre>
                   </div>
                 ) : null}

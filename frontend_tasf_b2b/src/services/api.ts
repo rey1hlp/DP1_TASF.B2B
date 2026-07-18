@@ -44,6 +44,12 @@ export type AppUserCrudDto = {
   updatedAt?: string | null
 }
 
+type ApiErrorResponse = {
+  code?: string
+  message?: string
+  details?: Record<string, unknown>
+}
+
 export type LoginResponse = {
   accessToken: string
   tokenType: 'Bearer'
@@ -81,6 +87,21 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
   }
 
   return response
+}
+
+async function readApiErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const contentType = res.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      const data = await res.json() as ApiErrorResponse
+      return data.message?.trim() || fallback
+    }
+
+    const text = await res.text()
+    return text.trim() || fallback
+  } catch {
+    return fallback
+  }
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -403,7 +424,7 @@ export async function createShipment(payload: ShipmentCrudDto): Promise<Shipment
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
-    throw new Error('No se pudo crear envio')
+    throw new Error(await readApiErrorMessage(res, 'No se pudo crear envio'))
   }
   return res.json()
 }
@@ -415,7 +436,7 @@ export async function updateShipment(id: number, payload: ShipmentCrudDto): Prom
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
-    throw new Error('No se pudo actualizar envio')
+    throw new Error(await readApiErrorMessage(res, 'No se pudo actualizar envio'))
   }
   return res.json()
 }
@@ -435,7 +456,7 @@ export async function uploadShipmentsTxt(file: File): Promise<BulkImportResult> 
     body: form,
   })
   if (!res.ok) {
-    throw new Error('No se pudo cargar envios desde TXT')
+    throw new Error(await readApiErrorMessage(res, 'No se pudo cargar envios desde TXT'))
   }
   return res.json()
 }
@@ -447,6 +468,7 @@ export type BulkImportResult = {
   skipped: number
   invalidFormatLines: string[]
   invalidAirportLines: string[]
+  invalidCapacityLines?: string[]
 }
 
 export async function uploadAirportsCsv(file: File): Promise<BulkImportResult> {
