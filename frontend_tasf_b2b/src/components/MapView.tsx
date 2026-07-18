@@ -401,7 +401,6 @@ export default function MapView({
   cancelledFlightTraces,
   onAirportDetailRequest,
   onAirportPreview,
-  onFlightDetailRequest,
   onFlightPreview,
   onSearchShipment,
   onToggleFullscreen,
@@ -1734,7 +1733,6 @@ export default function MapView({
       ) : null}
       {previewFlight && detailStage === 'flight' ? (
         <MapFloatingCard
-          actionLabel="Ver detalle completo"
           secondaryActionLabel="Ver envíos"
           onSecondaryAction={openShipmentsStage}
           badge={`Vuelo ${getVisibleFlightId(previewFlight)}`}
@@ -1750,7 +1748,6 @@ export default function MapView({
                 : `${formatBags(previewFlight.carga)}/--`,
             },
           ]}
-          onAction={() => onFlightDetailRequest?.(previewFlight.flightId)}
           onClose={closePreviewFlight}
           statusColor={resolveSemaphoreColor(
             getFlightLoadPercent(previewFlight),

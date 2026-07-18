@@ -365,7 +365,7 @@ export default function ShipmentsCrud() {
           <span>Pedido</span>
           <span>Origen</span>
           <span>Destino</span>
-          <span>Fecha Ingreso UTC</span>
+          <span>Fecha de Ingreso Local</span>
           <span>Cantidad</span>
           <span>Cliente</span>
           <span className="shipment-status-header">Estado</span>
