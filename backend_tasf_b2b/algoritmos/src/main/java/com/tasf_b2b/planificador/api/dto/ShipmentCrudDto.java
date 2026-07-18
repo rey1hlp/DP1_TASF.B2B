@@ -22,4 +22,6 @@ public class ShipmentCrudDto {
     public ShipmentStatus status;
     public LocalDateTime auditDateIns;
     public List<String> vueloIds;
+    public String codigoPedidoSolicitado;
+    public boolean codigoPedidoReasignado;
 }

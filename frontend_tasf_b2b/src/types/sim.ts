@@ -285,6 +285,8 @@ export type FlightCrudDto = {
 export type ShipmentCrudDto = {
   id?: number
   codigoPedido: string
+  codigoPedidoSolicitado?: string
+  codigoPedidoReasignado?: boolean
   origen: string
   origenCiudad?: string
   destino: string

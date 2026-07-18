@@ -12,6 +12,7 @@ import com.tasf_b2b.planificador.utils.UtilArchivos;
 import com.tasf_b2b.planificador.utils.OperationalTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +45,11 @@ public class ShipmentCrudController {
     private static final Logger log = LoggerFactory.getLogger(ShipmentCrudController.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Pattern PATRON_ORIGEN = Pattern.compile("_envios_([A-Za-z0-9]{4})_");
+    private static final Pattern PATRON_CODIGO_TXT = Pattern.compile("\\d{9}");
+    private static final Object SHIPMENT_CODE_LOCK = new Object();
+    private static final int NUMERIC_SHIPMENT_CODE_LENGTH = 9;
+    private static final int CREATE_CODE_RETRY_LIMIT = 4;
+    private static final int AIRPORT_CODE_LENGTH = 4;
 
     private final ShipmentRepository repository;
     private final AirportRepository airportRepository;
@@ -155,14 +161,14 @@ public class ShipmentCrudController {
             log.warn("[SHIPMENT_CRUD] create rejected by validation");
             return ResponseEntity.badRequest().build();
         }
-        ShipmentEntity saved = repository.save(entity);
+        ShipmentEntity saved = saveNewShipmentWithResolvedCode(entity);
         log.info(
-	            "[SHIPMENT_CRUD] create saved id={} pedido={} ingresoUtc={} status={}",
-	            saved.id,
-	            saved.codigoPedido,
-	            saved.ingresoUtc,
-	            saved.status
-	        );
+            "[SHIPMENT_CRUD] create saved id={} pedido={} ingresoUtc={} status={}",
+            saved.id,
+            saved.codigoPedido,
+            saved.ingresoUtc,
+            saved.status
+        );
         dailyPlanningService.replanNow("SHIPMENT_CREATE", "nuevo envio");
         return ResponseEntity.ok(toDto(saved));
     }
@@ -225,7 +231,7 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                String codigoPedido = parts[0].trim();
+                String codigoPedidoRaw = parts[0].trim();
                 String fecha = parts[1].trim();
                 String hhTxt = parts[2].trim();
                 String mmTxt = parts[3].trim();
@@ -233,11 +239,12 @@ public class ShipmentCrudController {
                 String cantidadTxt = parts[5].trim();
                 String idCliente = parts[6].trim();
 
-                if (codigoPedido.isBlank() || idCliente.isBlank()) {
+                if (!isSupportedTxtShipmentCode(codigoPedidoRaw) || idCliente.isBlank()) {
                     skipped++;
                     invalidFormat.add(line);
                     continue;
                 }
+                String codigoPedido = buildImportedShipmentCode(originOaci, codigoPedidoRaw);
 
                 AirportEntity destinoAirport = mapaAeropuertos.get(destinoOaci);
                 if (destinoAirport == null) {
@@ -409,7 +416,9 @@ public class ShipmentCrudController {
             return false;
         }
 
-        target.codigoPedido = source.codigoPedido.trim();
+        if (target.id == null) {
+            target.codigoPedido = source.codigoPedido != null ? source.codigoPedido.trim() : null;
+        }
         target.origen = origen;
         target.destino = destino;
         LocalDateTime ingresoLocal = source.ingresoLocal != null
@@ -421,6 +430,47 @@ public class ShipmentCrudController {
         target.slaHoras = source.slaHoras;
         target.status = source.status != null ? source.status : (target.status != null ? target.status : ShipmentStatus.PENDING);
         return true;
+    }
+
+    private ShipmentEntity saveNewShipmentWithResolvedCode(ShipmentEntity entity) {
+        String originCode = entity.origen != null ? normalizeAirport(entity.origen.codigoOaci) : null;
+        if (originCode == null || originCode.length() != AIRPORT_CODE_LENGTH) {
+            throw new IllegalStateException("No se pudo resolver el aeropuerto de origen para generar el codigo del envio");
+        }
+        synchronized (SHIPMENT_CODE_LOCK) {
+            String candidate = nextShipmentCode(originCode);
+            for (int attempt = 0; attempt < CREATE_CODE_RETRY_LIMIT; attempt++) {
+                entity.id = null;
+                entity.codigoPedido = candidate;
+                try {
+                    return repository.saveAndFlush(entity);
+                } catch (DataIntegrityViolationException ex) {
+                    log.warn(
+                        "[SHIPMENT_CRUD] create collision for pedido={} attempt={} cause={}",
+                        candidate,
+                        attempt + 1,
+                        ex.getClass().getSimpleName()
+                    );
+                    candidate = nextShipmentCode(originCode);
+                }
+            }
+        }
+        throw new IllegalStateException("No se pudo asignar un codigo unico al envio");
+    }
+
+    private String nextShipmentCode(String originCode) {
+        Long maxCode = repository.findMaxNumericCodigoPedidoByPrefix(originCode);
+        long currentMax = maxCode != null ? maxCode : 0L;
+        long next = currentMax + 1L;
+        return originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
+    }
+
+    private boolean isSupportedTxtShipmentCode(String code) {
+        return code != null && PATRON_CODIGO_TXT.matcher(code.trim()).matches();
+    }
+
+    private String buildImportedShipmentCode(String originOaci, String rawCode) {
+        return normalizeAirport(originOaci) + rawCode.trim();
     }
 
     private ShipmentCrudDto toDto(ShipmentEntity entity) {
@@ -445,7 +495,6 @@ public class ShipmentCrudController {
 
     private boolean isValid(ShipmentCrudDto dto, AuthenticatedUser user) {
         return dto != null
-            && dto.codigoPedido != null && !dto.codigoPedido.isBlank()
             && ((dto.origen != null && !dto.origen.isBlank()) || (user != null && user.airportCode() != null && !user.airportCode().isBlank()))
             && dto.destino != null && !dto.destino.isBlank()
             && dto.idCliente != null && !dto.idCliente.isBlank();

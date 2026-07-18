@@ -15,6 +15,16 @@ public interface ShipmentRepository extends JpaRepository<ShipmentEntity, Long> 
 
     List<ShipmentEntity> findByCodigoPedidoIn(List<String> codigosPedido);
 
+    @Query(
+        value = """
+            select coalesce(max(cast(substring(codigo_pedido, 5, 9) as unsigned)), 0)
+            from shipment
+            where codigo_pedido regexp concat('^', upper(:prefix), '[0-9]{9}$')
+            """,
+        nativeQuery = true
+    )
+    Long findMaxNumericCodigoPedidoByPrefix(@Param("prefix") String prefix);
+
     @Query("""
         select s from ShipmentEntity s
         where upper(s.origen.codigoOaci) = upper(:origen)
