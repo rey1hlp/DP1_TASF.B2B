@@ -48,6 +48,7 @@ public class ShipmentCrudController {
     private static final Object SHIPMENT_CODE_LOCK = new Object();
     private static final int NUMERIC_SHIPMENT_CODE_LENGTH = 9;
     private static final int CREATE_CODE_RETRY_LIMIT = 4;
+    private static final int AIRPORT_CODE_LENGTH = 4;
 
     private final ShipmentRepository repository;
     private final AirportRepository airportRepository;
@@ -159,22 +160,16 @@ public class ShipmentCrudController {
             log.warn("[SHIPMENT_CRUD] create rejected by validation");
             return ResponseEntity.badRequest().build();
         }
-        String requestedCode = entity.codigoPedido;
-        ShipmentEntity saved = saveNewShipmentWithResolvedCode(entity, requestedCode);
+        ShipmentEntity saved = saveNewShipmentWithResolvedCode(entity);
         log.info(
-            "[SHIPMENT_CRUD] create saved id={} pedido={} requested={} reassigned={} ingresoUtc={} status={}",
+            "[SHIPMENT_CRUD] create saved id={} pedido={} ingresoUtc={} status={}",
             saved.id,
             saved.codigoPedido,
-            requestedCode,
-            !Objects.equals(saved.codigoPedido, requestedCode),
             saved.ingresoUtc,
             saved.status
         );
         dailyPlanningService.replanNow("SHIPMENT_CREATE", "nuevo envio");
-        ShipmentCrudDto response = toDto(saved);
-        response.codigoPedidoSolicitado = requestedCode;
-        response.codigoPedidoReasignado = !Objects.equals(saved.codigoPedido, requestedCode);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(toDto(saved));
     }
 
     @PostMapping("/import-txt")
@@ -419,7 +414,9 @@ public class ShipmentCrudController {
             return false;
         }
 
-        target.codigoPedido = source.codigoPedido.trim();
+        if (target.id == null) {
+            target.codigoPedido = source.codigoPedido != null ? source.codigoPedido.trim() : null;
+        }
         target.origen = origen;
         target.destino = destino;
         LocalDateTime ingresoLocal = source.ingresoLocal != null
@@ -433,9 +430,13 @@ public class ShipmentCrudController {
         return true;
     }
 
-    private ShipmentEntity saveNewShipmentWithResolvedCode(ShipmentEntity entity, String requestedCode) {
+    private ShipmentEntity saveNewShipmentWithResolvedCode(ShipmentEntity entity) {
+        String originCode = entity.origen != null ? normalizeAirport(entity.origen.codigoOaci) : null;
+        if (originCode == null || originCode.length() != AIRPORT_CODE_LENGTH) {
+            throw new IllegalStateException("No se pudo resolver el aeropuerto de origen para generar el codigo del envio");
+        }
         synchronized (SHIPMENT_CODE_LOCK) {
-            String candidate = resolveInitialShipmentCode(requestedCode);
+            String candidate = nextShipmentCode(originCode);
             for (int attempt = 0; attempt < CREATE_CODE_RETRY_LIMIT; attempt++) {
                 entity.id = null;
                 entity.codigoPedido = candidate;
@@ -448,32 +449,18 @@ public class ShipmentCrudController {
                         attempt + 1,
                         ex.getClass().getSimpleName()
                     );
-                    candidate = nextNumericShipmentCode();
+                    candidate = nextShipmentCode(originCode);
                 }
             }
         }
         throw new IllegalStateException("No se pudo asignar un codigo unico al envio");
     }
 
-    private String resolveInitialShipmentCode(String requestedCode) {
-        String normalized = requestedCode != null ? requestedCode.trim() : "";
-        if (!isSupportedManualShipmentCode(normalized)) {
-            return nextNumericShipmentCode();
-        }
-        return repository.findByCodigoPedido(normalized) == null
-            ? normalized
-            : nextNumericShipmentCode();
-    }
-
-    private boolean isSupportedManualShipmentCode(String code) {
-        return code != null && code.matches("\\d{" + NUMERIC_SHIPMENT_CODE_LENGTH + "}");
-    }
-
-    private String nextNumericShipmentCode() {
-        Long maxCode = repository.findMaxNumericCodigoPedido();
+    private String nextShipmentCode(String originCode) {
+        Long maxCode = repository.findMaxNumericCodigoPedidoByPrefix(originCode);
         long currentMax = maxCode != null ? maxCode : 0L;
         long next = currentMax + 1L;
-        return String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
+        return originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
     }
 
     private ShipmentCrudDto toDto(ShipmentEntity entity) {
@@ -498,7 +485,6 @@ public class ShipmentCrudController {
 
     private boolean isValid(ShipmentCrudDto dto, AuthenticatedUser user) {
         return dto != null
-            && dto.codigoPedido != null && !dto.codigoPedido.isBlank()
             && ((dto.origen != null && !dto.origen.isBlank()) || (user != null && user.airportCode() != null && !user.airportCode().isBlank()))
             && dto.destino != null && !dto.destino.isBlank()
             && dto.idCliente != null && !dto.idCliente.isBlank();

@@ -17,13 +17,13 @@ public interface ShipmentRepository extends JpaRepository<ShipmentEntity, Long> 
 
     @Query(
         value = """
-            select coalesce(max(cast(codigo_pedido as unsigned)), 0)
+            select coalesce(max(cast(substring(codigo_pedido, 5, 9) as unsigned)), 0)
             from shipment
-            where codigo_pedido regexp '^[0-9]{9}$'
+            where codigo_pedido regexp concat('^', upper(:prefix), '[0-9]{9}$')
             """,
         nativeQuery = true
     )
-    Long findMaxNumericCodigoPedido();
+    Long findMaxNumericCodigoPedidoByPrefix(@Param("prefix") String prefix);
 
     @Query("""
         select s from ShipmentEntity s

@@ -92,10 +92,7 @@ export default function ShipmentsCrud() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isDuplicateErrorOpen, setIsDuplicateErrorOpen] = useState(false)
   const [duplicateUploadCodes, setDuplicateUploadCodes] = useState<string[]>([])
-  const [shipmentCodeNotice, setShipmentCodeNotice] = useState<{
-    requested: string
-    assigned: string
-  } | null>(null)
+  const [shipmentCodeNotice, setShipmentCodeNotice] = useState<string | null>(null)
   const [uploadResult, setUploadResult] = useState<{
     total: number
     inserted: number
@@ -220,7 +217,7 @@ export default function ShipmentsCrud() {
   const handleSubmit = async () => {
     setError(null)
     console.debug('[ShipmentsCrud] submit start', { form })
-    if (!form.codigoPedido || !form.origen || !form.destino || !form.ingresoLocal || !form.idCliente) {
+    if (!form.origen || !form.destino || !form.ingresoLocal || !form.idCliente) {
       setError('Completa los campos requeridos.')
       return
     }
@@ -240,12 +237,7 @@ export default function ShipmentsCrud() {
     } else {
       console.debug('[ShipmentsCrud] createShipment')
       const created = await createShipment(payload)
-      if (created.codigoPedidoReasignado && created.codigoPedidoSolicitado) {
-        setShipmentCodeNotice({
-          requested: created.codigoPedidoSolicitado,
-          assigned: created.codigoPedido,
-        })
-      }
+      setShipmentCodeNotice(created.codigoPedido)
     }
 
     resetForm()
@@ -336,23 +328,7 @@ export default function ShipmentsCrud() {
     setIsModalOpen(true)
     const loadedAirports = await ensureAirports()
     const currentLogisticsAirport = await loadLogisticsAirport(loadedAirports)
-    setForm({ ...buildEmptyForm(currentLogisticsAirport), codigoPedido: 'Calculando...' })
-
-    try {
-      const result = await listShipments(0, 1, '')
-      let nextCodigoPedido = '000000001'
-      if (result.content.length > 0) {
-        const lastCodigo = result.content[0].codigoPedido
-        const lastCodigoNum = parseInt(lastCodigo, 10)
-        if (!isNaN(lastCodigoNum)) {
-          nextCodigoPedido = String(lastCodigoNum + 1).padStart(9, '0')
-        }
-      }
-      setForm({ ...buildEmptyForm(currentLogisticsAirport), codigoPedido: nextCodigoPedido })
-    } catch (e) {
-      console.error('Failed to fetch latest shipment for new code', e)
-      setForm({ ...buildEmptyForm(currentLogisticsAirport), codigoPedido: '000000001' })
-    }
+    setForm(buildEmptyForm(currentLogisticsAirport))
   }
 
   const getFilteredAirports = (value: string) => {
@@ -526,17 +502,15 @@ export default function ShipmentsCrud() {
       <Modal
         open={shipmentCodeNotice != null}
         onClose={() => setShipmentCodeNotice(null)}
-        title="Identificador ajustado"
+        title="Envio registrado"
         className="modal--compact"
       >
         <div className="shipment-code-notice">
           <div className="shipment-code-notice__message">
-            {`El identificador solicitado ${shipmentCodeNotice?.requested ?? ''} ya habia sido tomado. El envio se registro con el codigo ${shipmentCodeNotice?.assigned ?? ''}.`}
+            {`Se registro el envio con el identificador ${shipmentCodeNotice ?? ''}.`}
           </div>
           <div className="shipment-code-notice__codes">
-            <code>{shipmentCodeNotice?.requested ?? ''}</code>
-            <span>{'->'}</span>
-            <code>{shipmentCodeNotice?.assigned ?? ''}</code>
+            <code>{shipmentCodeNotice ?? ''}</code>
           </div>
           <div className="modal-actions">
             <Button variant="primary" onClick={() => setShipmentCodeNotice(null)}>Entendido</Button>
@@ -546,10 +520,6 @@ export default function ShipmentsCrud() {
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Editar envio' : 'Nuevo envio'}>
         <div className="crud-form-grid">
-          <label className="field">
-            Pedido
-            <input value={form.codigoPedido} onChange={(event) => handleChange('codigoPedido', event.target.value)} />
-          </label>
           <label className="field">
             Origen (OACI)
             <div className="oaci-field">
