@@ -13,7 +13,15 @@ import {
   getSimulationShipmentsByFlight,
 } from '../services/api'
 import { useSimulationContext } from '../contexts/SimulationContext'
-import { formatBags, formatDurationHours, formatInteger, formatMinuteRangeWithGmt, formatPercent, formatDateFromDayIndex, formatClockFromMinute } from '../utils/time'
+import {
+  formatBags,
+  formatDurationHours,
+  formatGmtOffset,
+  formatInteger,
+  formatMinuteRangeWithGmt,
+  formatPercent,
+  formatSimMinuteWithGmt,
+} from '../utils/time'
 import {
   NEUTRAL_SEMAPHORE_COLORS,
   resolveSemaphoreColor,
@@ -1373,13 +1381,16 @@ export default function MapView({
         return
       }
 
-      const originAirport = airports.find(a => a.latitud === trace.origenLat && a.longitud === trace.origenLon)?.codigoOaci || 'Desconocido'
-      const destAirport = airports.find(a => a.latitud === trace.destinoLat && a.longitud === trace.destinoLon)?.codigoOaci || 'Desconocido'
-
-      const startDate = formatDateFromDayIndex(Math.floor(trace.salidaMin / 1440))
-      const startTime = formatClockFromMinute(trace.salidaMin)
-      const endDate = formatDateFromDayIndex(Math.floor(trace.llegadaMin / 1440))
-      const endTime = formatClockFromMinute(trace.llegadaMin)
+      const originAirportData = airports.find((airport) => airport.latitud === trace.origenLat && airport.longitud === trace.origenLon)
+      const destAirportData = airports.find((airport) => airport.latitud === trace.destinoLat && airport.longitud === trace.destinoLon)
+      const originAirport = originAirportData?.codigoOaci || 'Desconocido'
+      const destAirport = destAirportData?.codigoOaci || 'Desconocido'
+      const originGmt = originAirportData?.gmt ?? resolveAirportGmt(airportGmtByCode, originAirport)
+      const destinationGmt = destAirportData?.gmt ?? resolveAirportGmt(airportGmtByCode, destAirport)
+      const startLabel = formatSimMinuteWithGmt(trace.salidaMin, originGmt, true)
+      const endLabel = formatSimMinuteWithGmt(trace.llegadaMin, destinationGmt, true)
+      const startGmtLabel = formatGmtOffset(originGmt)
+      const endGmtLabel = formatGmtOffset(destinationGmt)
 
       const isVirtual = trace.sourceType === 'VIRTUAL'
 
@@ -1391,8 +1402,8 @@ export default function MapView({
           <strong>${isVirtual ? 'Cancelacion virtual' : 'Vuelo cancelado'}</strong><br/>
           Origen: ${originAirport}<br/>
           Destino: ${destAirport}<br/>
-          Inicio: ${startDate} - ${startTime}<br/>
-          Fin: ${endDate} - ${endTime}
+          Inicio: ${startLabel} ${startGmtLabel}<br/>
+          Fin: ${endLabel} ${endGmtLabel}
         </div>`,
         {
           direction: 'auto',
