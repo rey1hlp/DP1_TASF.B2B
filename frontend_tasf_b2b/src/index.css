@@ -1799,6 +1799,42 @@ body {
 }
 
 /* ─── Dense map workspace ───────────────────────────────────────── */
+.shipment-code-notice {
+  display: grid;
+  gap: 12px;
+}
+
+.shipment-code-notice__message {
+  padding: 12px 14px;
+  border: 1px solid rgba(35, 78, 140, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f4f8fe 0%, #eef4fd 100%);
+  color: #173763;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.shipment-code-notice__codes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #21436f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shipment-code-notice__codes code {
+  padding: 6px 9px;
+  border: 1px solid #c8d8ee;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #21436f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .app-shell--dense-map .app-topbar {
   height: 48px;
   grid-template-columns: 248px minmax(0, 1fr) 148px;

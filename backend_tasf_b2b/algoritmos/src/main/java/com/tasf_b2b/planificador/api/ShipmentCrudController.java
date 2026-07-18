@@ -12,6 +12,7 @@ import com.tasf_b2b.planificador.utils.UtilArchivos;
 import com.tasf_b2b.planificador.utils.OperationalTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +45,9 @@ public class ShipmentCrudController {
     private static final Logger log = LoggerFactory.getLogger(ShipmentCrudController.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Pattern PATRON_ORIGEN = Pattern.compile("_envios_([A-Za-z0-9]{4})_");
+    private static final Object SHIPMENT_CODE_LOCK = new Object();
+    private static final int NUMERIC_SHIPMENT_CODE_LENGTH = 9;
+    private static final int CREATE_CODE_RETRY_LIMIT = 4;
 
     private final ShipmentRepository repository;
     private final AirportRepository airportRepository;
@@ -155,16 +159,22 @@ public class ShipmentCrudController {
             log.warn("[SHIPMENT_CRUD] create rejected by validation");
             return ResponseEntity.badRequest().build();
         }
-        ShipmentEntity saved = repository.save(entity);
+        String requestedCode = entity.codigoPedido;
+        ShipmentEntity saved = saveNewShipmentWithResolvedCode(entity, requestedCode);
         log.info(
-	            "[SHIPMENT_CRUD] create saved id={} pedido={} ingresoUtc={} status={}",
-	            saved.id,
-	            saved.codigoPedido,
-	            saved.ingresoUtc,
-	            saved.status
-	        );
+            "[SHIPMENT_CRUD] create saved id={} pedido={} requested={} reassigned={} ingresoUtc={} status={}",
+            saved.id,
+            saved.codigoPedido,
+            requestedCode,
+            !Objects.equals(saved.codigoPedido, requestedCode),
+            saved.ingresoUtc,
+            saved.status
+        );
         dailyPlanningService.replanNow("SHIPMENT_CREATE", "nuevo envio");
-        return ResponseEntity.ok(toDto(saved));
+        ShipmentCrudDto response = toDto(saved);
+        response.codigoPedidoSolicitado = requestedCode;
+        response.codigoPedidoReasignado = !Objects.equals(saved.codigoPedido, requestedCode);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/import-txt")
@@ -421,6 +431,49 @@ public class ShipmentCrudController {
         target.slaHoras = source.slaHoras;
         target.status = source.status != null ? source.status : (target.status != null ? target.status : ShipmentStatus.PENDING);
         return true;
+    }
+
+    private ShipmentEntity saveNewShipmentWithResolvedCode(ShipmentEntity entity, String requestedCode) {
+        synchronized (SHIPMENT_CODE_LOCK) {
+            String candidate = resolveInitialShipmentCode(requestedCode);
+            for (int attempt = 0; attempt < CREATE_CODE_RETRY_LIMIT; attempt++) {
+                entity.id = null;
+                entity.codigoPedido = candidate;
+                try {
+                    return repository.saveAndFlush(entity);
+                } catch (DataIntegrityViolationException ex) {
+                    log.warn(
+                        "[SHIPMENT_CRUD] create collision for pedido={} attempt={} cause={}",
+                        candidate,
+                        attempt + 1,
+                        ex.getClass().getSimpleName()
+                    );
+                    candidate = nextNumericShipmentCode();
+                }
+            }
+        }
+        throw new IllegalStateException("No se pudo asignar un codigo unico al envio");
+    }
+
+    private String resolveInitialShipmentCode(String requestedCode) {
+        String normalized = requestedCode != null ? requestedCode.trim() : "";
+        if (!isSupportedManualShipmentCode(normalized)) {
+            return nextNumericShipmentCode();
+        }
+        return repository.findByCodigoPedido(normalized) == null
+            ? normalized
+            : nextNumericShipmentCode();
+    }
+
+    private boolean isSupportedManualShipmentCode(String code) {
+        return code != null && code.matches("\\d{" + NUMERIC_SHIPMENT_CODE_LENGTH + "}");
+    }
+
+    private String nextNumericShipmentCode() {
+        Long maxCode = repository.findMaxNumericCodigoPedido();
+        long currentMax = maxCode != null ? maxCode : 0L;
+        long next = currentMax + 1L;
+        return String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
     }
 
     private ShipmentCrudDto toDto(ShipmentEntity entity) {

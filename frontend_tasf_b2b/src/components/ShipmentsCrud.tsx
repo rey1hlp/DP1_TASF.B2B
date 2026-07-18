@@ -92,6 +92,10 @@ export default function ShipmentsCrud() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isDuplicateErrorOpen, setIsDuplicateErrorOpen] = useState(false)
   const [duplicateUploadCodes, setDuplicateUploadCodes] = useState<string[]>([])
+  const [shipmentCodeNotice, setShipmentCodeNotice] = useState<{
+    requested: string
+    assigned: string
+  } | null>(null)
   const [uploadResult, setUploadResult] = useState<{
     total: number
     inserted: number
@@ -235,7 +239,13 @@ export default function ShipmentsCrud() {
       await updateShipment(form.id, payload)
     } else {
       console.debug('[ShipmentsCrud] createShipment')
-      await createShipment(payload)
+      const created = await createShipment(payload)
+      if (created.codigoPedidoReasignado && created.codigoPedidoSolicitado) {
+        setShipmentCodeNotice({
+          requested: created.codigoPedidoSolicitado,
+          assigned: created.codigoPedido,
+        })
+      }
     }
 
     resetForm()
@@ -509,6 +519,27 @@ export default function ShipmentsCrud() {
           </div>
           <div className="modal-actions">
             <Button variant="primary" onClick={closeDuplicateErrorModal}>Entendido</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={shipmentCodeNotice != null}
+        onClose={() => setShipmentCodeNotice(null)}
+        title="Identificador ajustado"
+        className="modal--compact"
+      >
+        <div className="shipment-code-notice">
+          <div className="shipment-code-notice__message">
+            {`El identificador solicitado ${shipmentCodeNotice?.requested ?? ''} ya habia sido tomado. El envio se registro con el codigo ${shipmentCodeNotice?.assigned ?? ''}.`}
+          </div>
+          <div className="shipment-code-notice__codes">
+            <code>{shipmentCodeNotice?.requested ?? ''}</code>
+            <span>{'->'}</span>
+            <code>{shipmentCodeNotice?.assigned ?? ''}</code>
+          </div>
+          <div className="modal-actions">
+            <Button variant="primary" onClick={() => setShipmentCodeNotice(null)}>Entendido</Button>
           </div>
         </div>
       </Modal>
