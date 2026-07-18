@@ -13,7 +13,7 @@ import {
   getSimulationShipmentsByFlight,
 } from '../services/api'
 import { useSimulationContext } from '../contexts/SimulationContext'
-import { formatBags, formatDurationHours, formatInteger, formatMinuteRange, formatPercent, formatDateFromDayIndex, formatClockFromMinute } from '../utils/time'
+import { formatBags, formatDurationHours, formatInteger, formatMinuteRangeWithGmt, formatPercent, formatDateFromDayIndex, formatClockFromMinute } from '../utils/time'
 import {
   NEUTRAL_SEMAPHORE_COLORS,
   resolveSemaphoreColor,
@@ -57,6 +57,22 @@ type TimeChipProps = {
   value: string
   tone: TimeChipTone
   onClose: () => void
+}
+
+function normalizeAirportCode(value?: string | null) {
+  return value?.trim().toUpperCase() ?? ''
+}
+
+function resolveAirportGmt(
+  airportGmtByCode: Record<string, number>,
+  code?: string | null,
+): number | null {
+  const lookupKey = normalizeAirportCode(code)
+  if (!lookupKey) {
+    return null
+  }
+  const value = airportGmtByCode[lookupKey]
+  return Number.isFinite(value) ? value : null
 }
 
 function MapTimeChip({ icon: Icon, label, value, tone, onClose }: TimeChipProps) {
@@ -436,6 +452,13 @@ export default function MapView({
   const cancelledFlightIdSet = useMemo(
     () => new Set((cancelledFlightTraces ?? []).map((trace) => trace.flightId)),
     [cancelledFlightTraces],
+  )
+  const airportGmtByCode = useMemo(
+    () =>
+      Object.fromEntries(
+        airports.map((airport) => [normalizeAirportCode(airport.codigoOaci), airport.gmt]),
+      ) as Record<string, number>,
+    [airports],
   )
 
   const previewAirport = useMemo(() => {
@@ -1737,7 +1760,12 @@ export default function MapView({
             getFlightLoadPercent(previewFlight),
             ranges
           )}
-          subtitle={formatMinuteRange(previewFlight.salidaMin, previewFlight.llegadaMin)}
+          subtitle={formatMinuteRangeWithGmt(
+            previewFlight.salidaMin,
+            previewFlight.llegadaMin,
+            resolveAirportGmt(airportGmtByCode, previewFlight.origen),
+            resolveAirportGmt(airportGmtByCode, previewFlight.destino),
+          )}
           title={`${previewFlight.origen} → ${previewFlight.destino}`}
         />
       ) : previewFlight && detailStage === 'shipments' ? (
