@@ -6,13 +6,14 @@ type ModalProps = {
   title?: string
   headerActions?: ReactNode
   children?: ReactNode
+  className?: string
 }
 
-export default function Modal({ open, onClose, title, headerActions, children }: ModalProps) {
+export default function Modal({ open, onClose, title, headerActions, children, className }: ModalProps) {
   if (!open) return null
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal${className ? ` ${className}` : ''}`} onClick={(e) => e.stopPropagation()}>
         {(title || headerActions) && (
           <div className="modal-header">
             {title && <h3>{title}</h3>}

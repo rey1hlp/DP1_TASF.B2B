@@ -56,6 +56,23 @@ function timePart(value?: string | null): string {
   return value && value.includes('T') ? value.substring(11, 16) : ''
 }
 
+function normalizeShipmentCode(value?: string | null): string {
+  return value?.trim().toUpperCase() ?? ''
+}
+
+function extractShipmentCodesFromTxt(content: string): string[] {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const sanitized = line.replace(/^\uFEFF/, '')
+      const separatorIndex = sanitized.indexOf('-')
+      return separatorIndex >= 0 ? sanitized.slice(0, separatorIndex).trim() : sanitized.trim()
+    })
+    .filter(Boolean)
+}
+
 export default function ShipmentsCrud() {
   const { user } = useAuth()
   const [items, setItems] = useState<ShipmentCrudDto[]>([])
@@ -73,6 +90,8 @@ export default function ShipmentsCrud() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isDuplicateErrorOpen, setIsDuplicateErrorOpen] = useState(false)
+  const [duplicateUploadCodes, setDuplicateUploadCodes] = useState<string[]>([])
   const [uploadResult, setUploadResult] = useState<{
     total: number
     inserted: number
@@ -247,6 +266,11 @@ export default function ShipmentsCrud() {
     setUploadResult(null)
   }
 
+  const closeDuplicateErrorModal = () => {
+    setIsDuplicateErrorOpen(false)
+    setDuplicateUploadCodes([])
+  }
+
   const handleUpload = async () => {
     if (!uploadFile) {
       setUploadError('Selecciona un archivo .txt')
@@ -260,6 +284,23 @@ export default function ShipmentsCrud() {
         setUploadError(`Permiso denegado. Solo puedes cargar el archivo de tu aeropuerto asignado: _envios_${logisticsAirportCode}_.txt`);
         return;
       }
+    }
+
+    const fileContent = await uploadFile.text()
+    const fileCodes = extractShipmentCodesFromTxt(fileContent)
+    const currentCodes = new Set(
+      items.map((item) => normalizeShipmentCode(item.codigoPedido)).filter(Boolean),
+    )
+    const duplicateCodes = [...new Set(
+      fileCodes.filter((code) => currentCodes.has(normalizeShipmentCode(code))),
+    )].sort((left, right) => left.localeCompare(right))
+
+    if (duplicateCodes.length > 0) {
+      setUploadError(null)
+      setUploadResult(null)
+      setDuplicateUploadCodes(duplicateCodes)
+      setIsDuplicateErrorOpen(true)
+      return
     }
 
     setUploadLoading(true)
@@ -447,6 +488,27 @@ export default function ShipmentsCrud() {
                 {uploadLoading ? 'Cargando...' : 'Cargar envios'}
               </Button>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isDuplicateErrorOpen}
+        onClose={closeDuplicateErrorModal}
+        title="Carga de envios bloqueada"
+        className="modal--compact"
+      >
+        <div className="duplicate-upload-modal">
+          <div className="duplicate-upload-modal__message">
+            {`Error: Los siguientes pedidos ya se encuentran registrados en el sistema: [${duplicateUploadCodes.join(', ')}]. Por favor, corrÃ­jalos antes de volver a intentar.`}
+          </div>
+          <div className="duplicate-upload-modal__codes">
+            {duplicateUploadCodes.map((code) => (
+              <code key={code}>{code}</code>
+            ))}
+          </div>
+          <div className="modal-actions">
+            <Button variant="primary" onClick={closeDuplicateErrorModal}>Entendido</Button>
           </div>
         </div>
       </Modal>
