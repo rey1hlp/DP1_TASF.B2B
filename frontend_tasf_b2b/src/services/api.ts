@@ -447,6 +447,7 @@ export type BulkImportResult = {
   skipped: number
   invalidFormatLines: string[]
   invalidAirportLines: string[]
+  registeredCodes: string[]
 }
 
 export async function uploadAirportsCsv(file: File): Promise<BulkImportResult> {
