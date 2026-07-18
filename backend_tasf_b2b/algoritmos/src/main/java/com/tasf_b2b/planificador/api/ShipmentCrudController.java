@@ -27,13 +27,16 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,7 +47,9 @@ import java.util.Objects;
 public class ShipmentCrudController {
     private static final Logger log = LoggerFactory.getLogger(ShipmentCrudController.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
+    private static final DateTimeFormatter MYSQL_DATETIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Pattern PATRON_ORIGEN = Pattern.compile("_envios_([A-Za-z0-9]{4})_");
+    private static final Pattern PATRON_CODIGO_TXT = Pattern.compile("\\d{9}");
     private static final Object SHIPMENT_CODE_LOCK = new Object();
     private static final int NUMERIC_SHIPMENT_CODE_LENGTH = 9;
     private static final int CREATE_CODE_RETRY_LIMIT = 4;
@@ -87,7 +92,105 @@ public class ShipmentCrudController {
                 ? repository.findAllByOrderByAuditDateInsDesc(pageable)
                 : repository.searchOrderByAuditDateInsDesc(query.trim(), pageable);
         }
-        return ResponseEntity.ok(result.map(this::toDto));
+        log.info(
+            "[SHIPMENT_CRUD][LIST] db page={} size={} query={} userAirport={} rows={} totalElements={} totalPages={}",
+            page,
+            size,
+            query,
+            airport,
+            result.getNumberOfElements(),
+            result.getTotalElements(),
+            result.getTotalPages()
+        );
+        Map<Long, RawShipmentDateTimes> rawDateTimes = fetchRawShipmentDateTimes(result.getContent());
+        return ResponseEntity.ok(result.map(entity -> {
+            RawShipmentDateTimes raw = rawDateTimes.get(entity.id);
+            log.info(
+                "[SHIPMENT_CRUD][LIST][DB] id={} pedido={} origen={} destino={} ingresoUtcEntity={} ingresoUtcRaw={} cantidad={} cliente={} slaHoras={} status={} auditDateInsEntity={} auditDateInsRaw={}",
+                entity.id,
+                entity.codigoPedido,
+                entity.origen != null ? entity.origen.codigoOaci : null,
+                entity.destino != null ? entity.destino.codigoOaci : null,
+                entity.ingresoUtc,
+                raw != null ? raw.ingresoUtcText() : null,
+                entity.cantidad,
+                entity.idCliente,
+                entity.slaHoras,
+                entity.status,
+                entity.auditDateIns,
+                raw != null ? raw.auditDateInsText() : null
+            );
+            ShipmentCrudDto dto = toDto(entity);
+            if (raw != null && raw.ingresoUtc() != null) {
+                dto.ingresoUtc = raw.ingresoUtc();
+                dto.ingresoLocal = OperationalTime.utcToLocal(dto.ingresoUtc, dto.origenGmt);
+                dto.fecha = dto.ingresoLocal.format(DATE_FORMAT);
+            }
+            if (raw != null && raw.auditDateIns() != null) {
+                dto.auditDateIns = raw.auditDateIns();
+            }
+            log.info(
+                "[SHIPMENT_CRUD][LIST][DTO] id={} pedido={} origen={} destino={} ingresoUtc={} ingresoLocal={} origenGmt={} fecha={} cantidad={} cliente={} slaHoras={} status={} auditDateIns={}",
+                dto.id,
+                dto.codigoPedido,
+                dto.origen,
+                dto.destino,
+                dto.ingresoUtc,
+                dto.ingresoLocal,
+                dto.origenGmt,
+                dto.fecha,
+                dto.cantidad,
+                dto.idCliente,
+                dto.slaHoras,
+                dto.status,
+                dto.auditDateIns
+            );
+            return dto;
+        }));
+    }
+
+    private Map<Long, RawShipmentDateTimes> fetchRawShipmentDateTimes(List<ShipmentEntity> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> ids = entities.stream()
+            .map(entity -> entity.id)
+            .filter(Objects::nonNull)
+            .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+
+        String placeholders = String.join(",", ids.stream().map(id -> "?").toList());
+        String sql = """
+            SELECT id,
+                   DATE_FORMAT(ingreso_utc, '%%Y-%%m-%%d %%H:%%i:%%s') AS ingreso_utc_raw,
+                   DATE_FORMAT(audit_date_ins, '%%Y-%%m-%%d %%H:%%i:%%s') AS audit_date_ins_raw
+            FROM shipment
+            WHERE id IN (%s)
+            """.formatted(placeholders);
+
+        Map<Long, RawShipmentDateTimes> result = new HashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            Long id = rs.getLong("id");
+            String ingresoUtcText = rs.getString("ingreso_utc_raw");
+            String auditDateInsText = rs.getString("audit_date_ins_raw");
+            result.put(id, new RawShipmentDateTimes(
+                parseMysqlDateTime(ingresoUtcText),
+                parseMysqlDateTime(auditDateInsText),
+                ingresoUtcText,
+                auditDateInsText
+            ));
+        }, ids.toArray());
+        return result;
+    }
+
+    private LocalDateTime parseMysqlDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return LocalDateTime.parse(value, MYSQL_DATETIME_FORMAT);
     }
 
     @GetMapping("/daily")
@@ -198,6 +301,7 @@ public class ShipmentCrudController {
             log.warn("[SHIPMENT_CRUD] import rejected because origin airport does not exist origin={}", originOaci);
             return ResponseEntity.badRequest().build();
         }
+        LocalDateTime importIngresoUtc = LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC);
 
         int total = 0;
         int inserted = 0;
@@ -206,8 +310,8 @@ public class ShipmentCrudController {
         List<String> invalidFormat = new ArrayList<>();
         List<String> invalidAirport = new ArrayList<>();
         
-        List<ImportedShipmentDraft> drafts = new ArrayList<>();
-        List<String> registeredCodes = new ArrayList<>();
+        final int BATCH_SIZE = 2000;
+        List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
 
         // Cargar aeropuertos en memoria
         List<AirportEntity> todosLosAeropuertos = airportRepository.findAll();
@@ -230,18 +334,18 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                String fecha = parts[1].trim();
-                String hhTxt = parts[2].trim();
-                String mmTxt = parts[3].trim();
+                String codigoPedidoRaw = parts[0].trim();
+                // Fecha y hora del TXT se ignoran: la carga usa el reloj local del aeropuerto de la cuenta.
                 String destinoOaci = parts[4].trim().toUpperCase(Locale.ROOT);
                 String cantidadTxt = parts[5].trim();
                 String idCliente = parts[6].trim();
 
-                if (idCliente.isBlank()) {
+                if (!isSupportedTxtShipmentCode(codigoPedidoRaw) || idCliente.isBlank()) {
                     skipped++;
                     invalidFormat.add(line);
                     continue;
                 }
+                String codigoPedido = buildImportedShipmentCode(originOaci, codigoPedidoRaw);
 
                 AirportEntity destinoAirport = mapaAeropuertos.get(destinoOaci);
                 if (destinoAirport == null) {
@@ -250,10 +354,8 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                int hh, mm, cantidad;
+                int cantidad;
                 try {
-                    hh = Integer.parseInt(hhTxt);
-                    mm = Integer.parseInt(mmTxt);
                     cantidad = Integer.parseInt(cantidadTxt);
                 } catch (NumberFormatException ex) {
                     skipped++;
@@ -261,45 +363,46 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                if (hh < 0 || hh > 23 || mm < 0 || mm > 59 || cantidad < 0) {
+                if (cantidad < 0) {
                     skipped++;
                     invalidFormat.add(line);
                     continue;
                 }
 
-                LocalDate date;
-                LocalTime localTime;
-                try {
-                    date = LocalDate.parse(fecha, DATE_FORMAT);
-                    localTime = LocalTime.of(hh, mm);
-                } catch (Exception ex) {
-                    skipped++;
-                    invalidFormat.add(line);
-                    continue;
-                }
-
-                LocalDateTime ingresoLocal = LocalDateTime.of(date, localTime);
-                LocalDateTime ingresoUtc = OperationalTime.localToUtc(ingresoLocal, originAirport.gmt);
                 int slaHoras = computeSla(originAirport, destinoAirport);
 
-                drafts.add(new ImportedShipmentDraft(
-                    destinoAirport,
-                    ingresoUtc,
+                batch.add(new Object[]{
+                    codigoPedido,
+                    originAirport.id,
+                    destinoAirport.id,
+                    importIngresoUtc,
                     cantidad,
                     idCliente,
-                    slaHoras
-                ));
+                    slaHoras,
+                    ShipmentStatus.PENDING.name()
+                });
 
+                if (batch.size() >= BATCH_SIZE) {
+                    int[] results = executeShipmentBatch(batch);
+                    for (int r : results) {
+                        if (r == 1) inserted++;
+                        else if (r == 2) updated++;
+                    }
+                    batch.clear();
+                }
             }
         }
 
         // Procesar último lote
-        if (!drafts.isEmpty()) {
-            registeredCodes = persistImportedShipments(originAirport, drafts);
-            inserted = registeredCodes.size();
+        if (!batch.isEmpty()) {
+            int[] results = executeShipmentBatch(batch);
+            for (int r : results) {
+                if (r == 1) inserted++;
+                else if (r == 2) updated++;
+            }
         }
 
-        if (inserted > 0) {
+        if (inserted + updated > 0) {
             triggerReplanAsync("SHIPMENT_IMPORT", "txt masivo");
         }
 
@@ -307,47 +410,25 @@ public class ShipmentCrudController {
         log.info("[SHIPMENT_CRUD] import finished file={} origin={} total={} inserted={} updated={} skipped={} time={}ms",
             file.getOriginalFilename(), originOaci, total, inserted, updated, skipped, elapsed);
 
-        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport, registeredCodes));
+        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport));
     }
 
-    private int[] executeShipmentInsertBatch(List<Object[]> batch) {
+    // Cambiar void por int[]
+    private int[] executeShipmentBatch(List<Object[]> batch) {
         String sql = 
             "INSERT INTO shipment " +
             "(codigo_pedido, origen_id, destino_id, ingreso_utc, cantidad, id_cliente, sla_horas, status) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+            "AS new ON DUPLICATE KEY UPDATE " +
+            "origen_id = new.origen_id, " +
+            "destino_id = new.destino_id, " +
+            "ingreso_utc = new.ingreso_utc, " +
+            "cantidad = new.cantidad, " +
+            "id_cliente = new.id_cliente, " +
+            "sla_horas = new.sla_horas, " +
+            "status = new.status";
 
         return jdbcTemplate.batchUpdate(sql, batch);
-    }
-
-    private List<String> persistImportedShipments(AirportEntity originAirport, List<ImportedShipmentDraft> drafts) {
-        String originCode = originAirport != null ? normalizeAirport(originAirport.codigoOaci) : null;
-        if (originCode == null || originCode.length() != AIRPORT_CODE_LENGTH) {
-            throw new IllegalStateException("No se pudo resolver el aeropuerto de origen para importar los envios");
-        }
-
-        synchronized (SHIPMENT_CODE_LOCK) {
-            long nextNumericCode = nextShipmentNumericCode(originCode);
-            List<Object[]> batch = new ArrayList<>(drafts.size());
-            List<String> assignedCodes = new ArrayList<>(drafts.size());
-
-            for (ImportedShipmentDraft draft : drafts) {
-                String codigoPedido = originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", nextNumericCode++);
-                assignedCodes.add(codigoPedido);
-                batch.add(new Object[]{
-                    codigoPedido,
-                    originAirport.id,
-                    draft.destinoAirport().id,
-                    draft.ingresoUtc(),
-                    draft.cantidad(),
-                    draft.idCliente(),
-                    draft.slaHoras(),
-                    ShipmentStatus.PENDING.name()
-                });
-            }
-
-            executeShipmentInsertBatch(batch);
-            return assignedCodes;
-        }
     }
 
     private void triggerReplanAsync(String triggerType, String detail) {
@@ -464,14 +545,18 @@ public class ShipmentCrudController {
     }
 
     private String nextShipmentCode(String originCode) {
-        long next = nextShipmentNumericCode(originCode);
+        Long maxCode = repository.findMaxNumericCodigoPedidoByPrefix(originCode);
+        long currentMax = maxCode != null ? maxCode : 0L;
+        long next = currentMax + 1L;
         return originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
     }
 
-    private long nextShipmentNumericCode(String originCode) {
-        Long maxCode = repository.findMaxNumericCodigoPedidoByPrefix(originCode);
-        long currentMax = maxCode != null ? maxCode : 0L;
-        return currentMax + 1L;
+    private boolean isSupportedTxtShipmentCode(String code) {
+        return code != null && PATRON_CODIGO_TXT.matcher(code.trim()).matches();
+    }
+
+    private String buildImportedShipmentCode(String originOaci, String rawCode) {
+        return normalizeAirport(originOaci) + rawCode.trim();
     }
 
     private ShipmentCrudDto toDto(ShipmentEntity entity) {
@@ -562,15 +647,13 @@ public class ShipmentCrudController {
         int updated,
         int skipped,
         List<String> invalidFormatLines,
-        List<String> invalidAirportLines,
-        List<String> registeredCodes
+        List<String> invalidAirportLines
     ) {}
 
-    private record ImportedShipmentDraft(
-        AirportEntity destinoAirport,
+    private record RawShipmentDateTimes(
         LocalDateTime ingresoUtc,
-        int cantidad,
-        String idCliente,
-        int slaHoras
+        LocalDateTime auditDateIns,
+        String ingresoUtcText,
+        String auditDateInsText
     ) {}
 }

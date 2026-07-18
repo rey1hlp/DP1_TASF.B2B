@@ -64,6 +64,7 @@ export type DailyOperationControlsProps = {
 
   airportItems: EntityAirportItem[]
   airportGmtByCode: Record<string, number>
+  accountClockGmt?: number | null
 
   selectedAirportCode: string | null
   onSelectAirport: (codigoOaci: string) => void
@@ -115,6 +116,7 @@ export default function DailyOperationControls({
   onSelectFlight,
   airportItems,
   airportGmtByCode,
+  accountClockGmt,
   selectedAirportCode,
   onSelectAirport,
   alerts,
@@ -358,6 +360,7 @@ export default function DailyOperationControls({
             flights={allFlights}
             airports={airportItems}
             airportGmtByCode={airportGmtByCode}
+            accountClockGmt={accountClockGmt}
             shipments={sampleShipments}
             shipmentQuantities={shipmentQuantities}
             shipmentFlightIds={shipmentFlightIds}

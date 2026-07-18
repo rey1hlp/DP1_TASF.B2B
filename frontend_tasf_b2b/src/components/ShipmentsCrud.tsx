@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
-import { formatDateTime, formatFileSize, formatInteger } from '../utils/time'
+import { formatFileSize, formatInteger, formatUtcDateTimeForClock } from '../utils/time'
 
 const EMPTY_FORM: ShipmentCrudDto = {
   codigoPedido: '',
@@ -110,6 +110,12 @@ export default function ShipmentsCrud() {
   }, [airports, logisticsAirportCode])
 
   const isOriginLocked = Boolean(logisticsAirportCode)
+  const accountClockGmt = logisticsAirportCode ? logisticsAirport?.gmt ?? null : null
+
+  const formatShipmentIngress = (item: ShipmentCrudDto): string => {
+    const gmt = accountClockGmt ?? (logisticsAirportCode ? item.origenGmt : null)
+    return formatUtcDateTimeForClock(item.ingresoUtc || item.ingresoLocal, gmt)
+  }
 
   const load = async () => {
     setLoading(true)
@@ -209,6 +215,13 @@ export default function ShipmentsCrud() {
     }
     void loadLogisticsAirport()
   }, [isModalOpen, logisticsAirport, logisticsAirportCode])
+
+  useEffect(() => {
+    if (!logisticsAirportCode || logisticsAirport) {
+      return
+    }
+    void loadLogisticsAirport()
+  }, [logisticsAirport, logisticsAirportCode])
 
   const handleSubmit = async () => {
     setError(null)
@@ -387,7 +400,7 @@ export default function ShipmentsCrud() {
             <span>{item.codigoPedido}</span>
             <span>{item.origen}</span>
             <span>{item.destino}</span>
-            <span>{formatDateTime(item.ingresoLocal)}</span>
+            <span>{formatShipmentIngress(item)}</span>
             <span>{formatInteger(item.cantidad)}</span>
             <span>{item.idCliente}</span>
             <span className={`status-badge ${getShipmentStatusClass(item.status)}`}>
