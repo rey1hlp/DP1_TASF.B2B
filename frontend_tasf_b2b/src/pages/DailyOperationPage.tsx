@@ -298,6 +298,53 @@ export default function DailyOperationPage() {
     }
   }
 
+  const handleMapBagFocusRequest = useCallback((bagCode: string) => {
+    entityFocusRequestIdRef.current += 1
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'bag',
+      id: bagCode,
+      requestId: entityFocusRequestIdRef.current,
+    })
+
+    if (!bagCode) return
+
+    const loadBagRouteForEntityPanel = async () => {
+      setShipmentSearchError(null)
+      try {
+        const routeRes = await authFetch(`${API_BASE}/api/operation/daily/shipments/${encodeURIComponent(bagCode)}/route`)
+        if (routeRes.ok) {
+          const routeData = await routeRes.json()
+          const dbShipment = await fetchShipmentFromDb(bagCode)
+          if (dbShipment?.status) {
+            routeData.estado = dbShipment.status
+          }
+          setSelectedShipmentRoute(routeData)
+          return
+        }
+
+        const shipment = await fetchShipmentFromDb(bagCode)
+        if (shipment) {
+          setSelectedShipmentRoute({
+            codigoPedido: shipment.codigoPedido,
+            estado: shipment.status ?? 'PENDING',
+            tiempoTotalHoras: shipment.slaHoras,
+            ruta: []
+          })
+          return
+        }
+
+        setSelectedShipmentRoute(null)
+        setShipmentSearchError('No se encontro el envio o maleta en operacion diaria.')
+      } catch (e) {
+        setSelectedShipmentRoute(null)
+        setShipmentSearchError('Error al buscar el envio o maleta.')
+      }
+    }
+
+    void loadBagRouteForEntityPanel()
+  }, [])
+
   const currentMinute = useMemo(() => {
     if (serverCurrentMinute === null) return null
     const elapsedMs = now.getTime() - new Date(lastSyncAt || now).getTime()
@@ -840,7 +887,7 @@ export default function DailyOperationPage() {
             isFullscreen={isMapFullscreen}
             isPanelCollapsed={isPanelCollapsed}
             onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
-            onSearchShipment={handleSearchShipment}
+            onBagFocusRequest={handleMapBagFocusRequest}
             onClearShipmentRoute={() => {
               setSelectedShipmentRoute(null)
               setShipmentSearchError(null)

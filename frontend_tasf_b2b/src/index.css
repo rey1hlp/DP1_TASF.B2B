@@ -3126,6 +3126,302 @@ body {
   background: #c8daf6;
 }
 
+.flight-shipments-card .map-floating-card-header {
+  padding: 12px 14px;
+}
+
+.flight-shipments-card .map-floating-card-body {
+  gap: 10px;
+  padding: 12px 14px 14px;
+}
+
+.map-floating-card-back-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd7ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2f62b5;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.map-floating-card-back-icon:hover {
+  background: #eef5ff;
+  border-color: #aac4ea;
+}
+
+.flight-shipment-route-line,
+.flight-shipment-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.flight-shipment-route-line {
+  color: #18365f;
+}
+
+.flight-shipment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.flight-shipment-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #d9e4f4;
+  background: #f8fbff;
+}
+
+.flight-shipment-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.flight-shipment-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.flight-shipment-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.flight-shipment-code {
+  color: #10213a;
+  font-size: 13px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-detail-title-stack {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shipment-detail-title-stack strong {
+  color: #111827;
+  font-size: 15px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-detail-title-stack span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-detail-title-stack b {
+  color: #334155;
+  font-weight: 850;
+}
+
+.flight-shipment-detail-link {
+  border: none;
+  background: transparent;
+  color: #2f62b5;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.flight-shipment-detail-link:hover {
+  color: #1d4e96;
+  text-decoration: underline;
+}
+
+.flight-shipment-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.map-floating-card-metric.flight-shipment-metric {
+  min-height: 48px;
+  border-radius: 8px;
+  padding: 6px 4px;
+}
+
+.map-floating-card-metric.flight-shipment-metric strong {
+  font-size: 15px;
+  line-height: 1.05;
+}
+
+.map-floating-card-metric.flight-shipment-metric span {
+  font-size: 11px;
+}
+
+.flight-shipment-metric.sla-ok {
+  background: #ecfdf5;
+  color: #14532d;
+}
+
+.flight-shipment-metric.sla-ok span {
+  color: #166534;
+}
+
+.flight-shipment-metric.sla-late {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.flight-shipment-metric.sla-late span {
+  color: #b91c1c;
+}
+
+.shipment-detail-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #d9e4f4;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.shipment-detail-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shipment-detail-summary-header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.shipment-detail-summary-header span,
+.shipment-detail-summary-grid span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.shipment-detail-alerts {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 0 0 auto;
+  max-width: 48%;
+}
+
+.shipment-detail-sla-countdown {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  padding: 5px 7px;
+  white-space: nowrap;
+}
+
+.shipment-detail-sla-countdown.sla-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.shipment-detail-sla-countdown.sla-static {
+  background: #eef2f7;
+  color: #334155;
+}
+
+.shipment-detail-sla-countdown.sla-late {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.shipment-detail-total-route {
+  color: #18365f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.shipment-detail-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.shipment-detail-summary-grid div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shipment-detail-summary-grid strong {
+  color: #10213a;
+  font-size: 12px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-bag-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+
+.shipment-bag-compact-chip {
+  min-height: 30px;
+  border: 1px solid #cbdaf0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #173763;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 0 6px;
+}
+
+.shipment-bag-compact-chip:hover {
+  border-color: #2f62b5;
+  background: #eef5ff;
+}
+
 .range-field {
   display: flex;
   flex-direction: column;

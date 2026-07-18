@@ -484,6 +484,31 @@ export default function SimulationPage() {
     }
   }
 
+  const handleMapBagFocusRequest = useCallback((bagCode: string) => {
+    entityFocusRequestIdRef.current += 1
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'bag',
+      id: bagCode,
+      requestId: entityFocusRequestIdRef.current,
+    })
+
+    if (!bagCode || !simId) return
+
+    const loadBagRouteForEntityPanel = async () => {
+      try {
+        setShipmentSearchError(null)
+        const route = await fetchShipmentRoute(simId, bagCode)
+        setSelectedShipmentRoute(route)
+      } catch (err) {
+        setSelectedShipmentRoute(null)
+        setShipmentSearchError('No se encontro la ruta para la maleta o envio.')
+      }
+    }
+
+    void loadBagRouteForEntityPanel()
+  }, [simId])
+
   const handleClearShipmentRoute = useCallback(() => {
     setSelectedShipmentRoute(null)
     setShipmentSearchError(null)
@@ -1162,7 +1187,7 @@ export default function SimulationPage() {
                 isFullscreen={isMapFullscreen}
                 isPanelCollapsed={isPanelCollapsed}
                 onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
-                onSearchShipment={handleSearchShipment}
+                onBagFocusRequest={handleMapBagFocusRequest}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
                 onAirportDetailRequest={handleMapAirportDetailRequest}
