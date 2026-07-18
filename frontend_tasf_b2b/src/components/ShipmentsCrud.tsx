@@ -60,7 +60,24 @@ function normalizeShipmentCode(value?: string | null): string {
   return value?.trim().toUpperCase() ?? ''
 }
 
-function extractShipmentCodesFromTxt(content: string): string[] {
+function extractOriginFromTxtFileName(filename?: string | null): string | null {
+  if (!filename) {
+    return null
+  }
+  const match = filename.match(/_envios_([A-Za-z0-9]{4})_/i)
+  return match?.[1] ? normalizeShipmentCode(match[1]) : null
+}
+
+function buildImportedShipmentCode(originOaci: string, rawCode: string): string {
+  const normalizedOrigin = normalizeShipmentCode(originOaci)
+  const normalizedRawCode = normalizeShipmentCode(rawCode)
+  if (normalizedRawCode.startsWith(normalizedOrigin)) {
+    return normalizedRawCode
+  }
+  return `${normalizedOrigin}${normalizedRawCode}`
+}
+
+function extractShipmentCodesFromTxt(content: string, originOaci: string): string[] {
   return content
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -68,7 +85,8 @@ function extractShipmentCodesFromTxt(content: string): string[] {
     .map((line) => {
       const sanitized = line.replace(/^\uFEFF/, '')
       const separatorIndex = sanitized.indexOf('-')
-      return separatorIndex >= 0 ? sanitized.slice(0, separatorIndex).trim() : sanitized.trim()
+      const rawCode = separatorIndex >= 0 ? sanitized.slice(0, separatorIndex).trim() : sanitized.trim()
+      return buildImportedShipmentCode(originOaci, rawCode)
     })
     .filter(Boolean)
 }
@@ -187,6 +205,27 @@ export default function ShipmentsCrud() {
     }
   }
 
+  const loadAllVisibleShipmentCodes = async (): Promise<Set<string>> => {
+    const codes = new Set<string>()
+    const pageSize = 500
+    let currentPage = 0
+    let totalPages = 1
+
+    while (currentPage < totalPages) {
+      const result = await listShipments(currentPage, pageSize, '')
+      result.content.forEach((item) => {
+        const code = normalizeShipmentCode(item.codigoPedido)
+        if (code) {
+          codes.add(code)
+        }
+      })
+      totalPages = Math.max(result.totalPages, currentPage + 1)
+      currentPage += 1
+    }
+
+    return codes
+  }
+
   useEffect(() => {
     if (!isModalOpen || !logisticsAirportCode) {
       return
@@ -288,14 +327,25 @@ export default function ShipmentsCrud() {
       }
     }
 
-    const fileContent = await uploadFile.text()
-    const fileCodes = extractShipmentCodesFromTxt(fileContent)
-    const currentCodes = new Set(
-      items.map((item) => normalizeShipmentCode(item.codigoPedido)).filter(Boolean),
-    )
-    const duplicateCodes = [...new Set(
-      fileCodes.filter((code) => currentCodes.has(normalizeShipmentCode(code))),
-    )].sort((left, right) => left.localeCompare(right))
+    const originOaci = extractOriginFromTxtFileName(uploadFile.name)
+    if (!originOaci) {
+      setUploadError('No se pudo identificar el aeropuerto origen a partir del nombre del archivo.')
+      return
+    }
+
+    let duplicateCodes: string[] = []
+    try {
+      const fileContent = await uploadFile.text()
+      const fileCodes = extractShipmentCodesFromTxt(fileContent, originOaci)
+      const currentCodes = await loadAllVisibleShipmentCodes()
+      duplicateCodes = [...new Set(
+        fileCodes.filter((code) => currentCodes.has(normalizeShipmentCode(code))),
+      )].sort((left, right) => left.localeCompare(right))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado'
+      setUploadError(`No se pudo validar duplicados antes de cargar el TXT: ${msg}`)
+      return
+    }
 
     if (duplicateCodes.length > 0) {
       setUploadError(null)
@@ -425,7 +475,8 @@ export default function ShipmentsCrud() {
         <div className="modal-body">
           <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
             <h2>Archivo TXT de envios</h2>
-            <p>Formato: codigoPedido-AAAAMMDD-HH-MM-DESTINO-CANTIDAD-IDCLIENTE</p>
+            <p>Formato: 000000001-AAAAMMDD-HH-MM-DESTINO-CANTIDAD-IDCLIENTE</p>
+            <p>El sistema generara el identificador final como OACI de origen + 9 digitos del archivo.</p>
 
             {logisticsAirportCode ? (
               <p>

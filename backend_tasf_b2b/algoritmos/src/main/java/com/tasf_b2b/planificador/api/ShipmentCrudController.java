@@ -45,6 +45,7 @@ public class ShipmentCrudController {
     private static final Logger log = LoggerFactory.getLogger(ShipmentCrudController.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Pattern PATRON_ORIGEN = Pattern.compile("_envios_([A-Za-z0-9]{4})_");
+    private static final Pattern PATRON_CODIGO_TXT = Pattern.compile("\\d{9}");
     private static final Object SHIPMENT_CODE_LOCK = new Object();
     private static final int NUMERIC_SHIPMENT_CODE_LENGTH = 9;
     private static final int CREATE_CODE_RETRY_LIMIT = 4;
@@ -230,7 +231,7 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                String codigoPedido = parts[0].trim();
+                String codigoPedidoRaw = parts[0].trim();
                 String fecha = parts[1].trim();
                 String hhTxt = parts[2].trim();
                 String mmTxt = parts[3].trim();
@@ -238,11 +239,12 @@ public class ShipmentCrudController {
                 String cantidadTxt = parts[5].trim();
                 String idCliente = parts[6].trim();
 
-                if (codigoPedido.isBlank() || idCliente.isBlank()) {
+                if (!isSupportedTxtShipmentCode(codigoPedidoRaw) || idCliente.isBlank()) {
                     skipped++;
                     invalidFormat.add(line);
                     continue;
                 }
+                String codigoPedido = buildImportedShipmentCode(originOaci, codigoPedidoRaw);
 
                 AirportEntity destinoAirport = mapaAeropuertos.get(destinoOaci);
                 if (destinoAirport == null) {
@@ -461,6 +463,14 @@ public class ShipmentCrudController {
         long currentMax = maxCode != null ? maxCode : 0L;
         long next = currentMax + 1L;
         return originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
+    }
+
+    private boolean isSupportedTxtShipmentCode(String code) {
+        return code != null && PATRON_CODIGO_TXT.matcher(code.trim()).matches();
+    }
+
+    private String buildImportedShipmentCode(String originOaci, String rawCode) {
+        return normalizeAirport(originOaci) + rawCode.trim();
     }
 
     private ShipmentCrudDto toDto(ShipmentEntity entity) {
