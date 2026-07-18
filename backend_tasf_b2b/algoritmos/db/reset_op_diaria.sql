@@ -1,5 +1,6 @@
 USE tasf_b2b;
 
+-- ADVERTENCIA: Este script desactiva temporalmente el safe update de SQL
 -- Limpia solo la operacion diaria para volver a empezar con envios vacios.
 -- Conserva:
 --   - airport
@@ -13,6 +14,8 @@ USE tasf_b2b;
 --   - cancelaciones reales por dia
 
 START TRANSACTION;
+
+SET SQL_SAFE_UPDATES = 0;
 
 DELETE FROM daily_plan_segment;
 DELETE FROM daily_plan_run;
@@ -28,6 +31,8 @@ ALTER TABLE daily_plan_segment AUTO_INCREMENT = 1;
 ALTER TABLE daily_plan_run AUTO_INCREMENT = 1;
 ALTER TABLE flight_day_cancellation AUTO_INCREMENT = 1;
 ALTER TABLE shipment AUTO_INCREMENT = 1;
+
+SET SQL_SAFE_UPDATES = 1;
 
 COMMIT;
 

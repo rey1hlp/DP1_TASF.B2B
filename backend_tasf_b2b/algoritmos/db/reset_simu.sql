@@ -1,5 +1,6 @@
 USE tasf_b2b;
 
+-- ADVERTENCIA: Este script desactiva temporalmente el safe update de SQL
 -- Limpia solo las simulaciones para volver a empezar con reportes vacios.
 -- Conserva:
 --   - airport
@@ -15,6 +16,8 @@ USE tasf_b2b;
 --   - cancelaciones virtuales de simulacion
 
 START TRANSACTION;
+
+SET SQL_SAFE_UPDATES = 0;
 
 DELETE FROM simulation_report_route_step;
 DELETE FROM simulation_report_route;
@@ -36,6 +39,8 @@ ALTER TABLE simulation_report_impact AUTO_INCREMENT = 1;
 ALTER TABLE simulation_report_snapshot AUTO_INCREMENT = 1;
 ALTER TABLE simulation_virtual_cancellation AUTO_INCREMENT = 1;
 ALTER TABLE simulation_run AUTO_INCREMENT = 1;
+
+SET SQL_SAFE_UPDATES = 1;
 
 COMMIT;
 
