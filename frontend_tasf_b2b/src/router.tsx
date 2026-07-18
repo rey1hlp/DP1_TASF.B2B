@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { createBrowserRouter, Navigate, useLocation, useNavigate, useParams } from 'react-router'
+import { createBrowserRouter, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router'
 
 import AppLayout from './layouts/AppLayout'
 import SimulationPage from './pages/SimulationPage'
@@ -15,9 +15,20 @@ import ShipmentsCrud from './components/ShipmentsCrud'
 import ReportsDashboard from './components/reports/ReportsDashboard'
 
 import { PlaneIconDebug } from './debug/PlaneIconDebug'
-import { useAuth } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { SimulationProvider } from './contexts/SimulationContext'
 
 type AllowedRole = 'ADMIN' | 'LOGISTICS' | 'REGISTER'
+
+function AppProviders() {
+  return (
+    <AuthProvider>
+      <SimulationProvider>
+        <Outlet />
+      </SimulationProvider>
+    </AuthProvider>
+  )
+}
 
 function RequireAuth() {
   const location = useLocation()
@@ -140,104 +151,109 @@ function SimulationRoute() {
 
 export const router = createBrowserRouter([
   {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/',
-    element: <RequireAuth />,
+    element: <AppProviders />,
     children: [
       {
-        index: true,
-        element: <HomeRedirect />,
+        path: '/login',
+        element: <LoginPage />,
       },
       {
-        path: 'operacion-diaria',
-        element: (
-          <RequireRoles allow={['ADMIN', 'LOGISTICS']}>
-            <DailyOperationPage />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'envios',
-        element: (
-          <RequireRoles allow={['ADMIN', 'REGISTER']}>
-            <ShipmentsCrud />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'vuelos',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <FlightsRoute />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'vuelos/:flightId',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <FlightDetailRoute />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'aeropuertos',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <AirportsRoute />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'aeropuertos/:airportCode/almacen',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <AirportWarehouseRoute />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'simulacion',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <SimulationRoute />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'reportes',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <ReportsDashboard />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'configuracion',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <div>ConfiguraciÃ³n</div>
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'debug',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <PlaneIconDebug />
-          </RequireRoles>
-        ),
-      },
-      {
-        path: 'usuarios',
-        element: (
-          <RequireRoles allow={['ADMIN']}>
-            <EmployeesCrud />
-          </RequireRoles>
-        ),
+        path: '/',
+        element: <RequireAuth />,
+        children: [
+          {
+            index: true,
+            element: <HomeRedirect />,
+          },
+          {
+            path: 'operacion-diaria',
+            element: (
+              <RequireRoles allow={['ADMIN', 'LOGISTICS']}>
+                <DailyOperationPage />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'envios',
+            element: (
+              <RequireRoles allow={['ADMIN', 'REGISTER']}>
+                <ShipmentsCrud />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'vuelos',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <FlightsRoute />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'vuelos/:flightId',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <FlightDetailRoute />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'aeropuertos',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <AirportsRoute />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'aeropuertos/:airportCode/almacen',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <AirportWarehouseRoute />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'simulacion',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <SimulationRoute />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'reportes',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <ReportsDashboard />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'configuracion',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <div>ConfiguraciÃ³n</div>
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'debug',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <PlaneIconDebug />
+              </RequireRoles>
+            ),
+          },
+          {
+            path: 'usuarios',
+            element: (
+              <RequireRoles allow={['ADMIN']}>
+                <EmployeesCrud />
+              </RequireRoles>
+            ),
+          },
+        ],
       },
     ],
   },
