@@ -2030,6 +2030,18 @@ export default function MapView({
           </div>
         </div>
       ) : previewAirport && airportDetailStage === 'airport' ? (() => {
+        // ENTRANTE: envíos cuyo origen NO es este aeropuerto (vinieron de otro lugar)
+        const incomingShipmentsList = airportShipments.filter(ship => ship.origen !== previewAirport.codigoOaci);
+        // SALIENTE: envíos que originan aquí O que están en tránsito (destino final != este aeropuerto)
+        const outgoingShipmentsList = airportShipments.filter(ship =>
+          ship.origen === previewAirport.codigoOaci || ship.destino !== previewAirport.codigoOaci
+        );
+
+        const incomingShipmentsCount = incomingShipmentsList.length;
+        const incomingBagsCount = incomingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+
+        const outgoingShipmentsCount = outgoingShipmentsList.length;
+        const outgoingBagsCount = outgoingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
         const totalAirportBags = airportShipments.reduce((sum, shipment) => sum + (shipment.cantidad ?? 0), 0);
 
         return (
@@ -2050,12 +2062,20 @@ export default function MapView({
                   : `0/${formatInteger(previewAirport.capacidad)}`,
               },
               {
-                label: 'Envíos',
-                value: String(airportShipments.length),
+                label: 'Envios entrantes',
+                value: String(incomingShipmentsCount),
               },
               {
-                label: 'Maletas',
-                value: formatBags(totalAirportBags),
+                label: 'Maletas entrantes',
+                value: formatBags(incomingBagsCount),
+              },
+              {
+                label: 'Envios salientes',
+                value: String(outgoingShipmentsCount),
+              },
+              {
+                label: 'Maletas salientes',
+                value: formatBags(outgoingBagsCount),
               }
             ]}
             onClose={closePreviewAirport}
