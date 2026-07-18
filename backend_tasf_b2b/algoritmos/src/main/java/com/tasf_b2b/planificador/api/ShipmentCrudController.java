@@ -310,8 +310,8 @@ public class ShipmentCrudController {
         List<String> invalidFormat = new ArrayList<>();
         List<String> invalidAirport = new ArrayList<>();
         
-        final int BATCH_SIZE = 2000;
-        List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
+        List<ImportedShipmentDraft> drafts = new ArrayList<>();
+        List<String> registeredCodes = new ArrayList<>();
 
         // Cargar aeropuertos en memoria
         List<AirportEntity> todosLosAeropuertos = airportRepository.findAll();
@@ -334,18 +334,16 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                String codigoPedidoRaw = parts[0].trim();
                 // Fecha y hora del TXT se ignoran: la carga usa el reloj local del aeropuerto de la cuenta.
                 String destinoOaci = parts[4].trim().toUpperCase(Locale.ROOT);
                 String cantidadTxt = parts[5].trim();
                 String idCliente = parts[6].trim();
 
-                if (!isSupportedTxtShipmentCode(codigoPedidoRaw) || idCliente.isBlank()) {
+                if (idCliente.isBlank()) {
                     skipped++;
                     invalidFormat.add(line);
                     continue;
                 }
-                String codigoPedido = buildImportedShipmentCode(originOaci, codigoPedidoRaw);
 
                 AirportEntity destinoAirport = mapaAeropuertos.get(destinoOaci);
                 if (destinoAirport == null) {
@@ -371,38 +369,24 @@ public class ShipmentCrudController {
 
                 int slaHoras = computeSla(originAirport, destinoAirport);
 
-                batch.add(new Object[]{
-                    codigoPedido,
-                    originAirport.id,
-                    destinoAirport.id,
+                drafts.add(new ImportedShipmentDraft(
+                    destinoAirport,
                     importIngresoUtc,
                     cantidad,
                     idCliente,
-                    slaHoras,
-                    ShipmentStatus.PENDING.name()
-                });
+                    slaHoras
+                ));
 
-                if (batch.size() >= BATCH_SIZE) {
-                    int[] results = executeShipmentBatch(batch);
-                    for (int r : results) {
-                        if (r == 1) inserted++;
-                        else if (r == 2) updated++;
-                    }
-                    batch.clear();
-                }
             }
         }
 
         // Procesar último lote
-        if (!batch.isEmpty()) {
-            int[] results = executeShipmentBatch(batch);
-            for (int r : results) {
-                if (r == 1) inserted++;
-                else if (r == 2) updated++;
-            }
+        if (!drafts.isEmpty()) {
+            registeredCodes = persistImportedShipments(originAirport, drafts);
+            inserted = registeredCodes.size();
         }
 
-        if (inserted + updated > 0) {
+        if (inserted > 0) {
             triggerReplanAsync("SHIPMENT_IMPORT", "txt masivo");
         }
 
@@ -410,25 +394,47 @@ public class ShipmentCrudController {
         log.info("[SHIPMENT_CRUD] import finished file={} origin={} total={} inserted={} updated={} skipped={} time={}ms",
             file.getOriginalFilename(), originOaci, total, inserted, updated, skipped, elapsed);
 
-        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport));
+        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport, registeredCodes));
     }
 
-    // Cambiar void por int[]
-    private int[] executeShipmentBatch(List<Object[]> batch) {
+    private int[] executeShipmentInsertBatch(List<Object[]> batch) {
         String sql = 
             "INSERT INTO shipment " +
             "(codigo_pedido, origen_id, destino_id, ingreso_utc, cantidad, id_cliente, sla_horas, status) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
-            "AS new ON DUPLICATE KEY UPDATE " +
-            "origen_id = new.origen_id, " +
-            "destino_id = new.destino_id, " +
-            "ingreso_utc = new.ingreso_utc, " +
-            "cantidad = new.cantidad, " +
-            "id_cliente = new.id_cliente, " +
-            "sla_horas = new.sla_horas, " +
-            "status = new.status";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
         return jdbcTemplate.batchUpdate(sql, batch);
+    }
+
+    private List<String> persistImportedShipments(AirportEntity originAirport, List<ImportedShipmentDraft> drafts) {
+        String originCode = originAirport != null ? normalizeAirport(originAirport.codigoOaci) : null;
+        if (originCode == null || originCode.length() != AIRPORT_CODE_LENGTH) {
+            throw new IllegalStateException("No se pudo resolver el aeropuerto de origen para importar los envios");
+        }
+
+        synchronized (SHIPMENT_CODE_LOCK) {
+            long nextNumericCode = nextShipmentNumericCode(originCode);
+            List<Object[]> batch = new ArrayList<>(drafts.size());
+            List<String> assignedCodes = new ArrayList<>(drafts.size());
+
+            for (ImportedShipmentDraft draft : drafts) {
+                String codigoPedido = originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", nextNumericCode++);
+                assignedCodes.add(codigoPedido);
+                batch.add(new Object[]{
+                    codigoPedido,
+                    originAirport.id,
+                    draft.destinoAirport().id,
+                    draft.ingresoUtc(),
+                    draft.cantidad(),
+                    draft.idCliente(),
+                    draft.slaHoras(),
+                    ShipmentStatus.PENDING.name()
+                });
+            }
+
+            executeShipmentInsertBatch(batch);
+            return assignedCodes;
+        }
     }
 
     private void triggerReplanAsync(String triggerType, String detail) {
@@ -545,18 +551,14 @@ public class ShipmentCrudController {
     }
 
     private String nextShipmentCode(String originCode) {
-        Long maxCode = repository.findMaxNumericCodigoPedidoByPrefix(originCode);
-        long currentMax = maxCode != null ? maxCode : 0L;
-        long next = currentMax + 1L;
+        long next = nextShipmentNumericCode(originCode);
         return originCode + String.format(Locale.ROOT, "%0" + NUMERIC_SHIPMENT_CODE_LENGTH + "d", next);
     }
 
-    private boolean isSupportedTxtShipmentCode(String code) {
-        return code != null && PATRON_CODIGO_TXT.matcher(code.trim()).matches();
-    }
-
-    private String buildImportedShipmentCode(String originOaci, String rawCode) {
-        return normalizeAirport(originOaci) + rawCode.trim();
+    private long nextShipmentNumericCode(String originCode) {
+        Long maxCode = repository.findMaxNumericCodigoPedidoByPrefix(originCode);
+        long currentMax = maxCode != null ? maxCode : 0L;
+        return currentMax + 1L;
     }
 
     private ShipmentCrudDto toDto(ShipmentEntity entity) {
@@ -647,7 +649,16 @@ public class ShipmentCrudController {
         int updated,
         int skipped,
         List<String> invalidFormatLines,
-        List<String> invalidAirportLines
+        List<String> invalidAirportLines,
+        List<String> registeredCodes
+    ) {}
+
+    private record ImportedShipmentDraft(
+        AirportEntity destinoAirport,
+        LocalDateTime ingresoUtc,
+        int cantidad,
+        String idCliente,
+        int slaHoras
     ) {}
 
     private record RawShipmentDateTimes(
