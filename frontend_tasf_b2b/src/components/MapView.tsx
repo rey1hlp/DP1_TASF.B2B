@@ -36,9 +36,6 @@ import {
   LANDED_ROUTE_STYLE,
   MAP_PANES,
   SELECTED_ROUTE_STYLE,
-  SHIPMENT_ROUTE_ACTIVE_STYLE,
-  SHIPMENT_ROUTE_DONE_STYLE,
-  SHIPMENT_ROUTE_PENDING_STYLE,
   VIRTUAL_CANCELLED_ROUTE_STYLE,
 } from '../utils/mapRouteStyles'
 import { buildGeodesicArcPoints, getGeodesicPointAtProgress, type MapLatLng } from '../utils/mapGeodesic'
@@ -102,6 +99,26 @@ function MapTimeChip({ icon: Icon, label, value, tone, onClose }: TimeChipProps)
         <X size={12} />
       </button>
     </div>
+  )
+}
+
+type DetailLinkButtonProps = {
+  label?: string
+  onClick: () => void
+  title?: string
+}
+
+function DetailLinkButton({ label = 'Ver detalle', onClick, title = label }: DetailLinkButtonProps) {
+  return (
+    <button
+      type="button"
+      className="shipment-detail-link"
+      onClick={onClick}
+      title={title}
+    >
+      <Eye size={14} strokeWidth={2.2} />
+      <span>{label}</span>
+    </button>
   )
 }
 
@@ -198,11 +215,10 @@ export type MapViewProps = {
   realDurationLabel?: string
   isPaused?: boolean
   cancelledFlightTraces?: CancelledFlightTrace[]
-  onAirportDetailRequest?: (codigoOaci: string) => void
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
   onFlightPreview?: (flightId: number | null) => void
-  onBagFocusRequest?: (bagCode: string) => void
+  onShipmentFocusRequest?: (shipmentCode: string) => void
   onClearShipmentRoute?: () => void
   onToggleFullscreen: () => void
   isSimulation?: boolean
@@ -421,25 +437,15 @@ function getShipmentStepStyle(
   currentMinute: number | null
 ) {
   if (currentMinute == null) {
-    return SHIPMENT_ROUTE_PENDING_STYLE
+    return SELECTED_ROUTE_STYLE
   }
   if (currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin) {
-    return SHIPMENT_ROUTE_ACTIVE_STYLE
+    return { ...SELECTED_ROUTE_STYLE, dashArray: undefined, weight: 4.2, opacity: 1 }
   }
   if (currentMinute > step.llegadaMin) {
-    return SHIPMENT_ROUTE_DONE_STYLE
+    return { ...SELECTED_ROUTE_STYLE, opacity: 0.5, dashArray: '5, 5' }
   }
-  return SHIPMENT_ROUTE_PENDING_STYLE
-}
-
-function buildShipmentBagCodes(codigoPedido: string, cantidad?: number) {
-  const total = Math.max(0, Math.floor(cantidad ?? 0))
-  return Array.from({ length: total }, (_, index) => `${codigoPedido}-${String(index + 1).padStart(3, '0')}`)
-}
-
-function getBagShortCode(bagCode: string) {
-  const match = bagCode.match(/-(\d{3})$/)
-  return match?.[1] ?? bagCode
+  return SELECTED_ROUTE_STYLE
 }
 
 export default function MapView({
@@ -462,10 +468,9 @@ export default function MapView({
   realDurationLabel,
   isPaused = false,
   cancelledFlightTraces,
-  onAirportDetailRequest,
   onAirportPreview,
   onFlightPreview,
-  onBagFocusRequest,
+  onShipmentFocusRequest,
   onToggleFullscreen,
   isSimulation = true,
   showCancelledDetails = true,
@@ -908,10 +913,6 @@ export default function MapView({
     setAirportShipmentsLoading(false)
   }
 
-  const trackBag = (bagCode: string) => {
-    onBagFocusRequest?.(bagCode)
-  }
-
   const openShipmentsStage = () => {
     if (previewFlightId === null) {
       return
@@ -933,6 +934,10 @@ export default function MapView({
   const openShipmentDetails = (shipment: ShipmentCrudDto) => {
     setSelectedShipment(shipment)
     setDetailStage('shipmentDetails')
+  }
+
+  const openShipmentCatalogDetails = (shipmentCode: string) => {
+    onShipmentFocusRequest?.(shipmentCode)
   }
 
   const goBackToShipmentsList = () => {
@@ -1832,7 +1837,7 @@ export default function MapView({
           title={`${previewFlight.origen} → ${previewFlight.destino}`}
         />
       ) : previewFlight && detailStage === 'shipments' ? (
-        <div className="map-floating-card flight-shipments-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
+        <div className="map-floating-card flight-shipments-card">
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
               <button
@@ -1844,8 +1849,12 @@ export default function MapView({
               >
                 <ArrowLeft size={17} strokeWidth={2.4} />
               </button>
-              <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
-              <strong>Envíos asignados</strong>
+              <div className="flight-context-heading">
+                <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
+                <strong>
+                  {previewFlight.origen || '--'} - {previewFlight.destino || '--'}
+                </strong>
+              </div>
             </div>
             <button
               type="button"
@@ -1858,10 +1867,8 @@ export default function MapView({
           </div>
 
           <div className="map-floating-card-body">
-            <div className="flight-shipment-route-line">
-              <span>{previewFlight.origen}</span>
-              <span aria-hidden="true">→</span>
-              <span>{previewFlight.destino}</span>
+            <div className="flight-panel-section-heading">
+              <strong>Envíos asignados</strong>
             </div>
 
             {flightShipmentsLoading ? (
@@ -1881,7 +1888,6 @@ export default function MapView({
             {!flightShipmentsLoading && !flightShipmentsError ? (
               <div className="flight-shipment-list">
                 {flightShipments.map((shipment) => {
-                  const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
                   const slaInfo = formatRemainingSla(shipment)
 
                   return (
@@ -1891,27 +1897,13 @@ export default function MapView({
                     >
                       <div className="flight-shipment-item-header">
                         <div className="flight-shipment-main">
-                          <div className="flight-shipment-code-row">
-                            <div className="flight-shipment-code">{shipment.codigoPedido}</div>
-                            <button
-                              type="button"
-                              className="flight-shipment-detail-link"
-                              onClick={() => openShipmentDetails(shipment)}
-                              title="Ver detalles"
-                            >
-                              <Eye size={14} strokeWidth={2.2} />
-                              <span>Ver detalles</span>
-                            </button>
-                          </div>
+                          <div className="flight-shipment-code">{shipment.codigoPedido}</div>
                           <div className="flight-shipment-route">
-                            <span>{shipment.origen || '--'}</span>
+                            <span>{previewFlight.origen || '--'}</span>
                             <span aria-hidden="true">→</span>
-                            <span>{shipment.destino || '--'}</span>
+                            <span>{previewFlight.destino || '--'}</span>
                           </div>
                         </div>
-                        <span className={`status-badge ${statusClass}`}>
-                          {shipment.status ?? 'PENDING'}
-                        </span>
                       </div>
 
                       <div className="flight-shipment-metrics">
@@ -1923,11 +1915,13 @@ export default function MapView({
                           <strong>{slaInfo.value}</strong>
                           <span>{slaInfo.label}</span>
                         </div>
-                        <div className="map-floating-card-metric flight-shipment-metric">
-                          <strong>{shipment.asignado ? 'Sí' : 'No'}</strong>
-                          <span>Asignado</span>
-                        </div>
                       </div>
+
+                      <DetailLinkButton
+                        label="Ver detalle"
+                        onClick={() => openShipmentDetails(shipment)}
+                        title="Ver detalle"
+                      />
                     </div>
                   )
                 })}
@@ -1936,7 +1930,7 @@ export default function MapView({
           </div>
         </div>
       ) : previewFlight && detailStage === 'shipmentDetails' ? (
-        <div className="map-floating-card flight-shipments-card" style={{ width: 'min(420px, calc(100% - 32px))' }}>
+        <div className="map-floating-card flight-shipments-card">
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
               <button
@@ -1948,12 +1942,11 @@ export default function MapView({
               >
                 <ArrowLeft size={17} strokeWidth={2.4} />
               </button>
-              <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
-              <div className="shipment-detail-title-stack">
-                <strong>{selectedShipment?.codigoPedido ?? '--'}</strong>
-                <span>
-                  <b>Detalle del envío</b>
-                </span>
+              <div className="flight-context-heading">
+                <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
+                <strong>
+                  {previewFlight.origen || '--'} - {previewFlight.destino || '--'}
+                </strong>
               </div>
             </div>
             <button
@@ -1967,40 +1960,59 @@ export default function MapView({
           </div>
 
           <div className="map-floating-card-body">
-            <div className="flight-shipment-route-line">
-              <span>Vuelo actual:</span>
-              <span>{previewFlight.origen}</span>
-              <span aria-hidden="true">→</span>
-              <span>{previewFlight.destino}</span>
+            <div className="flight-panel-section-heading">
+              <strong>Detalle de envío</strong>
+              <span>{selectedShipment?.codigoPedido ?? '--'}</span>
             </div>
 
             {selectedShipment ? (
               <>
-                <div className="shipment-detail-summary-card">
-                  <div className="shipment-detail-summary-header">
-                    <div>
-                      <span>Ruta total del envío</span>
-                      <strong className="shipment-detail-total-route">
-                        {selectedShipment.origen || '--'} → {selectedShipment.destino || '--'}
-                      </strong>
+                {(() => {
+                  const slaInfo = formatRemainingSla(selectedShipment)
+                  const statusClass = (selectedShipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
+                  return (
+                    <div className="shipment-detail-route-card">
+                      <div className="shipment-detail-route-card-header">
+                        <div>
+                          <span>Tramo actual</span>
+                          <strong className="shipment-detail-total-route">
+                            {previewFlight.origen || '--'} → {previewFlight.destino || '--'}
+                          </strong>
+                        </div>
+                        <span className={`status-badge ${statusClass}`}>
+                          {selectedShipment.status ?? 'PENDING'}
+                        </span>
+                      </div>
+                      <div className="shipment-detail-current-leg">
+                        <span>Vuelo {getVisibleFlightId(previewFlight)}</span>
+                        <strong>
+                          {formatMinuteRangeWithGmt(
+                            previewFlight.salidaMin,
+                            previewFlight.llegadaMin,
+                            airportGmtByCode[normalizeAirportCode(previewFlight.origen)] ?? null,
+                            airportGmtByCode[normalizeAirportCode(previewFlight.destino)] ?? null,
+                          )}
+                        </strong>
+                      </div>
+                      <div className="shipment-detail-time-strip">
+                        <div>
+                          <span>Tiempo total</span>
+                          <strong>{formatDurationHours(selectedShipment.slaHoras, 0)}</strong>
+                        </div>
+                        <span className={`shipment-detail-sla-countdown sla-${slaInfo.tone}`}>
+                          {slaInfo.tone === 'late'
+                            ? `${slaInfo.value} vencido`
+                            : `${slaInfo.value} restantes`}
+                        </span>
+                      </div>
+                      <DetailLinkButton
+                        onClick={() => openShipmentCatalogDetails(selectedShipment.codigoPedido)}
+                      />
                     </div>
-                    <div className="shipment-detail-alerts">
-                      <span className={`status-badge ${(selectedShipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')}`}>
-                        {selectedShipment.status ?? 'PENDING'}
-                      </span>
-                      {(() => {
-                        const slaInfo = formatRemainingSla(selectedShipment)
-                        return (
-                          <span className={`shipment-detail-sla-countdown sla-${slaInfo.tone}`}>
-                            {slaInfo.tone === 'late'
-                              ? `${slaInfo.value} vencido`
-                              : `${slaInfo.value} restantes`}
-                          </span>
-                        )
-                      })()}
-                    </div>
-                  </div>
-                  <div className="shipment-detail-summary-grid">
+                  )
+                })()}
+
+                <div className="shipment-detail-secondary-grid">
                     <div>
                       <span>Maletas</span>
                       <strong>{formatBags(selectedShipment.cantidad)}</strong>
@@ -2009,26 +2021,8 @@ export default function MapView({
                       <span>Cliente</span>
                       <strong>{selectedShipment.idCliente || '--'}</strong>
                     </div>
-                    <div>
-                      <span>SLA Total</span>
-                      <strong>{formatDurationHours(selectedShipment.slaHoras, 0)}</strong>
-                    </div>
-                  </div>
                 </div>
 
-                <div className="shipment-bag-compact-grid" aria-label="Maletas del envío">
-                  {buildShipmentBagCodes(selectedShipment.codigoPedido, selectedShipment.cantidad).map((bagCode) => (
-                    <button
-                      key={bagCode}
-                      type="button"
-                      className="shipment-bag-compact-chip"
-                      onClick={() => trackBag(bagCode)}
-                      title={bagCode}
-                    >
-                      {getBagShortCode(bagCode)}
-                    </button>
-                  ))}
-                </div>
               </>
             ) : (
               <div className="crud-empty">Selecciona un envío para ver sus maletas.</div>
@@ -2036,22 +2030,10 @@ export default function MapView({
           </div>
         </div>
       ) : previewAirport && airportDetailStage === 'airport' ? (() => {
-        // ENTRANTE: envíos cuyo origen NO es este aeropuerto (vinieron de otro lugar)
-        const incomingShipmentsList = airportShipments.filter(ship => ship.origen !== previewAirport.codigoOaci);
-        // SALIENTE: envíos que originan aquí O que están en tránsito (destino final != este aeropuerto)
-        const outgoingShipmentsList = airportShipments.filter(ship =>
-          ship.origen === previewAirport.codigoOaci || ship.destino !== previewAirport.codigoOaci
-        );
-
-        const incomingShipmentsCount = incomingShipmentsList.length;
-        const incomingBagsCount = incomingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
-
-        const outgoingShipmentsCount = outgoingShipmentsList.length;
-        const outgoingBagsCount = outgoingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
+        const totalAirportBags = airportShipments.reduce((sum, shipment) => sum + (shipment.cantidad ?? 0), 0);
 
         return (
           <MapFloatingCard
-            actionLabel="Ver detalle completo"
             secondaryActionLabel="Ver envíos"
             onSecondaryAction={openAirportShipmentsStage}
             badge={previewAirport.codigoOaci}
@@ -2068,23 +2050,14 @@ export default function MapView({
                   : `0/${formatInteger(previewAirport.capacidad)}`,
               },
               {
-                label: 'Envios entrantes',
-                value: String(incomingShipmentsCount),
+                label: 'Envíos',
+                value: String(airportShipments.length),
               },
               {
-                label: 'Maletas entrantes',
-                value: formatBags(incomingBagsCount),
-              },
-              {
-                label: 'Envios salientes',
-                value: String(outgoingShipmentsCount),
-              },
-              {
-                label: 'Maletas salientes',
-                value: formatBags(outgoingBagsCount),
+                label: 'Maletas',
+                value: formatBags(totalAirportBags),
               }
             ]}
-            onAction={() => onAirportDetailRequest?.(previewAirport.codigoOaci)}
             onClose={closePreviewAirport}
             statusColor={resolveSemaphoreColor(
               warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,
@@ -2099,11 +2072,22 @@ export default function MapView({
           />
         );
       })() : previewAirport && airportDetailStage === 'shipments' ? (
-        <div className="map-floating-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
+        <div className="map-floating-card flight-shipments-card airport-shipments-card">
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
-              <span className="map-floating-card-badge">{previewAirport.codigoOaci}</span>
-              <strong>Envíos en el almacén</strong>
+              <button
+                type="button"
+                className="map-floating-card-back-icon"
+                onClick={goBackToAirportCard}
+                aria-label="Volver al detalle del aeropuerto"
+                title="Volver"
+              >
+                <ArrowLeft size={17} strokeWidth={2.4} />
+              </button>
+              <div className="flight-context-heading">
+                <span className="map-floating-card-badge">{previewAirport.codigoOaci}</span>
+                <strong>{previewAirport.nombre}</strong>
+              </div>
             </div>
             <button
               type="button"
@@ -2116,14 +2100,12 @@ export default function MapView({
           </div>
 
           <div className="map-floating-card-body">
-            <div className="map-floating-card-subtitle">{previewAirport.nombre}</div>
+            <div className="flight-panel-section-heading">
+              <strong>Envíos en almacén</strong>
+              <span>{previewAirport.pais}</span>
+            </div>
 
-            <button type="button" className="btn ghost" onClick={goBackToAirportCard}>
-              ← Volver
-            </button>
-
-            {/* Filtro Entrante / Saliente / Todos */}
-            <div style={{ display: 'flex', gap: '6px', margin: '8px 0' }}>
+            <div className="airport-shipment-filter-tabs">
               {(['all', 'entrante', 'saliente'] as const).map((filterVal) => {
                 const labels: Record<typeof filterVal, string> = { all: 'Todos', entrante: 'Entrantes', saliente: 'Salientes' };
                 const isActive = shipmentFilterType === filterVal;
@@ -2132,17 +2114,7 @@ export default function MapView({
                     key={filterVal}
                     type="button"
                     onClick={() => setShipmentFilterType(filterVal)}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '16px',
-                      border: isActive ? '2px solid #3b82f6' : '1px solid #ccc',
-                      background: isActive ? '#e8f0fe' : '#fff',
-                      color: isActive ? '#1a56db' : '#555',
-                      fontWeight: isActive ? 700 : 500,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
+                    className={`airport-shipment-filter-tab ${isActive ? 'active' : ''}`}
                   >
                     {labels[filterVal]}
                   </button>
@@ -2173,34 +2145,29 @@ export default function MapView({
               }
 
               return (
-                <div style={{ display: 'grid', gap: '10px' }}>
+                <div className="flight-shipment-list">
                   {displayShipments.map((shipment) => {
                     const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-');
-                    // Determinar badges de tipo
+                    const slaInfo = formatRemainingSla(shipment);
                     const isEntrante = shipment.origen !== code;
                     const isSaliente = shipment.origen === code || shipment.destino !== code;
 
                     return (
                       <div
                         key={shipment.id ?? shipment.codigoPedido}
-                        style={{
-                          display: 'grid',
-                          gap: '10px',
-                          padding: '12px',
-                          borderRadius: '12px',
-                          border: '1px solid #d9e4f4',
-                          background: '#f8fbff',
-                        }}
+                        className="flight-shipment-item airport-shipment-item"
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 800, color: '#10213a' }}>{shipment.codigoPedido}</div>
-                            <div style={{ fontSize: '12px', color: '#52647d' }}>
-                              {shipment.origen} → {shipment.destino}
+                        <div className="airport-shipment-item-header">
+                          <div className="flight-shipment-main">
+                            <div className="flight-shipment-code">{shipment.codigoPedido}</div>
+                            <div className="flight-shipment-route">
+                              <span>{shipment.origen || '--'}</span>
+                              <span aria-hidden="true">→</span>
+                              <span>{shipment.destino || '--'}</span>
                             </div>
-                            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                              {isEntrante && <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>ENTRANTE</span>}
-                              {isSaliente && <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>SALIENTE</span>}
+                            <div className="airport-shipment-direction-tags">
+                              {isEntrante ? <span className="airport-direction-tag incoming">Entrante</span> : null}
+                              {isSaliente ? <span className="airport-direction-tag outgoing">Saliente</span> : null}
                             </div>
                           </div>
                           <span className={`status-badge ${statusClass}`}>
@@ -2208,37 +2175,22 @@ export default function MapView({
                           </span>
                         </div>
 
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                            gap: '8px',
-                          }}
-                        >
-                          <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                            <strong style={{ fontSize: '18px' }}>{formatBags(shipment.cantidad)}</strong>
+                        <div className="flight-shipment-metrics">
+                          <div className="map-floating-card-metric flight-shipment-metric">
+                            <strong>{formatBags(shipment.cantidad)}</strong>
                             <span>Maletas</span>
                           </div>
-                          <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                            <strong style={{ fontSize: '18px' }}>
-                              {formatDurationHours(shipment.slaHoras, 0)}
-                            </strong>
-                            <span>SLA</span>
-                          </div>
-                          <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                            <strong style={{ fontSize: '18px' }}>{shipment.asignado ? 'Sí' : 'No'}</strong>
-                            <span>Asignado</span>
+                          <div className={`map-floating-card-metric flight-shipment-metric sla-${slaInfo.tone}`}>
+                            <strong>{slaInfo.value}</strong>
+                            <span>{slaInfo.label}</span>
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          className="map-floating-card-action"
+                        <DetailLinkButton
+                          label="Ver detalle"
                           onClick={() => openAirportShipmentDetails(shipment)}
-                          style={{ minHeight: '40px', fontSize: '14px' }}
-                        >
-                          Ver maletas
-                        </button>
+                          title="Ver detalle del envío"
+                        />
                       </div>
                     )
                   })}
@@ -2248,11 +2200,22 @@ export default function MapView({
           </div>
         </div>
       ) : previewAirport && airportDetailStage === 'shipmentDetails' ? (
-        <div className="map-floating-card" style={{ width: 'min(420px, calc(100% - 32px))' }}>
+        <div className="map-floating-card flight-shipments-card airport-shipments-card">
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
-              <span className="map-floating-card-badge">Maletas</span>
-              <strong>{selectedAirportShipment?.codigoPedido ?? previewAirport.codigoOaci}</strong>
+              <button
+                type="button"
+                className="map-floating-card-back-icon"
+                onClick={goBackToAirportShipmentsList}
+                aria-label="Volver a envíos en almacén"
+                title="Volver"
+              >
+                <ArrowLeft size={17} strokeWidth={2.4} />
+              </button>
+              <div className="flight-context-heading">
+                <span className="map-floating-card-badge">{previewAirport.codigoOaci}</span>
+                <strong>{previewAirport.nombre}</strong>
+              </div>
             </div>
             <button
               type="button"
@@ -2265,55 +2228,62 @@ export default function MapView({
           </div>
 
           <div className="map-floating-card-body">
-            <div className="map-floating-card-subtitle">{previewAirport.nombre}</div>
-
-            <button type="button" className="btn ghost" onClick={goBackToAirportShipmentsList}>
-              ← Volver
-            </button>
+            <div className="flight-panel-section-heading">
+              <strong>Detalle de envío</strong>
+              <span>{selectedAirportShipment?.codigoPedido ?? '--'}</span>
+            </div>
 
             {selectedAirportShipment ? (
               <>
-                <div className="map-floating-card-metrics" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                  <div className="map-floating-card-metric">
+                {(() => {
+                  const slaInfo = formatRemainingSla(selectedAirportShipment)
+                  const statusClass = (selectedAirportShipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
+                  return (
+                    <div className="shipment-detail-route-card">
+                      <div className="shipment-detail-route-card-header">
+                        <div>
+                          <span>Ruta total del envío</span>
+                          <strong className="shipment-detail-total-route">
+                            {selectedAirportShipment.origen || '--'} → {selectedAirportShipment.destino || '--'}
+                          </strong>
+                        </div>
+                        <span className={`status-badge ${statusClass}`}>
+                          {selectedAirportShipment.status ?? 'PENDING'}
+                        </span>
+                      </div>
+                      <div className="shipment-detail-current-leg">
+                        <span>Aeropuerto actual</span>
+                        <strong>{previewAirport.codigoOaci}</strong>
+                      </div>
+                      <div className="shipment-detail-time-strip">
+                        <div>
+                          <span>SLA total</span>
+                          <strong>{formatDurationHours(selectedAirportShipment.slaHoras, 0)}</strong>
+                        </div>
+                        <span className={`shipment-detail-sla-countdown sla-${slaInfo.tone}`}>
+                          {slaInfo.tone === 'late'
+                            ? `${slaInfo.value} vencido`
+                            : `${slaInfo.value} restantes`}
+                        </span>
+                      </div>
+                      <DetailLinkButton
+                        onClick={() => openShipmentCatalogDetails(selectedAirportShipment.codigoPedido)}
+                      />
+                    </div>
+                  )
+                })()}
+
+                <div className="shipment-detail-secondary-grid">
+                  <div>
+                    <span>Maletas</span>
                     <strong>{formatBags(selectedAirportShipment.cantidad)}</strong>
-                    <span>Número de maletas</span>
                   </div>
-                  <div className="map-floating-card-metric">
-                    <strong>{selectedAirportShipment.idCliente || '--'}</strong>
+                  <div>
                     <span>Cliente</span>
+                    <strong>{selectedAirportShipment.idCliente || '--'}</strong>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gap: '8px',
-                    border: '1px solid #d9e4f4',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    background: '#f8fbff',
-                    fontSize: '13px',
-                    color: '#334155',
-                  }}
-                >
-                  <div><strong>Origen:</strong> {selectedAirportShipment.origen}</div>
-                  <div><strong>Destino:</strong> {selectedAirportShipment.destino}</div>
-                  <div><strong>Estado:</strong> {selectedAirportShipment.status ?? 'PENDING'}</div>
-                  <div><strong>SLA:</strong> {formatDurationHours(selectedAirportShipment.slaHoras, 0)}</div>
-                </div>
-
-                <div className="entity-bag-list">
-                  {buildShipmentBagCodes(selectedAirportShipment.codigoPedido, selectedAirportShipment.cantidad).map((bagCode) => (
-                    <button
-                      key={bagCode}
-                      type="button"
-                      className="entity-bag-chip"
-                      onClick={() => trackBag(bagCode)}
-                    >
-                      {bagCode}
-                    </button>
-                  ))}
-                </div>
               </>
             ) : (
               <div className="crud-empty">Selecciona un envío para ver sus maletas.</div>

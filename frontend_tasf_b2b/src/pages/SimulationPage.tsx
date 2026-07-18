@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router'
+import { useOutletContext } from 'react-router'
 import type { AirportDto, EnvioDetalleDto, FlightCrudDto } from '../types/sim'
 import {
   API_BASE,
@@ -182,7 +182,6 @@ export default function SimulationPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
 
   const { setTopbarMain } = useOutletContext<AppLayoutContext>()
-  const navigate = useNavigate()
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
@@ -484,30 +483,31 @@ export default function SimulationPage() {
     }
   }
 
-  const handleMapBagFocusRequest = useCallback((bagCode: string) => {
+  const loadShipmentRouteForEntityPanel = useCallback(async (codigo: string) => {
+    if (!simId) return
+
+    try {
+      setShipmentSearchError(null)
+      const route = await fetchShipmentRoute(simId, codigo)
+      setSelectedShipmentRoute(route)
+    } catch (err) {
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('No se encontro la ruta para la maleta o envio.')
+    }
+  }, [simId])
+
+  const handleMapShipmentFocusRequest = useCallback((shipmentCode: string) => {
     entityFocusRequestIdRef.current += 1
     setIsPanelCollapsed(false)
     setEntityFocusRequest({
-      type: 'bag',
-      id: bagCode,
+      type: 'shipment',
+      id: shipmentCode,
       requestId: entityFocusRequestIdRef.current,
     })
 
-    if (!bagCode || !simId) return
-
-    const loadBagRouteForEntityPanel = async () => {
-      try {
-        setShipmentSearchError(null)
-        const route = await fetchShipmentRoute(simId, bagCode)
-        setSelectedShipmentRoute(route)
-      } catch (err) {
-        setSelectedShipmentRoute(null)
-        setShipmentSearchError('No se encontro la ruta para la maleta o envio.')
-      }
-    }
-
-    void loadBagRouteForEntityPanel()
-  }, [simId])
+    if (!shipmentCode || !simId) return
+    void loadShipmentRouteForEntityPanel(shipmentCode)
+  }, [loadShipmentRouteForEntityPanel, simId])
 
   const handleClearShipmentRoute = useCallback(() => {
     setSelectedShipmentRoute(null)
@@ -1004,17 +1004,6 @@ export default function SimulationPage() {
     })
   }, [])
 
-  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
-    navigate(`/aeropuertos/${codigoOaci}/almacen`, {
-      state: {
-        from: 'simulation',
-        simId,
-        currentMinute: displayMinute,
-        warehouseSnapshot,
-      },
-    })
-  }, [navigate, simId, displayMinute, warehouseSnapshot])
-
   const handleMapFlightPreview = useCallback((flightId: number | null) => {
     if (flightId === null) {
       setSelectedFlightId(null)
@@ -1187,10 +1176,9 @@ export default function SimulationPage() {
                 isFullscreen={isMapFullscreen}
                 isPanelCollapsed={isPanelCollapsed}
                 onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
-                onBagFocusRequest={handleMapBagFocusRequest}
+                onShipmentFocusRequest={handleMapShipmentFocusRequest}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
-                onAirportDetailRequest={handleMapAirportDetailRequest}
                 onFlightPreview={handleMapFlightPreview}
                 onFlightDetailRequest={handleMapFlightDetailRequest}
                 showCancelledDetails={showCancelledDetails}

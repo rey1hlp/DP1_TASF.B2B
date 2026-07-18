@@ -899,7 +899,9 @@ body {
 
 .control-panel-body {
   padding: 12px 18px 18px 12px;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2900,6 +2902,7 @@ body {
 }
 
 .shipment-tracker-step {
+  position: relative;
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
   gap: 2px 8px;
@@ -2907,6 +2910,11 @@ body {
   border: 1px solid #dbe6f5;
   border-radius: 6px;
   background: #edf6ff;
+}
+
+.shipment-tracker-step > * {
+  position: relative;
+  z-index: 1;
 }
 
 .shipment-tracker-step.active {
@@ -2945,6 +2953,7 @@ body {
 .shipment-tracker-step small {
   color: #55657c;
   font-size: 12px;
+  white-space: normal;
 }
 
 .shipment-tracker-step.active span {
@@ -3032,6 +3041,26 @@ body {
 .map-floating-card-title strong {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flight-context-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.flight-context-heading > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -3130,9 +3159,46 @@ body {
   padding: 12px 14px;
 }
 
+.flight-shipments-card {
+  width: fit-content;
+  min-width: min(360px, calc(100% - 32px));
+  max-width: min(420px, calc(100% - 32px));
+}
+
 .flight-shipments-card .map-floating-card-body {
   gap: 10px;
   padding: 12px 14px 14px;
+}
+
+.airport-shipments-card {
+  max-width: min(440px, calc(100% - 32px));
+}
+
+.flight-panel-section-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.flight-panel-section-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flight-panel-section-heading span {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .map-floating-card-back-icon {
@@ -3177,36 +3243,88 @@ body {
 
 .flight-shipment-item {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 9px;
+  padding: 11px;
   border-radius: 10px;
   border: 1px solid #d9e4f4;
   background: #f8fbff;
 }
 
 .flight-shipment-item-header {
+  min-width: 0;
+}
+
+.airport-shipment-item-header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .flight-shipment-main {
+  width: 100%;
   min-width: 0;
   display: grid;
+  gap: 5px;
+}
+
+.airport-shipment-filter-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.airport-shipment-filter-tab {
+  min-height: 30px;
+  border: 1px solid #cbd7ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.airport-shipment-filter-tab:hover {
+  background: #f3f7ff;
+}
+
+.airport-shipment-filter-tab.active {
+  border-color: #9ebce8;
+  background: #e8f0fe;
+  color: #1d4e96;
+}
+
+.airport-shipment-direction-tags {
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
-.flight-shipment-code-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+.airport-direction-tag {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  padding: 4px 7px;
+}
+
+.airport-direction-tag.incoming {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.airport-direction-tag.outgoing {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .flight-shipment-code {
   color: #10213a;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 850;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3242,29 +3360,38 @@ body {
   font-weight: 850;
 }
 
+.shipment-detail-link,
 .flight-shipment-detail-link {
+  width: 100%;
+  min-height: 40px;
   border: none;
-  background: transparent;
+  border-radius: 10px;
+  background: #d7e5fb;
   color: #2f62b5;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
+  justify-content: center;
+  gap: 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
-  padding: 0;
+  padding: 0 12px;
 }
 
+.flight-shipment-item > .shipment-detail-link {
+  justify-self: stretch;
+}
+
+.shipment-detail-link:hover,
 .flight-shipment-detail-link:hover {
+  background: #c8daf6;
   color: #1d4e96;
-  text-decoration: underline;
 }
 
 .flight-shipment-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -3301,7 +3428,7 @@ body {
   color: #b91c1c;
 }
 
-.shipment-detail-summary-card {
+.shipment-detail-route-card {
   display: grid;
   gap: 10px;
   padding: 10px;
@@ -3310,21 +3437,23 @@ body {
   background: #f8fbff;
 }
 
-.shipment-detail-summary-header {
+.shipment-detail-route-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.shipment-detail-summary-header > div {
+.shipment-detail-route-card-header > div {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.shipment-detail-summary-header span,
-.shipment-detail-summary-grid span {
+.shipment-detail-route-card-header span,
+.shipment-detail-secondary-grid span,
+.shipment-detail-current-leg span,
+.shipment-detail-time-strip span {
   color: #64748b;
   font-size: 11px;
   font-weight: 750;
@@ -3376,20 +3505,64 @@ body {
   white-space: nowrap;
 }
 
-.shipment-detail-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding-top: 2px;
+.shipment-detail-current-leg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #e1eaf6;
+  border-radius: 8px;
+  background: #ffffff;
 }
 
-.shipment-detail-summary-grid div {
+.shipment-detail-current-leg strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #10213a;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-detail-time-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shipment-detail-time-strip > div {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.shipment-detail-summary-grid strong {
+.shipment-detail-time-strip strong {
+  color: #10213a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.shipment-detail-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shipment-detail-secondary-grid div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e2e7f0;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.shipment-detail-secondary-grid strong {
   color: #10213a;
   font-size: 12px;
   font-weight: 850;
@@ -3400,12 +3573,12 @@ body {
 
 .shipment-bag-compact-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .shipment-bag-compact-chip {
-  min-height: 30px;
+  min-height: 36px;
   border: 1px solid #cbdaf0;
   border-radius: 8px;
   background: #ffffff;
@@ -3414,7 +3587,7 @@ body {
   font: inherit;
   font-size: 12px;
   font-weight: 850;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .shipment-bag-compact-chip:hover {
