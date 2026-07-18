@@ -7,6 +7,17 @@ import Button from './ui/Button'
 import Pager from './ui/Pager'
 import { formatFileSize, formatInteger, formatUtcDateTimeForClock } from '../utils/time'
 
+type ShipmentsUploadResult = {
+  total: number
+  inserted: number
+  updated: number
+  skipped: number
+  invalidFormatLines: string[]
+  invalidAirportLines: string[]
+  registeredCodes: string[]
+  invalidCapacityLines: string[]
+}
+
 const EMPTY_FORM: ShipmentCrudDto = {
   codigoPedido: '',
   origen: '',
@@ -68,6 +79,89 @@ function extractOriginFromTxtFileName(filename?: string | null): string | null {
   return match?.[1] ? normalizeShipmentCode(match[1]) : null
 }
 
+function buildAirportCapacityMap(airports: AirportCrudDto[]): Map<string, number> {
+  return new Map(
+    airports.map((airport) => [normalizeShipmentCode(airport.codigoOaci), airport.capacidad]),
+  )
+}
+
+function getShipmentCapacityError(
+  originOaci: string,
+  destinationOaci: string,
+  quantity: number,
+  airportCapacityByCode: Map<string, number>,
+): string | null {
+  const normalizedOrigin = normalizeShipmentCode(originOaci)
+  const normalizedDestination = normalizeShipmentCode(destinationOaci)
+  const originCapacity = airportCapacityByCode.get(normalizedOrigin)
+  const destinationCapacity = airportCapacityByCode.get(normalizedDestination)
+
+  if (quantity <= 0) {
+    return 'La cantidad debe ser mayor a 0.'
+  }
+
+  if (originCapacity != null && quantity > originCapacity) {
+    return `La cantidad (${quantity}) supera la capacidad del aeropuerto origen ${normalizedOrigin} (${originCapacity}).`
+  }
+
+  if (destinationCapacity != null && quantity > destinationCapacity) {
+    return `La cantidad (${quantity}) supera la capacidad del aeropuerto destino ${normalizedDestination} (${destinationCapacity}).`
+  }
+
+  return null
+}
+
+function splitImportedShipmentLine(line: string): string[] {
+  return line.trim().replace(/^\uFEFF/, '').split('-')
+}
+
+function validateImportedShipmentCapacities(
+  content: string,
+  originOaci: string,
+  airportCapacityByCode: Map<string, number>,
+): { total: number; validContent: string; invalidCapacityLines: string[] } {
+  const validLines: string[] = []
+  const invalidCapacityLines: string[] = []
+  let total = 0
+
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      return
+    }
+
+    total += 1
+    const parts = splitImportedShipmentLine(trimmed)
+    const destinationOaci = parts[4]?.trim().toUpperCase()
+    const quantity = Number(parts[5]?.trim())
+
+    if (parts.length < 6 || !destinationOaci || !Number.isInteger(quantity)) {
+      validLines.push(trimmed)
+      return
+    }
+
+    const capacityError = getShipmentCapacityError(
+      originOaci,
+      destinationOaci,
+      quantity,
+      airportCapacityByCode,
+    )
+
+    if (capacityError) {
+      invalidCapacityLines.push(`${trimmed} | ${capacityError}`)
+      return
+    }
+
+    validLines.push(trimmed)
+  })
+
+  return {
+    total,
+    validContent: validLines.join('\n'),
+    invalidCapacityLines,
+  }
+}
+
 export default function ShipmentsCrud() {
   const { user } = useAuth()
   const [items, setItems] = useState<ShipmentCrudDto[]>([])
@@ -88,15 +182,7 @@ export default function ShipmentsCrud() {
   const [isDuplicateErrorOpen] = useState(false)
   const [duplicateUploadCodes] = useState<string[]>([])
   const [shipmentCodeNotice, setShipmentCodeNotice] = useState<string[]>([])
-  const [uploadResult, setUploadResult] = useState<{
-    total: number
-    inserted: number
-    updated: number
-    skipped: number
-    invalidFormatLines: string[]
-    invalidAirportLines: string[]
-    registeredCodes: string[]
-  } | null>(null)
+  const [uploadResult, setUploadResult] = useState<ShipmentsUploadResult | null>(null)
 
   const logisticsAirportCode = user && user.role !== 'ADMIN'
     ? user.airportCode?.trim().toUpperCase() ?? null
@@ -150,19 +236,20 @@ export default function ShipmentsCrud() {
     setForm(buildEmptyForm())
   }
 
-  const ensureAirports = async (): Promise<AirportCrudDto[]> => {
-    if (airportsLoaded) {
-      return airports
-    }
+  const refreshAirports = async (): Promise<AirportCrudDto[]> => {
     try {
       const result = await listAirports(0, 1000, '')
       setAirports(result.content)
       setAirportsLoaded(true)
       return result.content
     } catch {
-      setAirports([])
-      return []
+      setAirportsLoaded(false)
+      return airports
     }
+  }
+
+  const ensureAirports = async (): Promise<AirportCrudDto[]> => {
+    return airportsLoaded ? airports : refreshAirports()
   }
 
   const loadLogisticsAirport = async (knownAirports: AirportCrudDto[] = airports): Promise<AirportCrudDto | null> => {
@@ -238,21 +325,40 @@ export default function ShipmentsCrud() {
       codigoPedido: form.codigoPedido.trim(),
       idCliente: form.idCliente.trim(),
     }
-    console.debug('[ShipmentsCrud] payload', payload)
 
-    if (form.id) {
-      console.debug('[ShipmentsCrud] updateShipment', { id: form.id })
-      await updateShipment(form.id, payload)
-    } else {
-      console.debug('[ShipmentsCrud] createShipment')
-      const created = await createShipment(payload)
-      setShipmentCodeNotice(created.codigoPedido ? [created.codigoPedido] : [])
+    const loadedAirports = await ensureAirports()
+    const capacityError = getShipmentCapacityError(
+      payload.origen,
+      payload.destino,
+      payload.cantidad,
+      buildAirportCapacityMap(loadedAirports),
+    )
+    if (capacityError) {
+      setError(capacityError)
+      return
     }
 
-    resetForm()
-    setIsModalOpen(false)
-    console.debug('[ShipmentsCrud] submit done, reloading list')
-    await load()
+    console.debug('[ShipmentsCrud] payload', payload)
+
+    try {
+      if (form.id) {
+        console.debug('[ShipmentsCrud] updateShipment', { id: form.id })
+        await updateShipment(form.id, payload)
+      } else {
+        console.debug('[ShipmentsCrud] createShipment')
+        const created = await createShipment(payload)
+        setShipmentCodeNotice(created.codigoPedido ? [created.codigoPedido] : [])
+      }
+
+      resetForm()
+      setIsModalOpen(false)
+      console.debug('[ShipmentsCrud] submit done, reloading list')
+      await load()
+    } catch (err) {
+      await refreshAirports()
+      const msg = err instanceof Error ? err.message : 'Error inesperado'
+      setError(msg)
+    }
   }
 
   const handleEdit = (item: ShipmentCrudDto) => {
@@ -279,6 +385,11 @@ export default function ShipmentsCrud() {
 
   const closeDuplicateErrorModal = () => {}
 
+  const closeShipmentModal = () => {
+    setIsModalOpen(false)
+    setError(null)
+  }
+
   const handleUpload = async () => {
     if (!uploadFile) {
       setUploadError('Selecciona un archivo .txt')
@@ -294,8 +405,34 @@ export default function ShipmentsCrud() {
       }
     }
 
-    if (!extractOriginFromTxtFileName(uploadFile.name)) {
+    const originOaci = extractOriginFromTxtFileName(uploadFile.name)
+    if (!originOaci) {
       setUploadError('No se pudo identificar el aeropuerto origen a partir del nombre del archivo.')
+      return
+    }
+
+    let fileContent = ''
+    let fileToUpload = uploadFile
+    let invalidCapacityLines: string[] = []
+    let originalTotal = 0
+    try {
+      fileContent = await uploadFile.text()
+      const loadedAirports = await ensureAirports()
+      const capacityValidation = validateImportedShipmentCapacities(
+        fileContent,
+        originOaci,
+        buildAirportCapacityMap(loadedAirports),
+      )
+      invalidCapacityLines = capacityValidation.invalidCapacityLines
+      originalTotal = capacityValidation.total
+
+      if (invalidCapacityLines.length > 0) {
+        fileContent = capacityValidation.validContent
+        fileToUpload = new File([fileContent], uploadFile.name, { type: uploadFile.type || 'text/plain' })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado'
+      setUploadError(`No se pudo validar capacidades antes de cargar el TXT: ${msg}`)
       return
     }
 
@@ -303,8 +440,31 @@ export default function ShipmentsCrud() {
     setUploadError(null)
     setUploadResult(null)
     try {
-      const result = await uploadShipmentsTxt(uploadFile)
-      setUploadResult(result)
+      if (!fileContent.trim() && invalidCapacityLines.length > 0) {
+        setUploadResult({
+          total: originalTotal,
+          inserted: 0,
+          updated: 0,
+          skipped: invalidCapacityLines.length,
+          invalidFormatLines: [],
+          invalidAirportLines: [],
+          registeredCodes: [],
+          invalidCapacityLines,
+        })
+        return
+      }
+
+      const result = await uploadShipmentsTxt(fileToUpload)
+      const backendInvalidCapacityLines = result.invalidCapacityLines ?? []
+      if (backendInvalidCapacityLines.length > 0) {
+        await refreshAirports()
+      }
+      setUploadResult({
+        ...result,
+        total: originalTotal || result.total,
+        skipped: result.skipped + invalidCapacityLines.length,
+        invalidCapacityLines: [...invalidCapacityLines, ...backendInvalidCapacityLines],
+      })
       setShipmentCodeNotice(result.registeredCodes ?? [])
       await load()
     } catch (err) {
@@ -379,7 +539,7 @@ export default function ShipmentsCrud() {
         </div>
       </div>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error && !isModalOpen ? <div className="error">{error}</div> : null}
       {loading ? <div className="prep-overlay">Cargando envios...</div> : null}
 
       <div className="crud-table">
@@ -457,6 +617,12 @@ export default function ShipmentsCrud() {
                     <pre className="upload-list">{uploadResult.invalidAirportLines.join('\n')}</pre>
                   </div>
                 ) : null}
+                {uploadResult.invalidCapacityLines.length > 0 ? (
+                  <div>
+                    <div>Los siguientes registros tienen cantidad invalida o superan la capacidad del aeropuerto origen o destino:</div>
+                    <pre className="upload-list">{uploadResult.invalidCapacityLines.join('\n')}</pre>
+                  </div>
+                ) : null}
                 {uploadResult.invalidFormatLines.length > 0 ? (
                   <div>
                     <div>Los siguientes registros no siguen el formato correcto:</div>
@@ -518,7 +684,8 @@ export default function ShipmentsCrud() {
         </div>
       </Modal>
 
-      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Editar envio' : 'Nuevo envio'}>
+      <Modal open={isModalOpen} onClose={closeShipmentModal} title={form.id ? 'Editar envio' : 'Nuevo envio'}>
+        {error ? <div className="upload-error">{error}</div> : null}
         <div className="crud-form-grid">
           <label className="field">
             Origen (OACI)
@@ -624,7 +791,7 @@ export default function ShipmentsCrud() {
         </div>
         <div className="crud-actions">
           <Button variant="primary" onClick={handleSubmit}>Guardar</Button>
-          <Button onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+          <Button onClick={closeShipmentModal}>Cancelar</Button>
         </div>
       </Modal>
     </div>

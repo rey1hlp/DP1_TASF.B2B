@@ -1,6 +1,7 @@
 package com.tasf_b2b.planificador.api;
 
 import com.tasf_b2b.planificador.api.dto.ShipmentCrudDto;
+import com.tasf_b2b.planificador.api.error.ApiValidationException;
 import com.tasf_b2b.planificador.auth.AuthenticatedUser;
 import com.tasf_b2b.planificador.persistence.AirportEntity;
 import com.tasf_b2b.planificador.persistence.AirportRepository;
@@ -34,6 +35,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -309,6 +311,7 @@ public class ShipmentCrudController {
         int skipped = 0;
         List<String> invalidFormat = new ArrayList<>();
         List<String> invalidAirport = new ArrayList<>();
+        List<String> invalidCapacity = new ArrayList<>();
         
         List<ImportedShipmentDraft> drafts = new ArrayList<>();
         List<String> registeredCodes = new ArrayList<>();
@@ -361,9 +364,11 @@ public class ShipmentCrudController {
                     continue;
                 }
 
-                if (cantidad < 0) {
+                try {
+                    validateShipmentQuantityAndCapacity(cantidad, originAirport, destinoAirport);
+                } catch (ApiValidationException ex) {
                     skipped++;
-                    invalidFormat.add(line);
+                    invalidCapacity.add(formatImportValidationLine(line, ex));
                     continue;
                 }
 
@@ -394,7 +399,7 @@ public class ShipmentCrudController {
         log.info("[SHIPMENT_CRUD] import finished file={} origin={} total={} inserted={} updated={} skipped={} time={}ms",
             file.getOriginalFilename(), originOaci, total, inserted, updated, skipped, elapsed);
 
-        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport, registeredCodes));
+        return ResponseEntity.ok(new BulkImportResult(total, inserted, updated, skipped, invalidFormat, invalidAirport, registeredCodes, invalidCapacity));
     }
 
     private int[] executeShipmentInsertBatch(List<Object[]> batch) {
@@ -496,17 +501,9 @@ public class ShipmentCrudController {
     }
 
     private boolean apply(ShipmentEntity target, ShipmentCrudDto source, AuthenticatedUser user) {
-        if (!isValid(source, user)) {
-            return false;
-        }
-        String origenCode = userAirportCode(user) != null
-            ? userAirportCode(user)
-            : source.origen;
-        AirportEntity origen = airportRepository.findByCodigoOaci(normalizeAirport(origenCode));
-        AirportEntity destino = airportRepository.findByCodigoOaci(normalizeAirport(source.destino));
-        if (origen == null || destino == null) {
-            return false;
-        }
+        ResolvedShipmentValidation resolved = validateShipmentRequest(source, user);
+        AirportEntity origen = resolved.origen();
+        AirportEntity destino = resolved.destino();
 
         if (target.id == null) {
             target.codigoPedido = source.codigoPedido != null ? source.codigoPedido.trim() : null;
@@ -517,11 +514,100 @@ public class ShipmentCrudController {
             ? source.ingresoLocal
             : OperationalTime.utcToLocal(LocalDateTime.now(), origen.gmt);
         target.ingresoUtc = OperationalTime.localToUtc(ingresoLocal, origen.gmt);
-        target.cantidad = Math.max(0, source.cantidad);
+        target.cantidad = source.cantidad;
         target.idCliente = source.idCliente.trim();
         target.slaHoras = source.slaHoras;
         target.status = source.status != null ? source.status : (target.status != null ? target.status : ShipmentStatus.PENDING);
         return true;
+    }
+
+    private ResolvedShipmentValidation validateShipmentRequest(ShipmentCrudDto source, AuthenticatedUser user) {
+        if (source == null) {
+            throw new ApiValidationException("SHIPMENT_REQUIRED", "El envio es obligatorio");
+        }
+
+        String assignedOrigin = userAirportCode(user);
+        String origenCode = assignedOrigin != null ? assignedOrigin : source.origen;
+        if (origenCode == null || origenCode.isBlank()) {
+            throw new ApiValidationException("SHIPMENT_ORIGIN_REQUIRED", "El aeropuerto origen es obligatorio");
+        }
+        if (source.destino == null || source.destino.isBlank()) {
+            throw new ApiValidationException("SHIPMENT_DESTINATION_REQUIRED", "El aeropuerto destino es obligatorio");
+        }
+        if (source.idCliente == null || source.idCliente.isBlank()) {
+            throw new ApiValidationException("SHIPMENT_CUSTOMER_REQUIRED", "El cliente es obligatorio");
+        }
+
+        AirportEntity origen = airportRepository.findByCodigoOaci(normalizeAirport(origenCode));
+        AirportEntity destino = airportRepository.findByCodigoOaci(normalizeAirport(source.destino));
+        if (origen == null) {
+            throw new ApiValidationException(
+                "SHIPMENT_ORIGIN_NOT_FOUND",
+                "El aeropuerto origen no existe",
+                Map.of("airportCode", normalizeAirport(origenCode))
+            );
+        }
+        if (destino == null) {
+            throw new ApiValidationException(
+                "SHIPMENT_DESTINATION_NOT_FOUND",
+                "El aeropuerto destino no existe",
+                Map.of("airportCode", normalizeAirport(source.destino))
+            );
+        }
+
+        validateShipmentQuantityAndCapacity(source.cantidad, origen, destino);
+        return new ResolvedShipmentValidation(origen, destino);
+    }
+
+    private void validateShipmentQuantityAndCapacity(int cantidad, AirportEntity origen, AirportEntity destino) {
+        if (cantidad <= 0) {
+            throw new ApiValidationException(
+                "SHIPMENT_QUANTITY_INVALID",
+                "La cantidad debe ser mayor a 0",
+                Map.of("cantidad", cantidad)
+            );
+        }
+
+        if (origen != null && cantidad > origen.capacidad) {
+            throw new ApiValidationException(
+                "SHIPMENT_ORIGIN_CAPACITY_EXCEEDED",
+                String.format(
+                    Locale.ROOT,
+                    "La cantidad (%d) supera la capacidad del aeropuerto origen %s (%d)",
+                    cantidad,
+                    normalizeAirport(origen.codigoOaci),
+                    origen.capacidad
+                ),
+                airportCapacityDetails(cantidad, "origen", origen)
+            );
+        }
+
+        if (destino != null && cantidad > destino.capacidad) {
+            throw new ApiValidationException(
+                "SHIPMENT_DESTINATION_CAPACITY_EXCEEDED",
+                String.format(
+                    Locale.ROOT,
+                    "La cantidad (%d) supera la capacidad del aeropuerto destino %s (%d)",
+                    cantidad,
+                    normalizeAirport(destino.codigoOaci),
+                    destino.capacidad
+                ),
+                airportCapacityDetails(cantidad, "destino", destino)
+            );
+        }
+    }
+
+    private Map<String, Object> airportCapacityDetails(int cantidad, String airportRole, AirportEntity airport) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("cantidad", cantidad);
+        details.put("airportRole", airportRole);
+        details.put("airportCode", normalizeAirport(airport.codigoOaci));
+        details.put("capacity", airport.capacidad);
+        return details;
+    }
+
+    private String formatImportValidationLine(String line, ApiValidationException ex) {
+        return line + " | " + ex.getMessage();
     }
 
     private ShipmentEntity saveNewShipmentWithResolvedCode(ShipmentEntity entity) {
@@ -579,13 +665,6 @@ public class ShipmentCrudController {
         dto.status = entity.status;
         dto.auditDateIns = entity.auditDateIns;
         return dto;
-    }
-
-    private boolean isValid(ShipmentCrudDto dto, AuthenticatedUser user) {
-        return dto != null
-            && ((dto.origen != null && !dto.origen.isBlank()) || (user != null && user.airportCode() != null && !user.airportCode().isBlank()))
-            && dto.destino != null && !dto.destino.isBlank()
-            && dto.idCliente != null && !dto.idCliente.isBlank();
     }
 
     private boolean requiresReplan(ShipmentCrudDto previous, ShipmentCrudDto current) {
@@ -650,7 +729,13 @@ public class ShipmentCrudController {
         int skipped,
         List<String> invalidFormatLines,
         List<String> invalidAirportLines,
-        List<String> registeredCodes
+        List<String> registeredCodes,
+        List<String> invalidCapacityLines
+    ) {}
+
+    private record ResolvedShipmentValidation(
+        AirportEntity origen,
+        AirportEntity destino
     ) {}
 
     private record ImportedShipmentDraft(
