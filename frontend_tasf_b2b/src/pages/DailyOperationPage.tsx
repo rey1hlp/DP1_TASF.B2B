@@ -825,10 +825,6 @@ export default function DailyOperationPage() {
     })
   }, [])
 
-  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
-    handleMapAirportPreview(codigoOaci)
-  }, [handleMapAirportPreview])
-
   const handleMapFlightPreview = useCallback((flightId: number | null) => {
     if (flightId === null) {
       setSelectedFlightId(null)
@@ -906,7 +902,6 @@ export default function DailyOperationPage() {
               setShipmentSearchError(null)
             }}
             onAirportPreview={handleMapAirportPreview}
-            onAirportDetailRequest={handleMapAirportDetailRequest}
             onFlightPreview={handleMapFlightPreview}
             onFlightDetailRequest={handleMapFlightDetailRequest}
             showCancelledDetails={showCancelledDetails}

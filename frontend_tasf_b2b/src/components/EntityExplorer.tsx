@@ -1307,7 +1307,27 @@ export default function EntityExplorer({
   const handleBackToShipmentList = () => {
     setSelectedBagCode(null)
     setActiveBagIndex(0)
+    setExpandedShipmentCode(null)
     setSidebarView('shipment-list')
+  }
+
+  const resetShipmentDrilldown = () => {
+    setSelectedBagCode(null)
+    setActiveBagIndex(0)
+    setExpandedShipmentCode(null)
+    setSidebarView('shipment-list')
+  }
+
+  const handleEntityTabChange = (tab: EntityTab) => {
+    if (tab === activeEntityTab) {
+      return
+    }
+
+    if (activeEntityTab === 'shipments' || tab === 'shipments') {
+      resetShipmentDrilldown()
+    }
+
+    setActiveEntityTab(tab)
   }
 
   const handleBagPagerChange = (direction: -1 | 1) => {
@@ -2373,19 +2393,19 @@ export default function EntityExplorer({
       <div className="entity-subtabs sticky-subtabs">
         <button
           className={`entity-subtab ${activeEntityTab === "flights" ? "active" : ""} ${filteredFlights.length === 0 ? "empty" : ""}`}
-          onClick={() => setActiveEntityTab("flights")}
+          onClick={() => handleEntityTabChange("flights")}
         >
           {`Vuelos (${formatInteger(filteredFlights.length)})`}
         </button>
         <button
           className={`entity-subtab ${activeEntityTab === "shipments" ? "active" : ""} ${filteredShipmentItems.length === 0 ? "empty" : ""}`}
-          onClick={() => setActiveEntityTab("shipments")}
+          onClick={() => handleEntityTabChange("shipments")}
         >
           {`Envíos (${formatInteger(filteredShipmentItems.length)})`}
         </button>
         <button
           className={`entity-subtab ${activeEntityTab === "airports" ? "active" : ""} ${filteredAirports.length === 0 ? "empty" : ""}`}
-          onClick={() => setActiveEntityTab("airports")}
+          onClick={() => handleEntityTabChange("airports")}
         >
           {`Aeropuertos (${formatInteger(filteredAirports.length)})`}
         </button>

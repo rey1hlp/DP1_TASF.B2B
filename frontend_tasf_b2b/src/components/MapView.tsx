@@ -36,9 +36,6 @@ import {
   LANDED_ROUTE_STYLE,
   MAP_PANES,
   SELECTED_ROUTE_STYLE,
-  SHIPMENT_ROUTE_ACTIVE_STYLE,
-  SHIPMENT_ROUTE_DONE_STYLE,
-  SHIPMENT_ROUTE_PENDING_STYLE,
   VIRTUAL_CANCELLED_ROUTE_STYLE,
 } from '../utils/mapRouteStyles'
 import { buildGeodesicArcPoints, getGeodesicPointAtProgress, type MapLatLng } from '../utils/mapGeodesic'
@@ -218,7 +215,6 @@ export type MapViewProps = {
   realDurationLabel?: string
   isPaused?: boolean
   cancelledFlightTraces?: CancelledFlightTrace[]
-  onAirportDetailRequest?: (codigoOaci: string) => void
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
   onFlightPreview?: (flightId: number | null) => void
@@ -442,15 +438,15 @@ function getShipmentStepStyle(
   currentMinute: number | null
 ) {
   if (currentMinute == null) {
-    return SHIPMENT_ROUTE_PENDING_STYLE
+    return SELECTED_ROUTE_STYLE
   }
   if (currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin) {
-    return SHIPMENT_ROUTE_ACTIVE_STYLE
+    return { ...SELECTED_ROUTE_STYLE, dashArray: undefined, weight: 4.2, opacity: 1 }
   }
   if (currentMinute > step.llegadaMin) {
-    return SHIPMENT_ROUTE_DONE_STYLE
+    return { ...SELECTED_ROUTE_STYLE, opacity: 0.5, dashArray: '5, 5' }
   }
-  return SHIPMENT_ROUTE_PENDING_STYLE
+  return SELECTED_ROUTE_STYLE
 }
 
 function buildShipmentBagCodes(codigoPedido: string, cantidad?: number) {
@@ -478,7 +474,6 @@ export default function MapView({
   realDurationLabel,
   isPaused = false,
   cancelledFlightTraces,
-  onAirportDetailRequest,
   onAirportPreview,
   onFlightPreview,
   onShipmentFocusRequest,
@@ -2061,7 +2056,6 @@ export default function MapView({
 
         return (
           <MapFloatingCard
-            actionLabel="Ver detalle completo"
             secondaryActionLabel="Ver envíos"
             onSecondaryAction={openAirportShipmentsStage}
             badge={previewAirport.codigoOaci}
@@ -2094,7 +2088,6 @@ export default function MapView({
                 value: formatBags(outgoingBagsCount),
               }
             ]}
-            onAction={() => onAirportDetailRequest?.(previewAirport.codigoOaci)}
             onClose={closePreviewAirport}
             statusColor={resolveSemaphoreColor(
               warehouseSnapshot[previewAirport.codigoOaci]?.porcentaje,

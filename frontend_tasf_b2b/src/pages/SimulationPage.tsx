@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router'
+import { useOutletContext } from 'react-router'
 import type { AirportDto, EnvioDetalleDto, FlightCrudDto } from '../types/sim'
 import {
   API_BASE,
@@ -182,7 +182,6 @@ export default function SimulationPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
 
   const { setTopbarMain } = useOutletContext<AppLayoutContext>()
-  const navigate = useNavigate()
 
   const [selectedShipmentRoute, setSelectedShipmentRoute] = useState<RespuestaRutaEnvioDto | null>(null)
   const [shipmentSearchError, setShipmentSearchError] = useState<string | null>(null)
@@ -1018,17 +1017,6 @@ export default function SimulationPage() {
     })
   }, [])
 
-  const handleMapAirportDetailRequest = useCallback((codigoOaci: string) => {
-    navigate(`/aeropuertos/${codigoOaci}/almacen`, {
-      state: {
-        from: 'simulation',
-        simId,
-        currentMinute: displayMinute,
-        warehouseSnapshot,
-      },
-    })
-  }, [navigate, simId, displayMinute, warehouseSnapshot])
-
   const handleMapFlightPreview = useCallback((flightId: number | null) => {
     if (flightId === null) {
       setSelectedFlightId(null)
@@ -1205,7 +1193,6 @@ export default function SimulationPage() {
                 onBagFocusRequest={handleMapBagFocusRequest}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}
-                onAirportDetailRequest={handleMapAirportDetailRequest}
                 onFlightPreview={handleMapFlightPreview}
                 onFlightDetailRequest={handleMapFlightDetailRequest}
                 showCancelledDetails={showCancelledDetails}
