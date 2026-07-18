@@ -348,6 +348,10 @@ function getBagNumberFromCode(value?: string | null) {
   return match ? Number(match[1]) : undefined
 }
 
+function getShipmentCodeFromBagCode(value: string) {
+  return value.trim().replace(/-\d{3}$/, '')
+}
+
 function getShipmentStatusKind(status?: string, hasRoute = true) {
   const normalized = status?.toUpperCase()
   if (normalized === 'DELIVERED' || normalized === 'ENTREGADO') return 'delivered'
@@ -1391,6 +1395,36 @@ export default function EntityExplorer({
       setShipmentQuery(String(focusRequest.id))
       setTimeout(() => {
         const index = orderedShipmentItems.findIndex(s => s.codigoPedido === String(focusRequest.id))
+        if (index !== -1) {
+          const targetScrollTop = index * SHIPMENT_ITEM_HEIGHT
+          shipmentList.setScrollTop(targetScrollTop)
+          if (shipmentListRef.current) {
+            shipmentListRef.current.scrollTop = targetScrollTop
+          }
+        } else {
+          shipmentList.setScrollTop(0)
+          if (shipmentListRef.current) {
+            shipmentListRef.current.scrollTop = 0
+          }
+        }
+      }, 50)
+      return
+    }
+
+    if (focusRequest.type === 'bag') {
+      const bagCode = String(focusRequest.id)
+      const shipmentCode = getShipmentCodeFromBagCode(bagCode)
+      const bagNumber = getBagNumberFromCode(bagCode)
+
+      setActiveEntityTab('shipments')
+      setShipmentQuery(shipmentCode)
+      setExpandedShipmentCode(shipmentCode)
+      setSelectedBagCode(bagCode)
+      setActiveBagIndex(Math.max(0, (bagNumber ?? 1) - 1))
+      setSidebarView('bag-detail')
+
+      setTimeout(() => {
+        const index = orderedShipmentItems.findIndex(s => s.codigoPedido === shipmentCode)
         if (index !== -1) {
           const targetScrollTop = index * SHIPMENT_ITEM_HEIGHT
           shipmentList.setScrollTop(targetScrollTop)

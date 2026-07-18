@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import L from 'leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
-import { Calendar, CalendarClock, Layers, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, Calendar, CalendarClock, Eye, Layers, Maximize2, Minimize2, PlayCircle, RotateCcw, Settings, Timer, X, type LucideIcon } from 'lucide-react'
 import type { AirportDto, FlightSegmentDto, ShipmentCrudDto } from '../types/sim'
 import type { MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
 import {
@@ -20,6 +20,7 @@ import {
   formatInteger,
   formatMinuteRangeWithGmt,
   formatPercent,
+  formatSimSpan,
   formatSimMinuteWithGmt,
 } from '../utils/time'
 import {
@@ -104,6 +105,55 @@ function MapTimeChip({ icon: Icon, label, value, tone, onClose }: TimeChipProps)
   )
 }
 
+function parseUtcDateTimeMs(value?: string | Date | number | null): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  if (value instanceof Date) {
+    const time = value.getTime()
+    return Number.isNaN(time) ? null : time
+  }
+
+  const raw = value.trim()
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)
+  const utcLikeMatch = hasTimezone
+    ? null
+    : raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/)
+  if (utcLikeMatch) {
+    const [, yyyy, mm, dd, hh, min, sec] = utcLikeMatch
+    return Date.UTC(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(hh),
+      Number(min),
+      Number(sec ?? '0'),
+    )
+  }
+
+  const parsed = new Date(raw).getTime()
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function formatRemainingSla(shipment: ShipmentCrudDto): { label: string; value: string; tone: 'ok' | 'late' | 'static' } {
+  const startMs = parseUtcDateTimeMs(shipment.ingresoUtc || shipment.ingresoLocal)
+  const slaHours = shipment.slaHoras
+  if (startMs === null || slaHours === null || slaHours === undefined || !Number.isFinite(slaHours)) {
+    return { label: 'SLA', value: formatDurationHours(slaHours, 0), tone: 'static' }
+  }
+
+  const deadlineMs = startMs + slaHours * 60 * 60 * 1000
+  const remainingMinutes = Math.ceil((deadlineMs - Date.now()) / 60000)
+  if (remainingMinutes <= 0) {
+    return { label: 'Vencido', value: formatSimSpan(Math.abs(remainingMinutes)), tone: 'late' }
+  }
+
+  return { label: 'Restante', value: formatSimSpan(remainingMinutes), tone: 'ok' }
+}
+
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 const PLANE_ICON_BASE_VISUAL_SIZE = 20
@@ -152,7 +202,7 @@ export type MapViewProps = {
   onAirportPreview?: (codigoOaci: string | null) => void
   onFlightDetailRequest?: (flightId: number) => void
   onFlightPreview?: (flightId: number | null) => void
-  onSearchShipment?: (codigo: string) => void | Promise<void>
+  onBagFocusRequest?: (bagCode: string) => void
   onClearShipmentRoute?: () => void
   onToggleFullscreen: () => void
   isSimulation?: boolean
@@ -387,6 +437,11 @@ function buildShipmentBagCodes(codigoPedido: string, cantidad?: number) {
   return Array.from({ length: total }, (_, index) => `${codigoPedido}-${String(index + 1).padStart(3, '0')}`)
 }
 
+function getBagShortCode(bagCode: string) {
+  const match = bagCode.match(/-(\d{3})$/)
+  return match?.[1] ?? bagCode
+}
+
 export default function MapView({
   airports,
   segments,
@@ -410,7 +465,7 @@ export default function MapView({
   onAirportDetailRequest,
   onAirportPreview,
   onFlightPreview,
-  onSearchShipment,
+  onBagFocusRequest,
   onToggleFullscreen,
   isSimulation = true,
   showCancelledDetails = true,
@@ -854,7 +909,7 @@ export default function MapView({
   }
 
   const trackBag = (bagCode: string) => {
-    void onSearchShipment?.(bagCode)
+    onBagFocusRequest?.(bagCode)
   }
 
   const openShipmentsStage = () => {
@@ -1777,9 +1832,18 @@ export default function MapView({
           title={`${previewFlight.origen} → ${previewFlight.destino}`}
         />
       ) : previewFlight && detailStage === 'shipments' ? (
-        <div className="map-floating-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
+        <div className="map-floating-card flight-shipments-card" style={{ width: 'min(460px, calc(100% - 32px))' }}>
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
+              <button
+                type="button"
+                className="map-floating-card-back-icon"
+                onClick={goBackToFlightCard}
+                aria-label="Volver al detalle del vuelo"
+                title="Volver"
+              >
+                <ArrowLeft size={17} strokeWidth={2.4} />
+              </button>
               <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
               <strong>Envíos asignados</strong>
             </div>
@@ -1794,13 +1858,11 @@ export default function MapView({
           </div>
 
           <div className="map-floating-card-body">
-            <div className="map-floating-card-subtitle">
-              {previewFlight.origen} → {previewFlight.destino}
+            <div className="flight-shipment-route-line">
+              <span>{previewFlight.origen}</span>
+              <span aria-hidden="true">→</span>
+              <span>{previewFlight.destino}</span>
             </div>
-
-            <button type="button" className="btn ghost" onClick={goBackToFlightCard}>
-              ← Volver
-            </button>
 
             {flightShipmentsLoading ? (
               <div className="crud-empty">Cargando envíos del vuelo...</div>
@@ -1817,27 +1879,34 @@ export default function MapView({
             ) : null}
 
             {!flightShipmentsLoading && !flightShipmentsError ? (
-              <div style={{ display: 'grid', gap: '10px' }}>
+              <div className="flight-shipment-list">
                 {flightShipments.map((shipment) => {
                   const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')
+                  const slaInfo = formatRemainingSla(shipment)
 
                   return (
                     <div
                       key={shipment.id ?? shipment.codigoPedido}
-                      style={{
-                        display: 'grid',
-                        gap: '10px',
-                        padding: '12px',
-                        borderRadius: '12px',
-                        border: '1px solid #d9e4f4',
-                        background: '#f8fbff',
-                      }}
+                      className="flight-shipment-item"
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, color: '#10213a' }}>{shipment.codigoPedido}</div>
-                          <div style={{ fontSize: '12px', color: '#52647d' }}>
-                            {shipment.origen} → {shipment.destino}
+                      <div className="flight-shipment-item-header">
+                        <div className="flight-shipment-main">
+                          <div className="flight-shipment-code-row">
+                            <div className="flight-shipment-code">{shipment.codigoPedido}</div>
+                            <button
+                              type="button"
+                              className="flight-shipment-detail-link"
+                              onClick={() => openShipmentDetails(shipment)}
+                              title="Ver detalles"
+                            >
+                              <Eye size={14} strokeWidth={2.2} />
+                              <span>Ver detalles</span>
+                            </button>
+                          </div>
+                          <div className="flight-shipment-route">
+                            <span>{shipment.origen || '--'}</span>
+                            <span aria-hidden="true">→</span>
+                            <span>{shipment.destino || '--'}</span>
                           </div>
                         </div>
                         <span className={`status-badge ${statusClass}`}>
@@ -1845,37 +1914,20 @@ export default function MapView({
                         </span>
                       </div>
 
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                          gap: '8px',
-                        }}
-                      >
-                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                          <strong style={{ fontSize: '18px' }}>{formatBags(shipment.cantidad)}</strong>
+                      <div className="flight-shipment-metrics">
+                        <div className="map-floating-card-metric flight-shipment-metric">
+                          <strong>{formatBags(shipment.cantidad)}</strong>
                           <span>Maletas</span>
                         </div>
-                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                          <strong style={{ fontSize: '18px' }}>
-                            {formatDurationHours(shipment.slaHoras, 0)}
-                          </strong>
-                          <span>SLA</span>
+                        <div className={`map-floating-card-metric flight-shipment-metric sla-${slaInfo.tone}`}>
+                          <strong>{slaInfo.value}</strong>
+                          <span>{slaInfo.label}</span>
                         </div>
-                        <div className="map-floating-card-metric" style={{ minHeight: '64px' }}>
-                          <strong style={{ fontSize: '18px' }}>{shipment.asignado ? 'Sí' : 'No'}</strong>
+                        <div className="map-floating-card-metric flight-shipment-metric">
+                          <strong>{shipment.asignado ? 'Sí' : 'No'}</strong>
                           <span>Asignado</span>
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        className="map-floating-card-action"
-                        onClick={() => openShipmentDetails(shipment)}
-                        style={{ minHeight: '40px', fontSize: '14px' }}
-                      >
-                        Ver maletas
-                      </button>
                     </div>
                   )
                 })}
@@ -1884,11 +1936,25 @@ export default function MapView({
           </div>
         </div>
       ) : previewFlight && detailStage === 'shipmentDetails' ? (
-        <div className="map-floating-card" style={{ width: 'min(420px, calc(100% - 32px))' }}>
+        <div className="map-floating-card flight-shipments-card" style={{ width: 'min(420px, calc(100% - 32px))' }}>
           <div className="map-floating-card-header">
             <div className="map-floating-card-title">
-              <span className="map-floating-card-badge">Maletas</span>
-              <strong>{selectedShipment?.codigoPedido ?? `Vuelo ${previewFlight.flightId}`}</strong>
+              <button
+                type="button"
+                className="map-floating-card-back-icon"
+                onClick={goBackToShipmentsList}
+                aria-label="Volver a envíos asignados"
+                title="Volver"
+              >
+                <ArrowLeft size={17} strokeWidth={2.4} />
+              </button>
+              <span className="map-floating-card-badge">Vuelo {getVisibleFlightId(previewFlight)}</span>
+              <div className="shipment-detail-title-stack">
+                <strong>{selectedShipment?.codigoPedido ?? '--'}</strong>
+                <span>
+                  <b>Detalle del envío</b>
+                </span>
+              </div>
             </div>
             <button
               type="button"
@@ -1901,54 +1967,65 @@ export default function MapView({
           </div>
 
           <div className="map-floating-card-body">
-            <div className="map-floating-card-subtitle">
-              {previewFlight.origen} → {previewFlight.destino}
+            <div className="flight-shipment-route-line">
+              <span>Vuelo actual:</span>
+              <span>{previewFlight.origen}</span>
+              <span aria-hidden="true">→</span>
+              <span>{previewFlight.destino}</span>
             </div>
-
-            <button type="button" className="btn ghost" onClick={goBackToShipmentsList}>
-              ← Volver
-            </button>
 
             {selectedShipment ? (
               <>
-                <div className="map-floating-card-metrics" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                  <div className="map-floating-card-metric">
-                    <strong>{formatBags(selectedShipment.cantidad)}</strong>
-                    <span>Número de maletas</span>
+                <div className="shipment-detail-summary-card">
+                  <div className="shipment-detail-summary-header">
+                    <div>
+                      <span>Ruta total del envío</span>
+                      <strong className="shipment-detail-total-route">
+                        {selectedShipment.origen || '--'} → {selectedShipment.destino || '--'}
+                      </strong>
+                    </div>
+                    <div className="shipment-detail-alerts">
+                      <span className={`status-badge ${(selectedShipment.status ?? 'pending').toLowerCase().replace(/_/g, '-')}`}>
+                        {selectedShipment.status ?? 'PENDING'}
+                      </span>
+                      {(() => {
+                        const slaInfo = formatRemainingSla(selectedShipment)
+                        return (
+                          <span className={`shipment-detail-sla-countdown sla-${slaInfo.tone}`}>
+                            {slaInfo.tone === 'late'
+                              ? `${slaInfo.value} vencido`
+                              : `${slaInfo.value} restantes`}
+                          </span>
+                        )
+                      })()}
+                    </div>
                   </div>
-                  <div className="map-floating-card-metric">
-                    <strong>{selectedShipment.idCliente || '--'}</strong>
-                    <span>Cliente</span>
+                  <div className="shipment-detail-summary-grid">
+                    <div>
+                      <span>Maletas</span>
+                      <strong>{formatBags(selectedShipment.cantidad)}</strong>
+                    </div>
+                    <div>
+                      <span>Cliente</span>
+                      <strong>{selectedShipment.idCliente || '--'}</strong>
+                    </div>
+                    <div>
+                      <span>SLA Total</span>
+                      <strong>{formatDurationHours(selectedShipment.slaHoras, 0)}</strong>
+                    </div>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gap: '8px',
-                    border: '1px solid #d9e4f4',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    background: '#f8fbff',
-                    fontSize: '13px',
-                    color: '#334155',
-                  }}
-                >
-                  <div><strong>Origen:</strong> {selectedShipment.origen}</div>
-                  <div><strong>Destino:</strong> {selectedShipment.destino}</div>
-                  <div><strong>Estado:</strong> {selectedShipment.status ?? 'PENDING'}</div>
-                  <div><strong>SLA:</strong> {formatDurationHours(selectedShipment.slaHoras, 0)}</div>
-                </div>
-
-                <div className="entity-bag-list">
+                <div className="shipment-bag-compact-grid" aria-label="Maletas del envío">
                   {buildShipmentBagCodes(selectedShipment.codigoPedido, selectedShipment.cantidad).map((bagCode) => (
                     <button
                       key={bagCode}
                       type="button"
-                      className="entity-bag-chip"
+                      className="shipment-bag-compact-chip"
                       onClick={() => trackBag(bagCode)}
+                      title={bagCode}
                     >
-                      {bagCode}
+                      {getBagShortCode(bagCode)}
                     </button>
                   ))}
                 </div>
