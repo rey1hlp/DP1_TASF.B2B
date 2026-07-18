@@ -384,7 +384,7 @@ export default function DailyOperationControls({
             shipmentSearchError={shipmentSearchError}
             currentMinute={currentMinute}
             focusRequest={entityFocusRequest}
-            listHeight={280}
+            listHeight={330}
             shipmentListHeight={150}
             showCancelledDetails={showCancelledDetails}
             onShowCancelledDetailsChange={onShowCancelledDetailsChange}

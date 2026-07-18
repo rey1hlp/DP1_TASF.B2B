@@ -484,6 +484,32 @@ export default function SimulationPage() {
     }
   }
 
+  const loadShipmentRouteForEntityPanel = useCallback(async (codigo: string) => {
+    if (!simId) return
+
+    try {
+      setShipmentSearchError(null)
+      const route = await fetchShipmentRoute(simId, codigo)
+      setSelectedShipmentRoute(route)
+    } catch (err) {
+      setSelectedShipmentRoute(null)
+      setShipmentSearchError('No se encontro la ruta para la maleta o envio.')
+    }
+  }, [simId])
+
+  const handleMapShipmentFocusRequest = useCallback((shipmentCode: string) => {
+    entityFocusRequestIdRef.current += 1
+    setIsPanelCollapsed(false)
+    setEntityFocusRequest({
+      type: 'shipment',
+      id: shipmentCode,
+      requestId: entityFocusRequestIdRef.current,
+    })
+
+    if (!shipmentCode || !simId) return
+    void loadShipmentRouteForEntityPanel(shipmentCode)
+  }, [loadShipmentRouteForEntityPanel, simId])
+
   const handleMapBagFocusRequest = useCallback((bagCode: string) => {
     entityFocusRequestIdRef.current += 1
     setIsPanelCollapsed(false)
@@ -494,20 +520,8 @@ export default function SimulationPage() {
     })
 
     if (!bagCode || !simId) return
-
-    const loadBagRouteForEntityPanel = async () => {
-      try {
-        setShipmentSearchError(null)
-        const route = await fetchShipmentRoute(simId, bagCode)
-        setSelectedShipmentRoute(route)
-      } catch (err) {
-        setSelectedShipmentRoute(null)
-        setShipmentSearchError('No se encontro la ruta para la maleta o envio.')
-      }
-    }
-
-    void loadBagRouteForEntityPanel()
-  }, [simId])
+    void loadShipmentRouteForEntityPanel(bagCode)
+  }, [loadShipmentRouteForEntityPanel, simId])
 
   const handleClearShipmentRoute = useCallback(() => {
     setSelectedShipmentRoute(null)
@@ -1187,6 +1201,7 @@ export default function SimulationPage() {
                 isFullscreen={isMapFullscreen}
                 isPanelCollapsed={isPanelCollapsed}
                 onToggleFullscreen={() => setIsMapFullscreen((current) => !current)}
+                onShipmentFocusRequest={handleMapShipmentFocusRequest}
                 onBagFocusRequest={handleMapBagFocusRequest}
                 onClearShipmentRoute={handleClearShipmentRoute}
                 onAirportPreview={handleMapAirportPreview}

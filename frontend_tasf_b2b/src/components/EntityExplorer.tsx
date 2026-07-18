@@ -1,15 +1,10 @@
-import { ArrowLeft, ArrowUpDown, CircleDot, Clock3, Filter, MapPin, Package, PlaneLanding, PlaneTakeoff, Search, Timer } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, CircleDot, Clock3, Filter, MapPin, Package, PlaneLanding, PlaneTakeoff, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import useVirtualList from '../hooks/useVirtualList'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import type { AirportTextFilters, FlightTextFilters, MapSemaphoreFilters, SemaphoreFilterLevel } from '../types/mapFilters'
-import type { EnvioDetalleDto, ShipmentCrudDto } from '../types/sim'
-// 1. Asegúrate de importar la función de simulación desde tu api
-import { getShipmentsByFlight, getSimulationShipmentsByFlight } from '../services/api'
+import type { EnvioDetalleDto } from '../types/sim'
 import './EntityExplorer.css'
-
-// 2. Importa el hook del contexto de simulación
-import { useSimulationContext } from '../contexts/SimulationContext'
 
 import {
   formatDurationHours,
@@ -90,7 +85,7 @@ function cloneBagRoute(
 }
 
 export type ShipmentCategory = 'PLANIFICADOS' | 'EN_VUELO' | 'ENTREGADOS'
-type SidebarView = 'shipment-detail' | 'bag-detail'
+type SidebarView = 'shipment-list' | 'shipment-detail'
 
 export type EntityExplorerProps = {
   flights: EntityFlightItem[]
@@ -169,8 +164,8 @@ type ShipmentSortKey =
 
 type SortDirection = 'asc' | 'desc'
 
-const FLIGHT_ITEM_HEIGHT = 96
-const AIRPORT_ITEM_HEIGHT = 106
+const FLIGHT_ITEM_HEIGHT = 78
+const AIRPORT_ITEM_HEIGHT = 86
 const SHIPMENT_ITEM_HEIGHT = 106
 const AIRPORT_PREVIEW_LIMIT = 30
 
@@ -277,6 +272,13 @@ function getShipmentStatusLabel(status?: string | null): string {
   }
 }
 
+function getRouteStepState(step: EntityRouteStep, currentMinute: number | null) {
+  if (currentMinute === null) return 'pending'
+  if (currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin) return 'active'
+  if (currentMinute > step.llegadaMin) return 'done'
+  return 'pending'
+}
+
 function getDynamicShipmentStatus(route: EntityShipmentRoute, currentMinute: number | null) {
   if (!route || route.ruta.length === 0) return getShipmentStatusLabel(route?.estado)
   if (currentMinute === null) return getShipmentStatusLabel(route.estado)
@@ -319,10 +321,6 @@ function maxBagTotal(...values: Array<number | null | undefined>) {
   )
 }
 
-function normalizeEntityCode(value?: string | null) {
-  return value?.trim().toLowerCase() ?? ''
-}
-
 function normalizeAirportCode(value?: string | null) {
   return value?.trim().toUpperCase() ?? ''
 }
@@ -352,19 +350,22 @@ function getShipmentCodeFromBagCode(value: string) {
   return value.trim().replace(/-\d{3}$/, '')
 }
 
-function getShipmentStatusKind(status?: string, hasRoute = true) {
-  const normalized = status?.toUpperCase()
-  if (normalized === 'DELIVERED' || normalized === 'ENTREGADO') return 'delivered'
-  if (normalized === 'CANCELLED' || normalized === 'CANCELADO') return 'cancelled'
-  if (normalized === 'SIN_RUTA_ENCONTRADA' || !hasRoute) return 'no-route'
-  return 'active'
+function getBagDisplayCode(value: string) {
+  return value.trim().match(/-(\d{3})$/)?.[1] ?? value
 }
 
-function getRouteStepState(step: EntityRouteStep, currentMinute: number | null) {
-  if (currentMinute === null) return 'pending'
-  if (currentMinute >= step.salidaMin && currentMinute <= step.llegadaMin) return 'active'
-  if (currentMinute > step.llegadaMin) return 'done'
-  return 'pending'
+function getShipmentRouteLabel(route: EntityShipmentRoute | null, shipment: EnvioDetalleDto | null) {
+  if (route?.ruta.length) {
+    const firstStep = route.ruta[0]
+    const lastStep = route.ruta[route.ruta.length - 1]
+    return `${firstStep.origen} → ${lastStep.destino}`
+  }
+
+  if (shipment?.origen || shipment?.destino) {
+    return `${shipment.origen || '--'} → ${shipment.destino || '--'}`
+  }
+
+  return '--'
 }
 
 type BagListProps = {
@@ -380,15 +381,17 @@ function BagList({ shipmentCode, totalBags, selectedBagCode, onSelectBag }: BagL
       <div className="entity-toolbar-label">
         Maletas de {shipmentCode}
       </div>
-      <div className="entity-bag-list">
+      <div className="entity-bag-list entity-bag-grid">
         {buildBagCodes(shipmentCode, totalBags).map((bagCode) => (
           <button
             key={bagCode}
             type="button"
             className={`entity-bag-chip ${selectedBagCode === bagCode ? 'active' : ''}`}
             onClick={() => onSelectBag(bagCode)}
+            title={bagCode}
+            aria-label={`Ver maleta ${bagCode}`}
           >
-            {bagCode}
+            {getBagDisplayCode(bagCode)}
           </button>
         ))}
       </div>
@@ -396,64 +399,69 @@ function BagList({ shipmentCode, totalBags, selectedBagCode, onSelectBag }: BagL
   )
 }
 
-type BagDetailPanelProps = {
+type ShipmentDetailPanelProps = {
   route: EntityShipmentRoute | null
+  shipment: EnvioDetalleDto | null
+  shipmentCode: string | null
   airportGmtByCode: Record<string, number>
-  selectedBagCode: string | null
   clientId?: string | null
-  activeBagIndex: number
   totalBags: number
+  selectedBagCode: string | null
+  activeBagIndex: number
   currentMinute: number | null
   shipmentSearchError: string | null
+  onBack: () => void
+  onSelectBag: (bagCode: string) => void
   onPreviousBag: () => void
   onNextBag: () => void
-  onBack: () => void
 }
 
-function BagDetailPanel({
+function ShipmentDetailPanel({
   route,
+  shipment,
+  shipmentCode,
   airportGmtByCode,
-  selectedBagCode,
   clientId,
-  activeBagIndex,
   totalBags,
+  selectedBagCode,
+  activeBagIndex,
   currentMinute,
   shipmentSearchError,
+  onBack,
+  onSelectBag,
   onPreviousBag,
   onNextBag,
-  onBack,
-}: BagDetailPanelProps) {
-  const displayedCode = route?.codigoMaleta || selectedBagCode || route?.codigoPedido || '--'
-  const dynamicStatus = route ? getDynamicShipmentStatus(route, currentMinute) : 'Cargando ruta'
-  const statusKind = getShipmentStatusKind(route?.estado, Boolean(route?.ruta.length))
-  const inferredBagNumber = route?.numeroMaleta ?? (activeBagIndex >= 0 ? activeBagIndex + 1 : getBagNumberFromCode(selectedBagCode))
-  const safeTotalBags = Math.max(totalBags, route?.totalMaletas ?? 0, inferredBagNumber ?? 0)
+}: ShipmentDetailPanelProps) {
+  const displayCode = shipmentCode || route?.codigoPedido || shipment?.codigoPedido || '--'
+  const routeLabel = getShipmentRouteLabel(route, shipment)
+  const statusLabel = route
+    ? getDynamicShipmentStatus(route, currentMinute)
+    : shipment?.estado
+      ? getShipmentStatusLabel(shipment.estado)
+      : 'Cargando'
+  const statusKind = route?.estado?.toLowerCase().replace(/_/g, '-') ?? shipment?.estado?.toLowerCase().replace(/_/g, '-') ?? 'pending'
+  const safeTotalBags = Math.max(totalBags, route?.totalMaletas ?? 0, shipment?.cantidadMaletas ?? 0)
+  const timeLabel = route?.tiempoTotalHoras !== undefined
+    ? formatDurationHours(route.tiempoTotalHoras)
+    : '--'
   const canNavigateBags = safeTotalBags > 1
-  const pieceLabel =
-    inferredBagNumber && safeTotalBags
-      ? `${inferredBagNumber} de ${safeTotalBags}`
-      : safeTotalBags
-        ? `-- de ${safeTotalBags}`
-        : '--'
+  const bagNumber = selectedBagCode
+    ? getBagNumberFromCode(selectedBagCode) ?? activeBagIndex + 1
+    : activeBagIndex + 1
+  const pieceLabel = safeTotalBags
+    ? `${bagNumber} de ${safeTotalBags}`
+    : '--'
 
   return (
-    <section className="bag-detail-card" aria-label="Detalle de maleta">
-      <button
-        type="button"
-        className="bag-detail-back"
-        onClick={onBack}
-      >
+    <section className="shipment-detail-panel" aria-label="Ficha completa del envío">
+      <button type="button" className="shipment-detail-back" onClick={onBack}>
         <ArrowLeft size={16} />
-        <span>Volver al envío</span>
+        <span>Volver a envíos</span>
       </button>
 
-      <div className="bag-detail-heading">
-        <Package size={18} />
-        <div>
-          <span>Ficha de Detalle de la Maleta</span>
-          <strong>{displayedCode}</strong>
-          {clientId ? <small>Cliente: {clientId}</small> : null}
-        </div>
+      <div className="shipment-detail-heading">
+        <span>Envío</span>
+        <strong>{displayCode}</strong>
       </div>
 
       {shipmentSearchError && !route ? (
@@ -461,63 +469,30 @@ function BagDetailPanel({
       ) : null}
 
       {!route && !shipmentSearchError ? (
-        <div className="bag-detail-loading">Consultando ruta de la maleta...</div>
+        <div className="bag-detail-loading">Consultando ruta del envío...</div>
       ) : null}
 
-      {route ? (
-        <>
-          <div className="bag-detail-summary">
-            <div className="bag-detail-summary-state">
-              <span>Estado</span>
-              <strong className={`bag-detail-state ${statusKind}`}>{dynamicStatus}</strong>
-            </div>
-            <div className="bag-detail-summary-piece">
-              <span>Pieza</span>
-              <div className="bag-piece-pager" aria-label="Navegar entre maletas del envío">
-                {canNavigateBags ? (
-                  <button
-                    type="button"
-                    onClick={onPreviousBag}
-                    disabled={activeBagIndex <= 0}
-                    aria-label="Maleta anterior"
-                    title="Maleta anterior"
-                  >
-                    ◀
-                  </button>
-                ) : null}
-                <strong>{pieceLabel}</strong>
-                {canNavigateBags ? (
-                  <button
-                    type="button"
-                    onClick={onNextBag}
-                    disabled={activeBagIndex >= safeTotalBags - 1}
-                    aria-label="Siguiente maleta"
-                    title="Siguiente maleta"
-                  >
-                    ▶
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="bag-detail-summary-time">
-              <span>Tiempo total</span>
-              <strong>{formatDurationHours(route.tiempoTotalHoras)}</strong>
-            </div>
+      <div className="shipment-detail-catalog-route">
+        <div className="shipment-detail-catalog-header">
+          <div>
+            <span>Ruta total</span>
+            <strong>{routeLabel}</strong>
           </div>
+          <span className={`status-badge ${statusKind}`}>{statusLabel}</span>
+        </div>
 
-          <div className="bag-detail-route-title">
-            <Timer size={14} />
-            <span>Tramos</span>
-          </div>
+        <div className="shipment-detail-catalog-time">
+          <span>{timeLabel} de tiempo total</span>
+        </div>
 
-          <div className="bag-detail-route">
-            {route.ruta.length === 0 ? (
-              <div className={`bag-detail-empty ${statusKind}`}>No hay tramos registrados.</div>
-            ) : (
-              route.ruta.map((step, index) => (
+        <div className="shipment-detail-catalog-steps">
+          {route?.ruta.length ? (
+            route.ruta.map((step, index) => {
+              const stepState = getRouteStepState(step, currentMinute)
+              return (
                 <div
                   key={`${step.vueloId}-${step.origen}-${step.destino}-${index}`}
-                  className={`bag-detail-step ${getRouteStepState(step, currentMinute)}`}
+                  className={`shipment-detail-catalog-step ${stepState}`}
                 >
                   <span>{step.planId ?? step.vueloId ?? '--'}</span>
                   <strong>{step.origen} → {step.destino}</strong>
@@ -529,11 +504,66 @@ function BagDetailPanel({
                       resolveAirportGmt(airportGmtByCode, step.destino),
                     )}
                   </small>
+                  {stepState === 'active' ? <em>Tramo actual</em> : null}
                 </div>
-              ))
-            )}
+              )
+            })
+          ) : (
+            <div className="shipment-detail-catalog-empty">No hay tramos registrados.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="shipment-detail-catalog-grid">
+        <div>
+          <span>Maletas</span>
+          <strong>{formatBags(safeTotalBags)}</strong>
+        </div>
+        <div>
+          <span>Cliente</span>
+          <strong>{clientId || '--'}</strong>
+        </div>
+        <div className="wide">
+          <span>SLA total</span>
+          <strong>{timeLabel}</strong>
+        </div>
+      </div>
+
+      {selectedBagCode ? (
+        <div className="shipment-selected-bag-panel" aria-label="Maleta seleccionada">
+          <div className="shipment-selected-bag-heading">
+            <span>Maleta</span>
+            <strong>{selectedBagCode}</strong>
           </div>
-        </>
+          <div className="shipment-selected-bag-pager" aria-label="Navegar entre maletas del envío">
+            <button
+              type="button"
+              onClick={onPreviousBag}
+              disabled={!canNavigateBags || activeBagIndex <= 0}
+              aria-label="Maleta anterior"
+              title="Maleta anterior"
+            >
+              ◀
+            </button>
+            <span>Pieza <strong>{pieceLabel}</strong></span>
+            <button
+              type="button"
+              onClick={onNextBag}
+              disabled={!canNavigateBags || activeBagIndex >= safeTotalBags - 1}
+              aria-label="Siguiente maleta"
+              title="Siguiente maleta"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+      ) : displayCode !== '--' && safeTotalBags ? (
+        <BagList
+          shipmentCode={displayCode}
+          totalBags={safeTotalBags}
+          selectedBagCode={selectedBagCode}
+          onSelectBag={onSelectBag}
+        />
       ) : null}
     </section>
   )
@@ -584,6 +614,8 @@ export default function EntityExplorer({
   const flightListRef = useRef<HTMLDivElement>(null)
   const airportListRef = useRef<HTMLDivElement>(null)
   const shipmentListRef = useRef<HTMLDivElement>(null)
+  const entityPanelRef = useRef<HTMLDivElement>(null)
+  const entityTabPanelRef = useRef<HTMLDivElement>(null)
 
   const [activeEntityTab, setActiveEntityTab] = useState<EntityTab>("flights");
   const [flightSortKey, setFlightSortKey] = useState<FlightSortKey>('default')
@@ -603,61 +635,10 @@ export default function EntityExplorer({
   const [shipmentQuery, setShipmentQuery] = useState("");
   const [shipmentFlightFilter, setShipmentFlightFilter] = useState('')
   const [expandedShipmentCode, setExpandedShipmentCode] = useState<string | null>(null);
-  const [sidebarView, setSidebarView] = useState<SidebarView>('shipment-detail')
+  const [sidebarView, setSidebarView] = useState<SidebarView>('shipment-list')
   const [selectedBagCode, setSelectedBagCode] = useState<string | null>(null)
   const [activeBagIndex, setActiveBagIndex] = useState(0)
-
-  const { simulation } = useSimulationContext();
-  const simId = simulation.simId;
-
-  const [flightShipments, setFlightShipments] = useState<ShipmentCrudDto[] | null>(null);
-  const [loadingShipments, setLoadingShipments] = useState(false);
-  const [errorShipments, setErrorShipments] = useState<string | null>(null);
-  const selectedFlight = useMemo(
-    () => flights.find((flight) => flight.flightId === selectedFlightId) ?? null,
-    [flights, selectedFlightId],
-  )
-  const selectedFlightDisplayId = selectedFlight?.planId ?? selectedFlightId
-  const selectedFlightLabel = selectedFlight?.codigo
-    ? `${selectedFlightDisplayId} (${selectedFlight.codigo})`
-    : selectedFlightDisplayId
-
-  useEffect(() => {
-    if (!selectedFlightId) {
-      setFlightShipments(null);
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingShipments(true);
-    setErrorShipments(null);
-
-    // 2. BIFURCACIÓN INTELIGENTE: 
-    // Si hay un simId activo en el contexto, llama al nuevo endpoint de simulación.
-    // Si no lo hay, usa el endpoint clásico de la base de datos ordinaria.
-    const fetchShipments = simId
-      ? getSimulationShipmentsByFlight(simId, selectedFlightId, {
-          planId: selectedFlight?.planId ?? undefined,
-          salidaMin: selectedFlight?.salidaMin,
-        })
-      : getShipmentsByFlight(selectedFlight?.planId ?? selectedFlightId, selectedFlight?.codigo);
-
-    fetchShipments
-      .then((data) => {
-        if (!cancelled) setFlightShipments(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setErrorShipments(err?.message || 'Error al cargar maletas del vuelo');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingShipments(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedFlight, selectedFlightId, simId]); // 3. ⚠️ Añadimos 'simId' aquí para que reaccione si cambia la simulación
-  // --- FIN CÓDIGO ACTUALIZADO ---
+  const [expandedEntityListHeight, setExpandedEntityListHeight] = useState<number | null>(null)
 
   const filteredFlights = useMemo(() => {
     const codeQuery = flightFilters.codeQuery.trim().toLowerCase()
@@ -993,15 +974,17 @@ export default function EntityExplorer({
 
   const flightList = useVirtualList(orderedFlights, {
     itemHeight: FLIGHT_ITEM_HEIGHT,
-    listHeight,
+    listHeight: expandedEntityListHeight ?? listHeight,
   });
   const airportList = useVirtualList(displayedAirports, {
     itemHeight: AIRPORT_ITEM_HEIGHT,
-    listHeight,
+    listHeight: expandedEntityListHeight ?? listHeight,
   });
   const shipmentList = useVirtualList(orderedShipmentItems, {
     itemHeight: SHIPMENT_ITEM_HEIGHT,
-    listHeight: shipmentListHeight,
+    listHeight: activeEntityTab === 'shipments' && sidebarView === 'shipment-list'
+      ? expandedEntityListHeight ?? shipmentListHeight
+      : shipmentListHeight,
   });
   const selectedShipmentCodeForBags =
     expandedShipmentCode
@@ -1022,6 +1005,10 @@ export default function EntityExplorer({
   const selectedShipmentItem = selectedShipmentCodeForBags
     ? baseShipmentItems.find((shipment) => shipment.codigoPedido === selectedShipmentCodeForBags) ?? null
     : null
+  const selectedShipmentDetailRoute =
+    selectedShipmentCodeForBags && selectedShipmentRoute?.codigoPedido === selectedShipmentCodeForBags
+      ? selectedShipmentRoute
+      : null
   const selectedShipmentBagCodes = useMemo(
     () => selectedShipmentCodeForBags
       ? buildBagCodes(selectedShipmentCodeForBags, selectedShipmentBagTotal)
@@ -1032,27 +1019,76 @@ export default function EntityExplorer({
     selectedShipmentItem?.idCliente ??
     (selectedShipmentCodeForBags ? shipmentClientIds[selectedShipmentCodeForBags] : null)
     ?? null
-  const selectedBagRoute = useMemo(() => {
-    if (!selectedBagCode || !selectedShipmentRoute) {
-      return null
+
+  useEffect(() => {
+    const canExpandActiveList =
+      activeEntityTab === 'flights' ||
+      activeEntityTab === 'airports' ||
+      (activeEntityTab === 'shipments' && sidebarView === 'shipment-list')
+
+    if (!canExpandActiveList) {
+      setExpandedEntityListHeight(null)
+      return
     }
 
-    const expectedBagCode = normalizeEntityCode(selectedBagCode)
-    const routeBagCode = normalizeEntityCode(selectedShipmentRoute.codigoMaleta)
-    if (routeBagCode && routeBagCode === expectedBagCode) {
-      return cloneBagRoute(selectedShipmentRoute, selectedBagCode, activeBagIndex, selectedShipmentBagTotal)
+    const container = entityTabPanelRef.current
+    const listElement =
+      activeEntityTab === 'flights'
+        ? flightListRef.current
+        : activeEntityTab === 'airports'
+          ? airportListRef.current
+          : shipmentListRef.current
+
+    if (!container || !listElement) {
+      return
     }
 
-    const routeShipmentCode = normalizeEntityCode(selectedShipmentRoute.codigoPedido)
-    if (
-      routeShipmentCode &&
-      expectedBagCode.startsWith(`${routeShipmentCode}-`)
-    ) {
-      return cloneBagRoute(selectedShipmentRoute, selectedBagCode, activeBagIndex, selectedShipmentBagTotal)
+    let frameId = 0
+    const measureAvailableListHeight = () => {
+      cancelAnimationFrame(frameId)
+      frameId = requestAnimationFrame(() => {
+        const containerRect = container.getBoundingClientRect()
+        const listRect = listElement.getBoundingClientRect()
+        const hintElement = container.querySelector('.flight-hint')
+        const hintHeight = hintElement instanceof HTMLElement ? hintElement.offsetHeight : 0
+        const nextHeight = Math.floor(containerRect.bottom - listRect.top - hintHeight - 8)
+
+        if (Number.isFinite(nextHeight) && nextHeight > 0) {
+          setExpandedEntityListHeight(Math.max(160, nextHeight))
+        }
+      })
     }
 
-    return null
-  }, [activeBagIndex, selectedBagCode, selectedShipmentBagTotal, selectedShipmentRoute])
+    measureAvailableListHeight()
+
+    const resizeObserver = new ResizeObserver(measureAvailableListHeight)
+    resizeObserver.observe(container)
+    resizeObserver.observe(listElement)
+    window.addEventListener('resize', measureAvailableListHeight)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', measureAvailableListHeight)
+    }
+  }, [
+    activeEntityTab,
+    filteredFlights.length,
+    displayedAirports.length,
+    orderedShipmentItems.length,
+    sidebarView,
+    flightFilters.codeQuery,
+    flightFilters.destinationQuery,
+    flightFilters.originQuery,
+    airportFilters.codeQuery,
+    airportFilters.continentQuery,
+    shipmentQuery,
+    shipmentOriginFilter,
+    shipmentDestinationFilter,
+    shipmentFlightFilter,
+    mapFilters.flights.semaphore,
+    mapFilters.warehouses.semaphore,
+  ])
 
   useEffect(() => {
     if (!selectedBagCode || selectedShipmentBagCodes.length === 0) {
@@ -1219,9 +1255,12 @@ export default function EntityExplorer({
     if (query) {
       if (isLikelyBagCode(query)) {
         setSelectedBagCode(query)
-        setSidebarView('bag-detail')
+        setExpandedShipmentCode(getShipmentCodeFromBagCode(query))
+        setActiveBagIndex(Math.max(0, (getBagNumberFromCode(query) ?? 1) - 1))
+        setSidebarView('shipment-detail')
       } else {
         setSelectedBagCode(null)
+        setExpandedShipmentCode(query)
         setSidebarView('shipment-detail')
       }
       onSearchShipment(query)
@@ -1231,6 +1270,7 @@ export default function EntityExplorer({
     const target = orderedShipmentItems[0];
     if (target) {
       setSelectedBagCode(null)
+      setExpandedShipmentCode(target.codigoPedido)
       setSidebarView('shipment-detail')
       onSearchShipment(target.codigoPedido);
     }
@@ -1240,7 +1280,7 @@ export default function EntityExplorer({
     setSelectedBagCode(null)
     setActiveBagIndex(0)
     setSidebarView('shipment-detail')
-    setExpandedShipmentCode((current) => (current ? codigo : current))
+    setExpandedShipmentCode(codigo)
     onSearchShipment(codigo)
   }
 
@@ -1248,15 +1288,15 @@ export default function EntityExplorer({
     const nextIndex = Math.max(0, selectedShipmentBagCodes.findIndex((code) => code === bagCode))
     setSelectedBagCode(bagCode)
     setActiveBagIndex(nextIndex)
-    setSidebarView('bag-detail')
+    setSidebarView('shipment-detail')
 
     if (
-      selectedShipmentRoute &&
+      selectedShipmentDetailRoute &&
       selectedShipmentCodeForBags &&
-      selectedShipmentRoute.codigoPedido === selectedShipmentCodeForBags
+      selectedShipmentDetailRoute.codigoPedido === selectedShipmentCodeForBags
     ) {
       onSelectShipmentRoute?.(
-        cloneBagRoute(selectedShipmentRoute, bagCode, nextIndex, selectedShipmentBagTotal),
+        cloneBagRoute(selectedShipmentDetailRoute, bagCode, nextIndex, selectedShipmentBagTotal),
       )
       return
     }
@@ -1264,12 +1304,14 @@ export default function EntityExplorer({
     onSearchShipment(bagCode)
   }
 
-  const handleBackToShipmentDetail = () => {
-    setSidebarView('shipment-detail')
+  const handleBackToShipmentList = () => {
+    setSelectedBagCode(null)
+    setActiveBagIndex(0)
+    setSidebarView('shipment-list')
   }
 
   const handleBagPagerChange = (direction: -1 | 1) => {
-    if (!selectedShipmentBagCodes.length || !selectedShipmentRoute) {
+    if (!selectedShipmentBagCodes.length || !selectedShipmentDetailRoute) {
       return
     }
 
@@ -1285,7 +1327,7 @@ export default function EntityExplorer({
     setActiveBagIndex(nextIndex)
     setSelectedBagCode(nextBagCode)
     onSelectShipmentRoute?.(
-      cloneBagRoute(selectedShipmentRoute, nextBagCode, nextIndex, selectedShipmentBagTotal),
+      cloneBagRoute(selectedShipmentDetailRoute, nextBagCode, nextIndex, selectedShipmentBagTotal),
     )
   }
 
@@ -1391,10 +1433,15 @@ export default function EntityExplorer({
     }
 
     if (focusRequest.type === 'shipment') {
+      const shipmentCode = String(focusRequest.id)
       setActiveEntityTab('shipments')
-      setShipmentQuery(String(focusRequest.id))
+      setShipmentQuery(shipmentCode)
+      setExpandedShipmentCode(shipmentCode)
+      setSelectedBagCode(null)
+      setActiveBagIndex(0)
+      setSidebarView('shipment-detail')
       setTimeout(() => {
-        const index = orderedShipmentItems.findIndex(s => s.codigoPedido === String(focusRequest.id))
+        const index = orderedShipmentItems.findIndex(s => s.codigoPedido === shipmentCode)
         if (index !== -1) {
           const targetScrollTop = index * SHIPMENT_ITEM_HEIGHT
           shipmentList.setScrollTop(targetScrollTop)
@@ -1421,7 +1468,7 @@ export default function EntityExplorer({
       setExpandedShipmentCode(shipmentCode)
       setSelectedBagCode(bagCode)
       setActiveBagIndex(Math.max(0, (bagNumber ?? 1) - 1))
-      setSidebarView('bag-detail')
+      setSidebarView('shipment-detail')
 
       setTimeout(() => {
         const index = orderedShipmentItems.findIndex(s => s.codigoPedido === shipmentCode)
@@ -1719,54 +1766,6 @@ export default function EntityExplorer({
         {labels?.flightHint ??
           `${formatInteger(orderedFlights.length)} ${labels?.flightHintNoun ?? "vuelos"}`}
       </div>
-      {/* --- NUEVO CÓDIGO: PANEL DE MALETAS --- */}
-      {selectedFlightId && (
-        <div
-          className="flight-list"
-          style={{ maxHeight: "220px", height: "auto", marginTop: "10px" }}
-        >
-          <div
-            style={{
-              padding: "10px",
-              fontSize: "12px",
-              background: "#eaf0fb",
-              borderBottom: "1px solid #d9e4f4",
-            }}
-          >
-            <strong>Maletas del vuelo {selectedFlightLabel}</strong>
-          </div>
-
-          {loadingShipments && <div style={{ padding: "10px", fontSize: "12px" }}>Cargando maletas...</div>}
-          {errorShipments && <div style={{ padding: "10px", fontSize: "12px", color: "red" }}>{errorShipments}</div>}
-
-          {!loadingShipments && !errorShipments && flightShipments && (
-            flightShipments.length === 0 ? (
-              <div style={{ padding: "10px", fontSize: "12px" }}>No hay maletas registradas en este vuelo.</div>
-            ) : (
-              flightShipments.map((ship) => (
-                <div
-                  key={ship.id}
-                  className="flight-item"
-                  style={{
-                    borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
-                    cursor: "default",
-                    height: "auto",
-                    padding: "8px 12px"
-                  }}
-                >
-                  <div className="flight-label">
-                    Pedido: {ship.codigoPedido}
-                  </div>
-                  <div className="flight-meta">
-                    {ship.origen} → {ship.destino} | {formatBags(ship.cantidad)} maletas
-                  </div>
-                </div>
-              ))
-            )
-          )}
-        </div>
-      )}
-      {/* --- FIN NUEVO CÓDIGO --- */}
       <div className="cancelled-flights-toggle" style={{ marginTop: '12px', padding: '0 4px', borderTop: '1px solid #d9e4f4', paddingTop: '10px' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#1e3b67' }}>
           <input 
@@ -1781,20 +1780,23 @@ export default function EntityExplorer({
   );
 
   const renderShipments = () => (
-    <div className={`shipment-sidebar-view ${sidebarView === 'bag-detail' ? 'is-bag-detail' : 'is-shipment-detail'}`}>
-      {sidebarView === 'bag-detail' ? (
-        <BagDetailPanel
-          route={selectedBagRoute}
+    <div className={`shipment-sidebar-view is-${sidebarView}`}>
+      {sidebarView === 'shipment-detail' ? (
+        <ShipmentDetailPanel
+          route={selectedShipmentDetailRoute}
+          shipment={selectedShipmentItem}
+          shipmentCode={selectedShipmentCodeForBags}
           airportGmtByCode={airportGmtByCode}
-          selectedBagCode={selectedBagCode}
           clientId={selectedShipmentClientId}
-          activeBagIndex={activeBagIndex}
           totalBags={selectedShipmentBagTotal}
+          selectedBagCode={selectedBagCode}
+          activeBagIndex={activeBagIndex}
           currentMinute={currentMinute}
           shipmentSearchError={shipmentSearchError}
+          onBack={handleBackToShipmentList}
+          onSelectBag={handleSelectBag}
           onPreviousBag={() => handleBagPagerChange(-1)}
           onNextBag={() => handleBagPagerChange(1)}
-          onBack={handleBackToShipmentDetail}
         />
       ) : (
         <>
@@ -2022,7 +2024,6 @@ export default function EntityExplorer({
             {shipmentList.visibleItems.map((shipment) => {
               const codigo = shipment.codigoPedido
               const cantidad = shipment.cantidadMaletas ?? shipmentQuantities[codigo] ?? 0
-              const isExpanded = expandedShipmentCode === codigo
               const isSelected = selectedShipmentRoute?.codigoPedido === codigo
               const deliveryLabel = shipment.minutoEntrega !== null && shipment.minutoEntrega !== undefined
                 ? formatSimDateTimeFromMinuteWithGmt(
@@ -2068,11 +2069,11 @@ export default function EntityExplorer({
                           className="shipment-card-bag-toggle"
                           onClick={(event) => {
                             event.stopPropagation()
-                            setExpandedShipmentCode(isExpanded ? null : codigo)
+                            handleSelectShipment(codigo)
                           }}
-                          title={isExpanded ? 'Ocultar maletas' : 'Ver maletas'}
+                          title="Ver detalle del envío"
                         >
-                          {isExpanded ? 'Ocultar' : 'Ver'}
+                          Detalle
                         </button>
                       ) : null}
                     </div>
@@ -2092,14 +2093,6 @@ export default function EntityExplorer({
           </div>
         </div>
       </div>
-      {selectedShipmentCodeForBags && selectedShipmentBagTotal ? (
-        <BagList
-          shipmentCode={selectedShipmentCodeForBags}
-          totalBags={selectedShipmentBagTotal}
-          selectedBagCode={selectedBagCode}
-          onSelectBag={handleSelectBag}
-        />
-      ) : null}
       <div className="flight-hint">
         {labels?.shipmentHint ??
           `${formatInteger(orderedShipmentItems.length)} ${labels?.shipmentHintNoun ?? "envíos"}`}
@@ -2107,56 +2100,6 @@ export default function EntityExplorer({
       {shipmentSearchError && (
         <div className="upload-error" style={{ marginBottom: "8px" }}>
           {shipmentSearchError}
-        </div>
-      )}
-      {selectedShipmentRoute && (
-        <div
-          className="flight-list"
-          style={{ maxHeight: "220px", height: "auto", marginBottom: "10px" }}
-        >
-          <div
-            style={{
-              padding: "10px",
-              fontSize: "12px",
-              background: "#eaf0fb",
-              borderBottom: "1px solid #d9e4f4",
-            }}
-          >
-            <strong>Estado:</strong>{" "}
-            {getDynamicShipmentStatus(selectedShipmentRoute, currentMinute)}{" "}
-            <br />
-            <strong>Tiempo total:</strong>{" "}
-            {formatDurationHours(selectedShipmentRoute.tiempoTotalHoras)}
-          </div>
-          {selectedShipmentRoute.ruta.length === 0 && (
-            <div style={{ padding: "10px", fontSize: "12px" }}>
-              No hay saltos registrados.
-            </div>
-          )}
-          {selectedShipmentRoute.ruta.map((step, index) => (
-            <div
-              key={`${step.vueloId}-${step.origen}-${step.destino}-${index}`}
-              className="flight-item"
-              style={{
-                borderBottom: "1px solid rgba(217, 228, 244, 0.8)",
-                cursor: "default",
-              }}
-            >
-              <div className="flight-label">
-                {step.planId ?? step.vueloId} | {step.origen} → {step.destino}
-              </div>
-              <div className="flight-meta">
-                Salida {
-                  formatMinuteRangeWithGmt(
-                    step.salidaMin,
-                    step.llegadaMin,
-                    resolveAirportGmt(airportGmtByCode, step.origen),
-                    resolveAirportGmt(airportGmtByCode, step.destino),
-                  )
-                }
-              </div>
-            </div>
-          ))}
         </div>
       )}
         </>
@@ -2426,7 +2369,7 @@ export default function EntityExplorer({
   );
 
   return (
-    <>
+    <div ref={entityPanelRef} className="entity-explorer">
       <div className="entity-subtabs sticky-subtabs">
         <button
           className={`entity-subtab ${activeEntityTab === "flights" ? "active" : ""} ${filteredFlights.length === 0 ? "empty" : ""}`}
@@ -2448,9 +2391,11 @@ export default function EntityExplorer({
         </button>
       </div>
 
-      {activeEntityTab === "flights" ? renderFlights() : null}
-      {activeEntityTab === "shipments" ? renderShipments() : null}
-      {activeEntityTab === "airports" ? renderAirports() : null}
-    </>
+      <div ref={entityTabPanelRef} className={`entity-tab-panel entity-tab-panel--${activeEntityTab}`}>
+        {activeEntityTab === "flights" ? renderFlights() : null}
+        {activeEntityTab === "shipments" ? renderShipments() : null}
+        {activeEntityTab === "airports" ? renderAirports() : null}
+      </div>
+    </div>
   );
 }
