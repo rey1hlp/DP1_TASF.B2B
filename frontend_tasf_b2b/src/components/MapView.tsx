@@ -800,12 +800,12 @@ export default function MapView({
     const isNewAirport = previewAirportCode !== lastAirportCodeRef.current
 
     const loadAirportShipments = async () => {
-      setAirportShipmentsLoading(true)
-      setAirportShipmentsError(null)
       if (isNewAirport) {
+        setAirportShipmentsLoading(true)
         setAirportShipments([]) // Clear old shipments to avoid showing stale data
         lastAirportCodeRef.current = previewAirportCode
       }
+      setAirportShipmentsError(null)
 
       const queryMinute = simId ? quarterMinute : null
       console.log('[MapView] loading airport shipments', {
