@@ -308,6 +308,23 @@ export function formatShipmentDepartureTime(
 
   const raw = String(value).trim()
   const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)
+  const utcLikeMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/)
+  if (!hasTimezone && utcLikeMatch) {
+    const [, yyyy, mm, dd, hh, min, sec] = utcLikeMatch
+    const parsedUtc = new Date(Date.UTC(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(hh),
+      Number(min),
+      Number(sec ?? '0'),
+    ))
+    if (normalizeGmtOffsetMinutes(gmt) !== null) {
+      return formatDateTimeWithGmt(parsedUtc, gmt)
+    }
+    return `${formatUtcDateTime(parsedUtc)} UTC`
+  }
+
   const parsed = new Date(raw)
   if (hasTimezone && !Number.isNaN(parsed.getTime())) {
     if (normalizeGmtOffsetMinutes(gmt) !== null) {
