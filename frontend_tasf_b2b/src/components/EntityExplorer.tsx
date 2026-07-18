@@ -96,6 +96,7 @@ export type EntityExplorerProps = {
   flights: EntityFlightItem[]
   airports: EntityAirportItem[]
   airportGmtByCode?: Record<string, number>
+  accountClockGmt?: number | null
   shipments: string[]
   selectedFlightId: number | null
   selectedAirportCode: string | null
@@ -538,6 +539,7 @@ export default function EntityExplorer({
   flights,
   airports,
   airportGmtByCode = {},
+  accountClockGmt = null,
   shipments,
   selectedFlightId,
   selectedAirportCode,
@@ -1994,6 +1996,7 @@ export default function EntityExplorer({
                     resolveAirportGmt(airportGmtByCode, shipment.destino),
                   )
                 : '--'
+              const shipmentClockGmt = accountClockGmt ?? resolveAirportGmt(airportGmtByCode, shipment.origen)
 
               return (
                 <div
@@ -2043,7 +2046,7 @@ export default function EntityExplorer({
                       <span>
                         {`Registro: ${formatShipmentDepartureTime(
                           shipment.ut,
-                          resolveAirportGmt(airportGmtByCode, shipment.origen),
+                          shipmentClockGmt,
                         )}`}
                       </span>
                       <span>{`Entrega: ${deliveryLabel}`}</span>

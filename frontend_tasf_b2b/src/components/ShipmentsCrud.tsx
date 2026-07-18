@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Pager from './ui/Pager'
-import { formatDateTime, formatFileSize, formatInteger } from '../utils/time'
+import { formatFileSize, formatInteger, formatUtcDateTimeForClock } from '../utils/time'
 
 type ShipmentsUploadResult = {
   total: number
@@ -14,6 +14,7 @@ type ShipmentsUploadResult = {
   skipped: number
   invalidFormatLines: string[]
   invalidAirportLines: string[]
+  registeredCodes: string[]
   invalidCapacityLines: string[]
 }
 
@@ -76,29 +77,6 @@ function extractOriginFromTxtFileName(filename?: string | null): string | null {
   }
   const match = filename.match(/_envios_([A-Za-z0-9]{4})_/i)
   return match?.[1] ? normalizeShipmentCode(match[1]) : null
-}
-
-function buildImportedShipmentCode(originOaci: string, rawCode: string): string {
-  const normalizedOrigin = normalizeShipmentCode(originOaci)
-  const normalizedRawCode = normalizeShipmentCode(rawCode)
-  if (normalizedRawCode.startsWith(normalizedOrigin)) {
-    return normalizedRawCode
-  }
-  return `${normalizedOrigin}${normalizedRawCode}`
-}
-
-function extractShipmentCodesFromTxt(content: string, originOaci: string): string[] {
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const sanitized = line.replace(/^\uFEFF/, '')
-      const separatorIndex = sanitized.indexOf('-')
-      const rawCode = separatorIndex >= 0 ? sanitized.slice(0, separatorIndex).trim() : sanitized.trim()
-      return buildImportedShipmentCode(originOaci, rawCode)
-    })
-    .filter(Boolean)
 }
 
 function buildAirportCapacityMap(airports: AirportCrudDto[]): Map<string, number> {
@@ -201,9 +179,9 @@ export default function ShipmentsCrud() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [isDuplicateErrorOpen, setIsDuplicateErrorOpen] = useState(false)
-  const [duplicateUploadCodes, setDuplicateUploadCodes] = useState<string[]>([])
-  const [shipmentCodeNotice, setShipmentCodeNotice] = useState<string | null>(null)
+  const [isDuplicateErrorOpen] = useState(false)
+  const [duplicateUploadCodes] = useState<string[]>([])
+  const [shipmentCodeNotice, setShipmentCodeNotice] = useState<string[]>([])
   const [uploadResult, setUploadResult] = useState<ShipmentsUploadResult | null>(null)
 
   const logisticsAirportCode = user && user.role !== 'ADMIN'
@@ -218,6 +196,12 @@ export default function ShipmentsCrud() {
   }, [airports, logisticsAirportCode])
 
   const isOriginLocked = Boolean(logisticsAirportCode)
+  const accountClockGmt = logisticsAirportCode ? logisticsAirport?.gmt ?? null : null
+
+  const formatShipmentIngress = (item: ShipmentCrudDto): string => {
+    const gmt = accountClockGmt ?? (logisticsAirportCode ? item.origenGmt : null)
+    return formatUtcDateTimeForClock(item.ingresoUtc || item.ingresoLocal, gmt)
+  }
 
   const load = async () => {
     setLoading(true)
@@ -292,27 +276,6 @@ export default function ShipmentsCrud() {
     }
   }
 
-  const loadAllVisibleShipmentCodes = async (): Promise<Set<string>> => {
-    const codes = new Set<string>()
-    const pageSize = 500
-    let currentPage = 0
-    let totalPages = 1
-
-    while (currentPage < totalPages) {
-      const result = await listShipments(currentPage, pageSize, '')
-      result.content.forEach((item) => {
-        const code = normalizeShipmentCode(item.codigoPedido)
-        if (code) {
-          codes.add(code)
-        }
-      })
-      totalPages = Math.max(result.totalPages, currentPage + 1)
-      currentPage += 1
-    }
-
-    return codes
-  }
-
   useEffect(() => {
     if (!isModalOpen || !logisticsAirportCode) {
       return
@@ -339,6 +302,13 @@ export default function ShipmentsCrud() {
     }
     void loadLogisticsAirport()
   }, [isModalOpen, logisticsAirport, logisticsAirportCode])
+
+  useEffect(() => {
+    if (!logisticsAirportCode || logisticsAirport) {
+      return
+    }
+    void loadLogisticsAirport()
+  }, [logisticsAirport, logisticsAirportCode])
 
   const handleSubmit = async () => {
     setError(null)
@@ -377,7 +347,7 @@ export default function ShipmentsCrud() {
       } else {
         console.debug('[ShipmentsCrud] createShipment')
         const created = await createShipment(payload)
-        setShipmentCodeNotice(created.codigoPedido)
+        setShipmentCodeNotice(created.codigoPedido ? [created.codigoPedido] : [])
       }
 
       resetForm()
@@ -413,10 +383,7 @@ export default function ShipmentsCrud() {
     setUploadResult(null)
   }
 
-  const closeDuplicateErrorModal = () => {
-    setIsDuplicateErrorOpen(false)
-    setDuplicateUploadCodes([])
-  }
+  const closeDuplicateErrorModal = () => {}
 
   const closeShipmentModal = () => {
     setIsModalOpen(false)
@@ -444,7 +411,6 @@ export default function ShipmentsCrud() {
       return
     }
 
-    let duplicateCodes: string[] = []
     let fileContent = ''
     let fileToUpload = uploadFile
     let invalidCapacityLines: string[] = []
@@ -464,23 +430,9 @@ export default function ShipmentsCrud() {
         fileContent = capacityValidation.validContent
         fileToUpload = new File([fileContent], uploadFile.name, { type: uploadFile.type || 'text/plain' })
       }
-
-      const fileCodes = extractShipmentCodesFromTxt(fileContent, originOaci)
-      const currentCodes = await loadAllVisibleShipmentCodes()
-      duplicateCodes = [...new Set(
-        fileCodes.filter((code) => currentCodes.has(normalizeShipmentCode(code))),
-      )].sort((left, right) => left.localeCompare(right))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
-      setUploadError(`No se pudo validar duplicados antes de cargar el TXT: ${msg}`)
-      return
-    }
-
-    if (duplicateCodes.length > 0) {
-      setUploadError(null)
-      setUploadResult(null)
-      setDuplicateUploadCodes(duplicateCodes)
-      setIsDuplicateErrorOpen(true)
+      setUploadError(`No se pudo validar capacidades antes de cargar el TXT: ${msg}`)
       return
     }
 
@@ -496,6 +448,7 @@ export default function ShipmentsCrud() {
           skipped: invalidCapacityLines.length,
           invalidFormatLines: [],
           invalidAirportLines: [],
+          registeredCodes: [],
           invalidCapacityLines,
         })
         return
@@ -512,6 +465,7 @@ export default function ShipmentsCrud() {
         skipped: result.skipped + invalidCapacityLines.length,
         invalidCapacityLines: [...invalidCapacityLines, ...backendInvalidCapacityLines],
       })
+      setShipmentCodeNotice(result.registeredCodes ?? [])
       await load()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado'
@@ -606,7 +560,7 @@ export default function ShipmentsCrud() {
             <span>{item.codigoPedido}</span>
             <span>{item.origen}</span>
             <span>{item.destino}</span>
-            <span>{formatDateTime(item.ingresoLocal)}</span>
+            <span>{formatShipmentIngress(item)}</span>
             <span>{formatInteger(item.cantidad)}</span>
             <span>{item.idCliente}</span>
             <span className={`status-badge ${getShipmentStatusClass(item.status)}`}>
@@ -627,7 +581,7 @@ export default function ShipmentsCrud() {
           <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
             <h2>Archivo TXT de envios</h2>
             <p>Formato: 000000001-AAAAMMDD-HH-MM-DESTINO-CANTIDAD-IDCLIENTE</p>
-            <p>El sistema generara el identificador final como OACI de origen + 9 digitos del archivo.</p>
+            <p>El identificador del archivo no se usa para registrar el envio; el sistema asignara nuevos IDs automaticamente.</p>
 
             {logisticsAirportCode ? (
               <p>
@@ -708,20 +662,24 @@ export default function ShipmentsCrud() {
       </Modal>
 
       <Modal
-        open={shipmentCodeNotice != null}
-        onClose={() => setShipmentCodeNotice(null)}
-        title="Envio registrado"
+        open={shipmentCodeNotice.length > 0}
+        onClose={() => setShipmentCodeNotice([])}
+        title={shipmentCodeNotice.length === 1 ? 'Envio registrado' : 'Envios registrados'}
         className="modal--compact"
       >
         <div className="shipment-code-notice">
           <div className="shipment-code-notice__message">
-            {`Se registro el envio con el identificador ${shipmentCodeNotice ?? ''}.`}
+            {shipmentCodeNotice.length === 1
+              ? `Se registro el envio con el identificador ${shipmentCodeNotice[0]}.`
+              : 'Se registraron los envios con los siguientes identificadores.'}
           </div>
           <div className="shipment-code-notice__codes">
-            <code>{shipmentCodeNotice ?? ''}</code>
+            {shipmentCodeNotice.map((code) => (
+              <code key={code}>{code}</code>
+            ))}
           </div>
           <div className="modal-actions">
-            <Button variant="primary" onClick={() => setShipmentCodeNotice(null)}>Entendido</Button>
+            <Button variant="primary" onClick={() => setShipmentCodeNotice([])}>Entendido</Button>
           </div>
         </div>
       </Modal>

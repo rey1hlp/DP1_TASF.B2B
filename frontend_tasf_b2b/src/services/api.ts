@@ -468,6 +468,7 @@ export type BulkImportResult = {
   skipped: number
   invalidFormatLines: string[]
   invalidAirportLines: string[]
+  registeredCodes: string[]
   invalidCapacityLines?: string[]
 }
 
