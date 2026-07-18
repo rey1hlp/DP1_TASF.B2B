@@ -171,6 +171,16 @@ function formatRemainingSla(shipment: ShipmentCrudDto): { label: string; value: 
   return { label: 'Restante', value: formatSimSpan(remainingMinutes), tone: 'ok' }
 }
 
+function formatSlaRemainingNote(slaInfo: ReturnType<typeof formatRemainingSla>) {
+  if (slaInfo.tone === 'late') {
+    return `SLA vencido hace ${slaInfo.value}`
+  }
+  if (slaInfo.tone === 'static') {
+    return `SLA permitido ${slaInfo.value}`
+  }
+  return `Queda ${slaInfo.value} para cumplir SLA`
+}
+
 const PLANE_PATH =
   "M 17.8 19.2 L 16 11 l 3.5 -3.5 C 21 6 21.5 4 21 3 c -1 -0.5 -3 0 -4.5 1.5 L 13 8 L 4.8 6.2 c -0.5 -0.1 -0.9 0.1 -1.1 0.5 l -0.3 0.5 c -0.2 0.5 -0.1 1 0.3 1.3 L 9 12 l -2 3 H 4 l -1 1 l 3 2 l 2 3 l 1 -1 v -3 l 3 -2 l 3.5 5.3 c 0.3 0.4 0.8 0.5 1.3 0.3 l 0.5 -0.2 c 0.4 -0.3 0.6 -0.7 0.5 -1.2 Z"
 const PLANE_ICON_BASE_VISUAL_SIZE = 20
@@ -1887,44 +1897,40 @@ export default function MapView({
 
             {!flightShipmentsLoading && !flightShipmentsError ? (
               <div className="flight-shipment-list">
-                {flightShipments.map((shipment) => {
-                  const slaInfo = formatRemainingSla(shipment)
-
-                  return (
-                    <div
-                      key={shipment.id ?? shipment.codigoPedido}
-                      className="flight-shipment-item"
-                    >
-                      <div className="flight-shipment-item-header">
-                        <div className="flight-shipment-main">
-                          <div className="flight-shipment-code">{shipment.codigoPedido}</div>
-                          <div className="flight-shipment-route">
-                            <span>{previewFlight.origen || '--'}</span>
-                            <span aria-hidden="true">→</span>
-                            <span>{previewFlight.destino || '--'}</span>
-                          </div>
+                {flightShipments.map((shipment) => (
+                  <div
+                    key={shipment.id ?? shipment.codigoPedido}
+                    className="flight-shipment-item"
+                  >
+                    <div className="flight-shipment-item-header">
+                      <div className="flight-shipment-main">
+                        <div className="flight-shipment-code">{shipment.codigoPedido}</div>
+                        <div className="flight-shipment-route">
+                          <span>{previewFlight.origen || '--'}</span>
+                          <span aria-hidden="true">→</span>
+                          <span>{previewFlight.destino || '--'}</span>
                         </div>
                       </div>
-
-                      <div className="flight-shipment-metrics">
-                        <div className="map-floating-card-metric flight-shipment-metric">
-                          <strong>{formatBags(shipment.cantidad)}</strong>
-                          <span>Maletas</span>
-                        </div>
-                        <div className={`map-floating-card-metric flight-shipment-metric sla-${slaInfo.tone}`}>
-                          <strong>{slaInfo.value}</strong>
-                          <span>{slaInfo.label}</span>
-                        </div>
-                      </div>
-
-                      <DetailLinkButton
-                        label="Ver detalle"
-                        onClick={() => openShipmentDetails(shipment)}
-                        title="Ver detalle"
-                      />
                     </div>
-                  )
-                })}
+
+                    <div className="flight-shipment-metrics">
+                      <div className="map-floating-card-metric flight-shipment-metric">
+                        <strong>{formatBags(shipment.cantidad)}</strong>
+                        <span>Maletas</span>
+                      </div>
+                      <div className="map-floating-card-metric flight-shipment-metric sla-static">
+                        <strong>{formatDurationHours(shipment.slaHoras, 0)}</strong>
+                        <span>SLA</span>
+                      </div>
+                    </div>
+
+                    <DetailLinkButton
+                      label="Ver detalle"
+                      onClick={() => openShipmentDetails(shipment)}
+                      title="Ver detalle"
+                    />
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>
@@ -1996,13 +2002,11 @@ export default function MapView({
                       </div>
                       <div className="shipment-detail-time-strip">
                         <div>
-                          <span>Tiempo total</span>
+                          <span>SLA permitido</span>
                           <strong>{formatDurationHours(selectedShipment.slaHoras, 0)}</strong>
                         </div>
-                        <span className={`shipment-detail-sla-countdown sla-${slaInfo.tone}`}>
-                          {slaInfo.tone === 'late'
-                            ? `${slaInfo.value} vencido`
-                            : `${slaInfo.value} restantes`}
+                        <span className="shipment-detail-sla-countdown sla-neutral">
+                          {formatSlaRemainingNote(slaInfo)}
                         </span>
                       </div>
                       <DetailLinkButton
@@ -2168,7 +2172,6 @@ export default function MapView({
                 <div className="flight-shipment-list">
                   {displayShipments.map((shipment) => {
                     const statusClass = (shipment.status ?? 'pending').toLowerCase().replace(/_/g, '-');
-                    const slaInfo = formatRemainingSla(shipment);
                     const isEntrante = shipment.origen !== code;
                     const isSaliente = shipment.origen === code || shipment.destino !== code;
 
@@ -2200,9 +2203,9 @@ export default function MapView({
                             <strong>{formatBags(shipment.cantidad)}</strong>
                             <span>Maletas</span>
                           </div>
-                          <div className={`map-floating-card-metric flight-shipment-metric sla-${slaInfo.tone}`}>
-                            <strong>{slaInfo.value}</strong>
-                            <span>{slaInfo.label}</span>
+                          <div className="map-floating-card-metric flight-shipment-metric sla-static">
+                            <strong>{formatDurationHours(shipment.slaHoras, 0)}</strong>
+                            <span>SLA</span>
                           </div>
                         </div>
 
@@ -2277,13 +2280,11 @@ export default function MapView({
                       </div>
                       <div className="shipment-detail-time-strip">
                         <div>
-                          <span>SLA total</span>
+                          <span>SLA permitido</span>
                           <strong>{formatDurationHours(selectedAirportShipment.slaHoras, 0)}</strong>
                         </div>
-                        <span className={`shipment-detail-sla-countdown sla-${slaInfo.tone}`}>
-                          {slaInfo.tone === 'late'
-                            ? `${slaInfo.value} vencido`
-                            : `${slaInfo.value} restantes`}
+                        <span className="shipment-detail-sla-countdown sla-neutral">
+                          {formatSlaRemainingNote(slaInfo)}
                         </span>
                       </div>
                       <DetailLinkButton

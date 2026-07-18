@@ -3419,6 +3419,15 @@ body {
   color: #166534;
 }
 
+.flight-shipment-metric.sla-static {
+  background: #eef2f7;
+  color: #334155;
+}
+
+.flight-shipment-metric.sla-static span {
+  color: #475569;
+}
+
 .flight-shipment-metric.sla-late {
   background: #fef2f2;
   color: #991b1b;
@@ -3486,6 +3495,13 @@ body {
 .shipment-detail-sla-countdown.sla-static {
   background: #eef2f7;
   color: #334155;
+}
+
+.shipment-detail-sla-countdown.sla-neutral {
+  border: 1px solid #d8e0ec;
+  background: #f6f8fb;
+  color: #475569;
+  font-weight: 800;
 }
 
 .shipment-detail-sla-countdown.sla-late {

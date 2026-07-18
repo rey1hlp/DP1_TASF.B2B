@@ -482,7 +482,7 @@ function ShipmentDetailPanel({
         </div>
 
         <div className="shipment-detail-catalog-time">
-          <span>{timeLabel} de tiempo total</span>
+          <span>{timeLabel} de duración de rutas</span>
         </div>
 
         <div className="shipment-detail-catalog-steps">
@@ -524,7 +524,7 @@ function ShipmentDetailPanel({
           <strong>{clientId || '--'}</strong>
         </div>
         <div className="wide">
-          <span>SLA total</span>
+          <span>Duración de rutas</span>
           <strong>{timeLabel}</strong>
         </div>
       </div>

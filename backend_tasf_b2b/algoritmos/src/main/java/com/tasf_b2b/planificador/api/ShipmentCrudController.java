@@ -516,7 +516,7 @@ public class ShipmentCrudController {
         target.ingresoUtc = OperationalTime.localToUtc(ingresoLocal, origen.gmt);
         target.cantidad = source.cantidad;
         target.idCliente = source.idCliente.trim();
-        target.slaHoras = source.slaHoras;
+        target.slaHoras = computeSla(origen, destino);
         target.status = source.status != null ? source.status : (target.status != null ? target.status : ShipmentStatus.PENDING);
         return true;
     }
