@@ -2041,7 +2041,7 @@ export default function EntityExplorer({
                     </div>
                     <div className="shipment-card-footer">
                       <span>
-                        {`Salida: ${formatShipmentDepartureTime(
+                        {`Registro: ${formatShipmentDepartureTime(
                           shipment.ut,
                           resolveAirportGmt(airportGmtByCode, shipment.origen),
                         )}`}
