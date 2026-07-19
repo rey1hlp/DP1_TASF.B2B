@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { ComponentProps } from 'react'
 import type { AirportDto, EnvioDetalleDto, FlightCrudDto, ShipmentCrudDto } from '../types/sim'
-import { API_BASE, authFetch, buildDailyOperationWsUrl, fetchAirports, listFlights } from '../services/api'
+import { API_BASE, authFetch, buildDailyOperationWsUrl, cancelFlightDay, fetchAirports, listFlights } from '../services/api'
 import MapView from '../components/MapView'
 import DailyOperationControls, { type RespuestaRutaEnvioDto } from '../components/DailyOperationControls'
+import FlightCancellationPanel, { type CancellableFlightItem } from '../components/FlightCancellationPanel'
 import { DEFAULT_MAP_SEMAPHORE_FILTERS } from '../types/mapFilters'
 import type { EntityFocusRequest } from '../types/entityFocus'
 import {
@@ -16,7 +17,7 @@ import {
 import { resolveAirportContinent } from '../utils/continents'
 import { resolveSemaphoreColor, resolveSemaphoreLevel } from '../utils/semaphore'
 import { formatBags, formatDateTime, formatInteger, formatPercent } from '../utils/time'
-import { buildCancelledFlightTraces, readCancelledFlightDays } from '../utils/cancelledFlightTraces'
+import { buildCancelledFlightTraces, readCancelledFlightDays, appendCancelledFlightDay } from '../utils/cancelledFlightTraces'
 
 type MapViewProps = ComponentProps<typeof MapView>
 type MapSegment = MapViewProps['segments'][number]
@@ -206,6 +207,8 @@ export default function DailyOperationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [socketConnected, setSocketConnected] = useState(false)
+  
+  const [dailyCancelLoadingId, setDailyCancelLoadingId] = useState<number | null>(null)
 
   const [ranges, setRanges] = useState({ greenMax: 30, amberMax: 70 })
   const [mapFilters, setMapFilters] = useState(DEFAULT_MAP_SEMAPHORE_FILTERS)
@@ -363,7 +366,7 @@ export default function DailyOperationPage() {
       airports,
       cancelledDays,
       operationDateKey,
-      false,
+      true,
     )
   }, [airports, cancelledDays, flightCatalog, operationDateKey])
 
@@ -747,6 +750,60 @@ export default function DailyOperationPage() {
     }))
   }, [upcomingSegments, currentMinute, ranges])
 
+  const dailyCancellationFlights = useMemo(() => {
+    const byPlan = new Map<number, CancellableFlightItem>()
+    for (const seg of upcomingSegments) {
+      if (seg.planId === null || seg.planId === undefined || byPlan.has(seg.planId)) {
+        continue
+      }
+      byPlan.set(seg.planId, {
+        id: seg.planId,
+        instanceId: seg.flightId,
+        origen: seg.origen,
+        destino: seg.destino,
+        salidaMin: seg.salidaMin,
+        llegadaMin: seg.llegadaMin,
+        carga: seg.carga,
+        capacidad: seg.capacidad,
+        origenLat: seg.origenLat,
+        origenLon: seg.origenLon,
+        destinoLat: seg.destinoLat,
+        destinoLon: seg.destinoLon,
+      })
+    }
+    return Array.from(byPlan.values())
+  }, [upcomingSegments])
+
+  const handleDailyCancelFlight = async (flight: CancellableFlightItem) => {
+    setDailyCancelLoadingId(flight.id)
+    setError(null)
+    try {
+      const fecha = getLimaDateKey()
+      await cancelFlightDay(flight.id, fecha, undefined)
+      appendCancelledFlightDay({
+        flightId: flight.id,
+        fecha,
+        sourceType: 'REAL',
+        origen: flight.origen,
+        destino: flight.destino,
+        origenLat: flight.origenLat,
+        origenLon: flight.origenLon,
+        destinoLat: flight.destinoLat,
+        destinoLon: flight.destinoLon,
+        salidaMin: flight.salidaMin % 1440,
+        llegadaMin: flight.llegadaMin % 1440,
+      })
+      setCancelledDays(readCancelledFlightDays({ includeVirtual: false }))
+      // No re-fetch the entire snapshot here, the WS will push the changes naturally if needed, 
+      // or the UI will just hide the flight since it's cancelled.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al cancelar vuelo'
+      setError(msg)
+    } finally {
+      setDailyCancelLoadingId(null)
+    }
+  }
+
   const airportItems = useMemo(() => {
     const airportFlightTimings = buildAirportFlightTimings(segments, currentMinute)
 
@@ -957,6 +1014,18 @@ export default function DailyOperationPage() {
           entityFocusRequest={entityFocusRequest}
           showCancelledDetails={showCancelledDetails}
           onShowCancelledDetailsChange={setShowCancelledDetails}
+          flightCancellationPanel={
+            <FlightCancellationPanel
+              title="Cancelar vuelo hoy"
+              description="Cancela un vuelo programado para hoy. Esta acción afectará la operación real."
+              flights={dailyCancellationFlights}
+              loadingFlightId={dailyCancelLoadingId}
+              emptyMessage="No hay vuelos próximos disponibles para cancelar."
+              submitLabel="Cancelar vuelo"
+              onCancel={handleDailyCancelFlight}
+              airportGmtByCode={airportGmtByCode}
+            />
+          }
         />
       </section>
     </div>

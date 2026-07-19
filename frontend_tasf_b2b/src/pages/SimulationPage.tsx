@@ -1260,6 +1260,7 @@ export default function SimulationPage() {
                   emptyMessage="Inicia la simulacion para ver los proximos planes de vuelo cancelables."
                   submitLabel="Cancelar en simulacion"
                   onCancel={handleVirtualCancelFlight}
+                  airportGmtByCode={airportGmtByCode}
                 />
               }
             />

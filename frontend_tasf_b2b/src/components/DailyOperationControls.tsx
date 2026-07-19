@@ -96,6 +96,7 @@ export type DailyOperationControlsProps = {
   entityFocusRequest?: EntityFocusRequest | null
   showCancelledDetails?: boolean
   onShowCancelledDetailsChange?: (val: boolean) => void
+  flightCancellationPanel?: React.ReactNode
 }
 
 export default function DailyOperationControls({
@@ -139,6 +140,7 @@ export default function DailyOperationControls({
   entityFocusRequest,
   showCancelledDetails,
   onShowCancelledDetailsChange,
+  flightCancellationPanel,
   onResizeStart,
 }: DailyOperationControlsProps & { onResizeStart?: (e: React.MouseEvent) => void }) {
   const [activeTab, setActiveTab] = useState<'config' | 'stats' | 'entities'>('stats')
@@ -254,6 +256,8 @@ export default function DailyOperationControls({
                 )}
               </div>
             </div>
+
+            {flightCancellationPanel}
           </>
         ) : null}
           

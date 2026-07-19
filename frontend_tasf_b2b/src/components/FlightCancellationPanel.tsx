@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { formatClockFromMinute, formatDateFromDayIndex, formatInteger } from '../utils/time'
+import { formatClockFromMinute, formatDateFromDayIndex, formatInteger, shiftAbsoluteMinuteByGmt } from '../utils/time'
 
 export type CancellableFlightItem = {
   id: number
@@ -28,13 +28,19 @@ type FlightCancellationPanelProps = {
   emptyMessage?: string
   submitLabel?: string
   onCancel: (flight: CancellableFlightItem, reason: string) => Promise<void> | void
+  airportGmtByCode?: Record<string, number>
 }
 
-function flightLabel(flight: CancellableFlightItem) {
+function flightLabel(flight: CancellableFlightItem, gmtOffsets?: Record<string, number>) {
   const route = `${flight.origen} -> ${flight.destino}`
-  const date = formatDateFromDayIndex(Math.floor(flight.salidaMin / 1440))
-  const time = formatClockFromMinute(flight.salidaMin)
-  return `${route} · ${date} ${time}`
+  const gmt = gmtOffsets?.[flight.origen]
+  const localizedMinute = shiftAbsoluteMinuteByGmt(Math.floor(flight.salidaMin), gmt)
+  
+  const date = formatDateFromDayIndex(Math.floor(localizedMinute / 1440))
+  const time = formatClockFromMinute(localizedMinute)
+  const gmtSuffix = gmt !== undefined ? (gmt >= 0 ? `+${gmt}` : `${gmt}`) : 'UTC'
+  
+  return `${route} · ${date} ${time} (GMT${gmtSuffix})`
 }
 
 export default function FlightCancellationPanel({
@@ -46,6 +52,7 @@ export default function FlightCancellationPanel({
   emptyMessage = 'No hay vuelos disponibles para cancelar.',
   submitLabel = 'Cancelar vuelo',
   onCancel,
+  airportGmtByCode,
 }: FlightCancellationPanelProps) {
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -104,7 +111,7 @@ export default function FlightCancellationPanel({
             >
               {filteredFlights.map((flight) => (
                 <option key={`${flight.id}-${flight.salidaMin}`} value={flight.id}>
-                  {flightLabel(flight)}
+                  {flightLabel(flight, airportGmtByCode)}
                 </option>
               ))}
             </select>
@@ -119,7 +126,12 @@ export default function FlightCancellationPanel({
               <div>
                 <span>Salida</span>
                 <strong>
-                  {formatDateFromDayIndex(Math.floor(selectedFlight.salidaMin / 1440))} · {formatClockFromMinute(selectedFlight.salidaMin)}
+                  {(() => {
+                    const gmt = airportGmtByCode?.[selectedFlight.origen]
+                    const localizedMinute = shiftAbsoluteMinuteByGmt(Math.floor(selectedFlight.salidaMin), gmt)
+                    const gmtSuffix = gmt !== undefined ? (gmt >= 0 ? `+${gmt}` : `${gmt}`) : 'UTC'
+                    return `${formatDateFromDayIndex(Math.floor(localizedMinute / 1440))} · ${formatClockFromMinute(localizedMinute)} (GMT${gmtSuffix})`
+                  })()}
                 </strong>
               </div>
               <div>
