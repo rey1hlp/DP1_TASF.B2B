@@ -707,9 +707,9 @@ export default function MapView({
       try {
         const result = simId
           ? await getSimulationShipmentsByFlight(simId, activeFlightId, {
-              planId: previewFlight?.planId,
-              salidaMin: previewFlight?.salidaMin,
-            })
+            planId: previewFlight?.planId,
+            salidaMin: previewFlight?.salidaMin,
+          })
           : await getShipmentsByFlight(catalogFlightId, previewFlight?.codigo)
 
         if (!cancelled) {
@@ -1569,16 +1569,16 @@ export default function MapView({
   const mapLayerFilterColor = hasMixedMapLayerFilter
     ? { fill: '#dbeafe', stroke: '#2f62b5' }
     : getSemaphoreFilterColor(
-        mapFilters.flights.semaphore !== 'all'
-          ? mapFilters.flights.semaphore
-          : mapFilters.warehouses.semaphore,
-        ranges,
-      )
+      mapFilters.flights.semaphore !== 'all'
+        ? mapFilters.flights.semaphore
+        : mapFilters.warehouses.semaphore,
+      ranges,
+    )
   const mapLayerFilterButtonStyle = hasActiveMapLayerFilter
     ? ({
-        '--map-layer-filter-bg': mapLayerFilterColor.fill,
-        '--map-layer-filter-border': mapLayerFilterColor.stroke,
-      } as CSSProperties)
+      '--map-layer-filter-bg': mapLayerFilterColor.fill,
+      '--map-layer-filter-border': mapLayerFilterColor.stroke,
+    } as CSSProperties)
     : undefined
 
   const handleMapFlightSemaphoreChange = (value: SemaphoreFilterLevel) => {
@@ -2017,14 +2017,14 @@ export default function MapView({
                 })()}
 
                 <div className="shipment-detail-secondary-grid">
-                    <div>
-                      <span>Maletas</span>
-                      <strong>{formatBags(selectedShipment.cantidad)}</strong>
-                    </div>
-                    <div>
-                      <span>Cliente</span>
-                      <strong>{selectedShipment.idCliente || '--'}</strong>
-                    </div>
+                  <div>
+                    <span>Maletas</span>
+                    <strong>{formatBags(selectedShipment.cantidad)}</strong>
+                  </div>
+                  <div>
+                    <span>Cliente</span>
+                    <strong>{selectedShipment.idCliente || '--'}</strong>
+                  </div>
                 </div>
 
               </>
@@ -2046,7 +2046,7 @@ export default function MapView({
 
         const outgoingShipmentsCount = outgoingShipmentsList.length;
         const outgoingBagsCount = outgoingShipmentsList.reduce((sum, s) => sum + (s.cantidad ?? 0), 0);
-        const totalAirportBags = airportShipments.reduce((sum, shipment) => sum + (shipment.cantidad ?? 0), 0);
+        //const totalAirportBags = airportShipments.reduce((sum, shipment) => sum + (shipment.cantidad ?? 0), 0);
 
         return (
           <MapFloatingCard
