@@ -577,8 +577,8 @@ export default function ShipmentsCrud() {
       <Pager page={page} totalPages={totalPages} onPrev={() => setPage((current) => Math.max(0, current - 1))} onNext={() => setPage((current) => current + 1)} />
 
       <Modal open={isUploadOpen} onClose={closeUploadModal} title="Cargar envios por TXT" headerActions={<Button onClick={closeUploadModal}>Cerrar</Button>}>
-        <div className="modal-body">
-          <div className="upload-card" style={{ boxShadow: 'none', padding: 0 }}>
+        <div className="modal-body" style={{ gridTemplateColumns: '1fr' }}>
+          <div className="upload-card" style={{ boxShadow: 'none', padding: 0, maxWidth: '100%' }}>
             <h2>Archivo TXT de envios</h2>
             <p>Formato: 000000001-AAAAMMDD-HH-MM-DESTINO-CANTIDAD-IDCLIENTE</p>
             <p>El identificador del archivo no se usa para registrar el envio; el sistema asignara nuevos IDs automaticamente.</p>
@@ -667,7 +667,7 @@ export default function ShipmentsCrud() {
         title={shipmentCodeNotice.length === 1 ? 'Envio registrado' : 'Envios registrados'}
         className="modal--compact"
       >
-        <div className="shipment-code-notice">
+        <div className="shipment-code-notice" style={{ maxHeight: '60vh', overflow: 'auto' }}>
           <div className="shipment-code-notice__message">
             {shipmentCodeNotice.length === 1
               ? `Se registro el envio con el identificador ${shipmentCodeNotice[0]}.`
