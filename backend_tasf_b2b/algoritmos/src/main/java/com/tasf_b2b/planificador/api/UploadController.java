@@ -34,7 +34,7 @@ public class UploadController {
                 continue;
             }
             Path target = baseDir.resolve(Path.of(name).getFileName().toString());
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            file.transferTo(target);
         }
 
         Map<String, String> response = new HashMap<>();
